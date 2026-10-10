@@ -40,6 +40,6 @@ and upload it to itch.io as an HTML5 game.
 
 ## Credits
 
-Music: "Monkeys Spinning Monkeys" by Kevin MacLeod (incompetech.com),
-licensed under Creative Commons: By Attribution 4.0
-(http://creativecommons.org/licenses/by/4.0/).
+Music: "Stage 1" from Chiptune Adventures by Juhani Junkala
+(https://opengameart.org/content/4-chiptunes-adventure), released under CC0
+(public domain). Credit isn't required, but it's appreciated.

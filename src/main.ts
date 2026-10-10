@@ -22,9 +22,9 @@ const TEAM_CSS = ['#5b8cff', '#ff6b5b'];
 
 const renderer = new Renderer(canvas);
 const sfx = new Sfx();
-// "Monkeys Spinning Monkeys" by Kevin MacLeod (incompetech.com), CC BY 4.0;
-// credited on screen (#credit in index.html) and in the README.
-void sfx.playMusic('music/monkeys-spinning-monkeys.m4a');
+// "Stage 1" from Chiptune Adventures by Juhani Junkala, CC0 (public domain).
+// A seamless loop; credit isn't required but is shown on screen and in the README.
+void sfx.playMusic('music/chiptune-adventures-stage-1.m4a');
 soundButton.addEventListener('click', () => {
   sfx.unlock();
   canvas.focus();
