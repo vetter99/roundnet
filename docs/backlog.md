@@ -65,7 +65,7 @@ Once items are GitHub issues: *"Work on issue #12"*.
 | ART-03 | Character variety | P2 | M | |
 | ART-04 | Celebrations and reactions | P2 | M | |
 | ART-05 | Hit effects: particles, hit-stop, shake (deferred) | P3 | M | |
-| ART-06 | Camera follow option | P2 | S | |
+| ART-06 | Camera ✅ smart framing done; alternatives listed | P2 | S | |
 | AUDIO-01 | Music rotation + menu track | P2 | S | UX-01 |
 | AUDIO-02 | Crowd reactions | P2 | M | |
 | AUDIO-03 | Footsteps and landing sounds | P3 | S | |
@@ -352,11 +352,25 @@ Happy hop after a PERFECT or a won rally, a slump after a miss.
 
 Discussed and deliberately postponed. Keep for later polish.
 
-### ART-06 · Camera follow option
-**P2 · S** · Files: `src/render/renderer.ts`
+### ART-06 · Camera ✅ smart framing done (2026-10-10)
+**P2 · S** · Files: `src/render/cameraFraming.ts`, `src/render/renderer.ts`, `src/config/tuning.ts` (`camera`)
 
-Slight drift toward the action, as an option. The fixed broadcast camera stays
-the default.
+The fixed low camera lost balls hit toward the viewer; a fixed high camera
+showed everything but felt like watching from a blimp. Options considered:
+
+1. **Smart framing (shipped):** fixed angle (~36°) that only pans and
+   zooms, sitting as close as it can while keeping both players, the ball,
+   the whole landing guide and the net on screen. Pulls back fast, eases back
+   in slowly. Never rotates, so stick directions stay the same on screen.
+2. **Fixed middle ground:** e.g. ~45° at medium height. Simple, but still
+   clips some long spikes and still feels a bit high.
+3. **Wider lens at a low angle:** fits more, but edges look stretched.
+4. **Camera behind your player** (Disc Jam / tennis style): immersive, but
+   roundnet is 360°, so it would swing constantly and remap the controls.
+   Not recommended.
+
+Follow-ups: tune `camera.*` from play feedback; consider leaving room for the
+HUD panels when framing; possibly a slight zoom on PERFECT hits later.
 
 ---
 

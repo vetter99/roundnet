@@ -87,9 +87,6 @@ renderer.engine.runRenderLoop(() => {
   }
 
   sfx.setVolume(tuning.audio.volume, tuning.audio.music);
-  world.waitingForServe = false; world.ball.alive = true; world.ball.lastTouch = 'net';
-  world.ball.pos = { x: -0.6, y: 2.0, z: -3.5 }; world.ball.vel = { x: -0.5, y: 1, z: -4.5 };
-  prev = snapshot(world);
   renderer.sync(world, prev, accumulator / DT, tuning, frameSeconds);
   updateHud(frameSeconds, devices);
 });
