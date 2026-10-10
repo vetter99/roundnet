@@ -139,7 +139,27 @@ export const DEFAULT_TUNING = {
     lineWidth: 0.045,
   },
 
-  // The temporary serve: a ball fed off the net toward the receiving player.
+  // The serve duel (see src/sim/serve.ts).
+  serve: {
+    // The server stands this far behind the serve line.
+    behindLine: 0.4,
+    // The receiver starts this far from the net center, opposite the server.
+    receiverDistance: 3,
+    // How fast the stick moves the aim across the net (m/s), and how far out
+    // it can go (fraction of the net radius; 1 = the edge).
+    aimSpeed: 1.4,
+    aimLimit: 1,
+    // How far the aim wobbles at full charge (m): power costs accuracy.
+    wobble: 0.35,
+    // Serve speed for a tap vs. a full charge (m/s).
+    speedMin: 6,
+    speedMax: 12,
+    handHeight: 1.1,
+    // Attempts per serve before it's lost.
+    tries: 2,
+  },
+
+  // Rally timing, and a ball fed off the net (a practice/test helper).
   practice: {
     // Ticks after the ball dies before the serve prompt appears (60 = 1 second).
     resetDelayTicks: 50,
@@ -167,6 +187,12 @@ export const DEFAULT_TUNING = {
     // Seconds of player movement to look ahead, so running toward the camera
     // shows where you're going before you get there.
     lookAhead: 0.5,
+    // Serve duel camera: this far behind and this high above the receiver,
+    // with this field of view, easing in/out at duelBlendSpeed.
+    duelBack: 3.2,
+    duelHeight: 2.3,
+    duelFov: 0.85,
+    duelBlendSpeed: 3,
   },
 
   audio: {

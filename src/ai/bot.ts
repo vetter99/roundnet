@@ -40,8 +40,11 @@ const DROP_OUT_OF_10 = 4;
 // How hard the pass leans toward the net (0 = straight up), for a better spike angle.
 const PASS_TOWARD_NET = 0.25;
 const WAIT_DISTANCE = 2.3;
-// Ticks the CPU waits before serving when it's its turn.
+// Serving: the CPU aims a little to one side of the net center, then after a
+// pause charges for SERVE_CHARGE_TICKS (about two-thirds power) and releases.
 const SERVE_DELAY_TICKS = 50;
+const SERVE_CHARGE_TICKS = 22;
+const SERVE_AIM_SIDE = 0.35;
 
 /** A repeatable pseudo-random value in [-1, 1] for this possession; `salt` varies it per touch. */
 function slop(world: World, salt: number): number {
@@ -75,9 +78,15 @@ export function botIntent(world: World, index: number, t: Tuning): Intent {
   const ball = world.ball;
   const intent: Intent = { ...NEUTRAL_INTENT };
 
-  // Serve with a quick tap of pass (it serves on release) after a short pause.
   if (world.waitingForServe && serverTeam(world) === me.team) {
-    intent.pass = world.tick - world.serveReadyTick === SERVE_DELAY_TICKS;
+    // Steer the aim to one side (alternating serve to serve), then charge and release.
+    const side = world.serveReadyTick % 2 === 0 ? 1 : -1;
+    const dx = side * SERVE_AIM_SIDE * t.net.radius - world.serve.aim.x;
+    const dz = -world.serve.aim.z;
+    intent.moveX = Math.max(-1, Math.min(1, dx * 6));
+    intent.moveZ = Math.max(-1, Math.min(1, dz * 6));
+    const elapsed = world.tick - world.serveReadyTick;
+    intent.spike = elapsed >= SERVE_DELAY_TICKS && elapsed < SERVE_DELAY_TICKS + SERVE_CHARGE_TICKS;
     return intent;
   }
 

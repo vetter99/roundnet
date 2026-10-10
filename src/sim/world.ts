@@ -2,6 +2,16 @@ import type { Tuning } from '../config/tuning';
 import { createBall, launchBallAt, netContactHeight, stepBall, type Ball, type BallEvent } from './ball';
 import { autoDiveTarget, missReason, tryHit, type HitResult, type MissReason } from './hit';
 import { createPlayer, diveTicks, NEUTRAL_INTENT, startDive, stepPlayer, type HitKind, type Intent, type Player, type ShotKind } from './player';
+import {
+  createServeState,
+  faultServe,
+  launchServe,
+  serverIntent,
+  serveWobble,
+  setUpServe,
+  stepServeAim,
+  type ServeState,
+} from './serve';
 
 export type Team = 0 | 1;
 
@@ -15,6 +25,9 @@ export type SimEvent =
   | { type: 'whiff'; playerId: number; kind: HitKind; reason: MissReason }
   // The ball came off the net, so the other team must now play it.
   | { type: 'possession'; team: Team }
+  // A serve was hit; a serve that missed the net (lost = out of tries).
+  | { type: 'serve'; playerId: number; power: number }
+  | { type: 'fault'; team: Team; lost: boolean }
   // A player started a dive, and later hit the ground at the end of the lunge.
   | { type: 'dive'; playerId: number }
   | { type: 'diveLand'; playerId: number };
@@ -23,7 +36,7 @@ export type SimEvent =
  * The whole game state: 1v1 rallies for working on mechanics. When the ball
  * comes off the net, the other team has possession and must put it back on
  * the net. No scoring or touch limit yet: when the ball lands, the serve
- * switches sides and the game waits for the server to press pass (A) to serve.
+ * switches sides and the next serve duel starts (see serve.ts).
  */
 export interface World {
   tick: number;
@@ -44,8 +57,9 @@ export interface World {
   lastHitPower: number;
   // Ticks since the ball died; the serve prompt appears after a short pause.
   deadTicks: number;
-  // True while the game waits for the server to serve (press and release pass).
+  // True while the game waits for the server to serve (aim, charge, release).
   waitingForServe: boolean;
+  serve: ServeState;
   // Tick when the wait for the serve started (the CPU serves after a pause).
   serveReadyTick: number;
   // The team that receives the next serve; the other team serves it.
@@ -66,9 +80,17 @@ export function createWorld(): World {
     lastHitPower: 0,
     deadTicks: 0,
     waitingForServe: true,
+    serve: createServeState(),
     serveReadyTick: 0,
     nextReceiver: 0,
   };
+  return world;
+}
+
+/** A new world, set up for the first serve (Red serves to Blue). */
+export function createMatch(t: Tuning): World {
+  const world = createWorld();
+  setUpServe(world, t);
   return world;
 }
 
@@ -77,11 +99,10 @@ export function serverTeam(world: World): Team {
   return otherTeam(world.nextReceiver);
 }
 
-/** End the current rally now (e.g. a stuck ball) and wait for the next serve. */
-export function resetRally(world: World): void {
+/** End the current rally now (e.g. a stuck ball) and set up the next serve. */
+export function resetRally(world: World, t: Tuning): void {
   world.ball.alive = false;
-  world.waitingForServe = true;
-  world.serveReadyTick = world.tick;
+  setUpServe(world, t);
 }
 
 export function otherTeam(team: Team): Team {
@@ -94,16 +115,22 @@ export function stepWorld(world: World, intents: readonly Intent[], t: Tuning): 
   world.events.length = 0;
 
   world.players.forEach((p, i) => {
+    const intent = intents[i] ?? NEUTRAL_INTENT;
+    const serving = world.waitingForServe && p.team === serverTeam(world);
+    // Read the wobble before stepping, so a release this tick uses where the aim was.
+    const wobble = serving ? serveWobble(world, p, t) : null;
     const wasDiving = p.dive !== null;
-    const swing = stepPlayer(p, intents[i] ?? NEUTRAL_INTENT, t);
+    const swing = stepPlayer(p, serving ? serverIntent(intent) : intent, t);
+    if (serving) stepServeAim(world, p, intent, t);
     if (p.dive && !wasDiving) world.events.push({ type: 'dive', playerId: p.id });
     if (p.dive?.ticks === diveTicks(t)) world.events.push({ type: 'diveLand', playerId: p.id });
     if (!swing) return;
     world.events.push({ type: 'swing', playerId: p.id, ...swing });
-    // The server's pass swing puts the ball in play instead of hitting.
-    if (world.waitingForServe && swing.kind === 'pass' && p.team === serverTeam(world)) {
+    // Releasing a charged hit while aiming serves the ball.
+    if (serving && wobble) {
       p.hitBuffer = null;
-      serve(world, world.nextReceiver, t);
+      launchServe(world, p, swing.power, wobble, t);
+      world.events.push({ type: 'serve', playerId: p.id, power: swing.power });
     }
   });
   separatePlayers(world, t);
@@ -119,6 +146,8 @@ export function stepWorld(world: World, intents: readonly Intent[], t: Tuning): 
     const hit = tryHit(p, world.ball, intents[i] ?? NEUTRAL_INTENT, t, turn);
     if (hit) {
       world.events.push({ type: 'hit', ...hit });
+      // The duel ends once the receiving side plays the ball.
+      if (p.team !== world.lastHitTeam) world.serve.returnPending = false;
       world.lastHitTeam = p.team;
       world.lastHitKind = hit.kind;
       world.lastHitPower = hit.power;
@@ -137,26 +166,35 @@ export function stepWorld(world: World, intents: readonly Intent[], t: Tuning): 
       // Whoever sent it onto the net hands the ball to the other team.
       world.possession = otherTeam(world.lastHitTeam);
       world.possessionTick = world.tick;
+      world.serve.inFlight = false;
+      world.serve.faults = 0;
       world.events.push({ type: 'possession', team: world.possession });
     } else if (e.type === 'ground') {
-      world.nextReceiver = otherTeam(world.nextReceiver);
+      if (world.serve.inFlight) {
+        // A serve that never reached the net: a fault.
+        const server = otherTeam(world.nextReceiver);
+        world.events.push({ type: 'fault', team: server, lost: faultServe(world, t) });
+      } else {
+        // The rally is over: the serve alternates sides.
+        world.serve.returnPending = false;
+        world.nextReceiver = otherTeam(world.nextReceiver);
+      }
     }
   }
 
   if (world.ball.alive) {
     world.deadTicks = 0;
   } else if (!world.waitingForServe && ++world.deadTicks >= t.practice.resetDelayTicks) {
-    world.waitingForServe = true;
-    world.serveReadyTick = world.tick;
+    setUpServe(world, t);
   }
 }
 
 /**
- * Put a new ball in play: tossed off the net toward the receiving team's
- * player, who then has possession. (Stand-in until real serving exists.)
- * Usually triggered by the server's pass swing while waitingForServe.
+ * Put a ball in play by feeding it off the net toward the receiving team's
+ * player, who then has possession. A practice/test helper; real games start
+ * rallies with the serve duel (serve.ts).
  */
-export function serve(world: World, receiver: Team, t: Tuning): void {
+export function feedBall(world: World, receiver: Team, t: Tuning): void {
   const p = world.players.find((pl) => pl.team === receiver) ?? world.players[0];
   let ux = p.pos.x;
   let uz = p.pos.z;

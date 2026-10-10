@@ -25,11 +25,13 @@ const RANGES: Record<string, Ranges> = {
   'player.dive': { speed: [2, 15], duration: [0.1, 0.8], recovery: [0, 1.5], reachOffset: [0, 1.5], reachBonus: [0, 1.5], highReach: [0, 2], contactHeight: [0.2, 1.5], powerScale: [0, 1], autoRange: [0, 4] },
   court: { serveLineDistance: [1, 5], noSpikeZoneDistance: [0, 1.5], lineWidth: [0.01, 0.2] },
   marker: { maxRadius: [0.2, 2.5], targetRadius: [0.05, 1], approachTime: [0.2, 3] },
+  serve: { behindLine: [0, 2], receiverDistance: [1, 6], aimSpeed: [0.2, 4], aimLimit: [0.3, 1.3], wobble: [0, 1], speedMin: [3, 15], speedMax: [3, 20], handHeight: [0.5, 2], tries: [1, 3, 1] },
   practice: { resetDelayTicks: [0, 180, 1], feedDistance: [0.8, 4], feedHeight: [0.5, 4], feedSpeed: [2, 15] },
   audio: { volume: [0, 1], music: [0, 1] },
   camera: {
     pitchDeg: [10, 85], fov: [0.4, 1.3], minDistance: [4, 30], maxDistance: [8, 45], margin: [0.4, 1],
     zoomOutSpeed: [0.2, 15], zoomInSpeed: [0.2, 15], panSpeed: [0.2, 15], lookAhead: [0, 1.5],
+    duelBack: [0.5, 8], duelHeight: [0.5, 6], duelFov: [0.4, 1.4], duelBlendSpeed: [0.5, 10],
   },
 };
 

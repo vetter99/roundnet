@@ -321,12 +321,15 @@ export class Character {
     dt: number,
     charge: ChargeView | null,
     dive: DiveView | null,
+    faceNet = false,
   ): void {
     this.root.position.set(x, y, z);
     this.root.scaling.setAll(size);
 
     const speed = Math.hypot(p.vel.x, p.vel.z);
     if (speed > 0.5) this.facing = Math.atan2(p.vel.x, p.vel.z);
+    // Standing still while getting ready to serve: face the net.
+    else if (faceNet) this.facing = Math.atan2(-x, -z);
     this.root.rotation.y = this.facing;
 
     if (p.grounded && !this.wasGrounded) this.landTimer = LAND_SQUASH_TIME;

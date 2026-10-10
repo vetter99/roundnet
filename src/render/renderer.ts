@@ -24,7 +24,8 @@ import { createStadium, type Stadium } from './stadium';
 import type { ShadowGenerator } from '@babylonjs/core/Lights/Shadows/shadowGenerator';
 import { chargePower, diveRecoveryTicks, diveTicks } from '../sim/player';
 import { clamp, lerp, type Vec3 } from '../sim/vec';
-import type { World } from '../sim/world';
+import { serverTeam, type World } from '../sim/world';
+import { serveWobble } from '../sim/serve';
 
 const TEAM_COLORS = [new Color3(0.2, 0.45, 0.95), new Color3(0.95, 0.3, 0.25)];
 
@@ -93,6 +94,13 @@ export class Renderer {
   private time = 0;
   // The camera's current (smoothed) framing; null until the first frame.
   private cameraFraming: Framing | null = null;
+  // 0 = broadcast camera, 1 = serve-duel camera behind the receiver; eased between.
+  private duelBlend = 0;
+  // The camera's yaw (0 = looking along +z), so input can follow the view.
+  private yaw = 0;
+  // Where the server is aiming on the net during a serve.
+  private readonly aimReticle: TransformNode;
+  private readonly aimMat: StandardMaterial;
 
   constructor(canvas: HTMLCanvasElement) {
     this.engine = new Engine(canvas, true, { stencil: true });
@@ -137,6 +145,17 @@ export class Renderer {
     this.trailMat.alpha = 0;
     trail.material = this.trailMat;
     trail.isPickable = false;
+
+    this.aimReticle = new TransformNode('aimReticle', scene);
+    this.aimMat = glowMaterial('aimReticle', scene);
+    const aimRing = MeshBuilder.CreateTorus('aimRing', { diameter: 0.26, thickness: 0.035, tessellation: 32 }, scene);
+    const aimDot = MeshBuilder.CreateDisc('aimDot', { radius: 0.035, tessellation: 16 }, scene);
+    aimDot.rotation.x = Math.PI / 2;
+    for (const m of [aimRing, aimDot]) {
+      m.material = this.aimMat;
+      m.parent = this.aimReticle;
+      m.isPickable = false;
+    }
 
     this.marker = new TransformNode('marker', scene);
     this.approachMat = glowMaterial('approach', scene);
@@ -190,7 +209,7 @@ export class Renderer {
           ? { lunging: true, progress: p.dive.ticks / lunge }
           : { lunging: false, progress: (p.dive.ticks - lunge) / diveRecoveryTicks(t) }
         : null;
-      view.character.update(p, x, y, z, t.player.size, frameSeconds, charge, dive);
+      view.character.update(p, x, y, z, t.player.size, frameSeconds, charge, dive, world.waitingForServe);
       this.updateMeter(view.meter, charge?.power ?? null, x, y + 1.55 * t.player.size, z);
       // Reach rings are a debug aid only (they were confused with the timing rings).
       view.reachRing.isVisible = t.debug.showReach;
@@ -199,6 +218,7 @@ export class Renderer {
     });
 
     this.updateMarker(world, landing, t);
+    this.updateAimReticle(world, t);
     this.stadium.update(this.time);
     this.scene.render();
   }
@@ -287,10 +307,52 @@ export class Renderer {
     cur.center.x += (goal.center.x - cur.center.x) * pan;
     cur.center.z += (goal.center.z - cur.center.z) * pan;
 
-    const pos = cameraPosition(cur, pitch);
+    const broadcastPos = cameraPosition(cur, pitch);
+    const broadcastTarget = cur.center;
+
+    // Serve duel: a low camera behind the receiver, looking across the net at
+    // the server, from setup until the receiving side plays the ball.
+    const duel = world.waitingForServe || world.serve.returnPending;
+    this.duelBlend += ((duel ? 1 : 0) - this.duelBlend) * (1 - Math.exp(-c.duelBlendSpeed * dt));
+    const receiver = world.players.find((p) => p.team === world.nextReceiver) ?? world.players[0];
+    const server = world.players.find((p) => p.team !== world.nextReceiver) ?? world.players[0];
+    const away = Math.hypot(receiver.pos.x, receiver.pos.z) || 1;
+    const duelPos = {
+      x: receiver.pos.x + (receiver.pos.x / away) * c.duelBack,
+      y: c.duelHeight,
+      z: receiver.pos.z + (receiver.pos.z / away) * c.duelBack,
+    };
+    const duelTarget = { x: server.pos.x * 0.35, y: 0.7, z: server.pos.z * 0.35 };
+
+    const b = this.duelBlend;
+    const pos = { x: lerp(broadcastPos.x, duelPos.x, b), y: lerp(broadcastPos.y, duelPos.y, b), z: lerp(broadcastPos.z, duelPos.z, b) };
+    const target = {
+      x: lerp(broadcastTarget.x, duelTarget.x, b),
+      y: lerp(broadcastTarget.y, duelTarget.y, b),
+      z: lerp(broadcastTarget.z, duelTarget.z, b),
+    };
     this.camera.position.set(pos.x, pos.y, pos.z);
-    this.camera.setTarget(new Vector3(cur.center.x, cur.center.y, cur.center.z));
-    this.camera.fov = c.fov;
+    this.camera.setTarget(new Vector3(target.x, target.y, target.z));
+    this.camera.fov = lerp(c.fov, c.duelFov, b);
+    this.yaw = Math.atan2(target.x - pos.x, target.z - pos.z);
+  }
+
+  /** The camera's yaw: 0 when looking along +z (the broadcast view), PI when looking back along -z. */
+  viewYaw(): number {
+    return this.yaw;
+  }
+
+  /** The server's aim on the net (plus their charge wobble), shown while waiting to serve. */
+  private updateAimReticle(world: World, t: Tuning): void {
+    const server = world.players.find((p) => p.team === serverTeam(world));
+    const show = world.waitingForServe && server !== undefined;
+    this.aimReticle.setEnabled(show);
+    if (!show || !server) return;
+    const wobble = serveWobble(world, server, t);
+    this.aimReticle.position.set(world.serve.aim.x + wobble.x, t.net.height + 0.02, world.serve.aim.z + wobble.z);
+    const color = TEAM_COLORS[server.team];
+    this.aimMat.emissiveColor = Color3.Lerp(color, new Color3(1, 1, 1), 0.35);
+    this.aimMat.alpha = 0.95;
   }
 
   private updateMarker(world: World, landing: LandingPrediction | null, t: Tuning): void {

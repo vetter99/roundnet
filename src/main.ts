@@ -7,7 +7,7 @@ import { Renderer, snapshot } from './render/renderer';
 import type { MissReason } from './sim/hit';
 import { chargePower, isDiving } from './sim/player';
 import { DT } from './sim/time';
-import { createWorld, resetRally, serverTeam, stepWorld, type SimEvent, type Team } from './sim/world';
+import { createMatch, resetRally, serverTeam, stepWorld, type SimEvent, type Team } from './sim/world';
 
 const canvas = document.getElementById('game') as HTMLCanvasElement;
 const stats = document.querySelector('#hud .stats') as HTMLElement;
@@ -36,7 +36,7 @@ window.addEventListener('keydown', (e) => {
 // Per player: whether their charge was already full, to ding once on reaching it.
 const chargeWasFull = [false, false];
 const input = new LocalInput(window);
-const world = createWorld();
+const world = createMatch(tuning);
 createTuningPane(tuning);
 canvas.focus();
 
@@ -86,6 +86,14 @@ function assignDevices(): [Device, Device] {
   return [devices[0], devices[1]];
 }
 
+/** Turn a human's stick from screen directions into world directions: up is always away from the camera. */
+function followCamera(frame: InputFrame): InputFrame {
+  const yaw = renderer.viewYaw();
+  const c = Math.cos(yaw);
+  const s = Math.sin(yaw);
+  return { ...frame, moveX: frame.moveX * c + frame.moveZ * s, moveZ: -frame.moveX * s + frame.moveZ * c };
+}
+
 function deviceName(d: Device): string {
   if (d === 'cpu') return 'CPU';
   if (d === 'all') return 'Keyboard';
@@ -117,10 +125,9 @@ renderer.engine.runRenderLoop(() => {
     const keyboard = input.pollKeyboard();
     const frames: InputFrame[] = devices.map((d, i) => {
       if (d === 'cpu') return { ...botIntent(world, i, tuning), feed: false };
-      if (typeof d === 'string') return keyboard[d];
-      return input.pollGamepad(d);
+      return followCamera(typeof d === 'string' ? keyboard[d] : input.pollGamepad(d));
     });
-    if (world.ball.alive && (frames.some((f) => f.feed) || keyboard.all.feed)) resetRally(world);
+    if (world.ball.alive && (frames.some((f) => f.feed) || keyboard.all.feed)) resetRally(world, tuning);
     stepWorld(world, frames, tuning);
     for (const e of world.events) onEvent(e);
     world.players.forEach((p, i) => {
@@ -182,6 +189,11 @@ function onEvent(e: SimEvent): void {
   } else if (e.type === 'ground') {
     sfx.ground();
     rally = 0;
+  } else if (e.type === 'serve') {
+    sfx.hit('spike', e.power, 1, world.players[e.playerId].team === 0);
+  } else if (e.type === 'fault') {
+    sfx.ground();
+    showFlash(e.lost ? `Double fault: serve goes to ${TEAM_NAMES[1 - e.team]}` : 'Fault: 2nd serve', '#ffd84a', 1.2);
   } else if (e.type === 'dive') {
     sfx.swing(1);
   } else if (e.type === 'diveLand') {
@@ -268,8 +280,11 @@ function updateHud(frameSeconds: number, devices: [Device, Device]): void {
   prompt.style.display = world.waitingForServe ? 'block' : 'none';
   if (world.waitingForServe) {
     const key = serverDevice === 'cpu' ? '' : typeof serverDevice === 'string' ? PASS_KEY_LABEL[serverDevice] : 'A';
+    const second = world.serve.faults > 0 ? ' <small>(2nd serve)</small>' : '';
     prompt.innerHTML =
-      serverDevice === 'cpu' ? `${teamSpan(server)} is about to serve…` : `${teamSpan(server)}: press <b>${key}</b> to serve`;
+      serverDevice === 'cpu'
+        ? `${teamSpan(server)} is serving…${second}`
+        : `${teamSpan(server)}: stick aims · hold <b>${key}</b> to charge · release to serve${second}`;
   }
   stats.innerHTML = world.waitingForServe
     ? `${teamSpan(server)} serves to ${teamSpan(world.nextReceiver)}`

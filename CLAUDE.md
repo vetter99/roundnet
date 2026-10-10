@@ -52,8 +52,11 @@ src/main.ts           wires it together; fixed 60Hz loop with render interpolati
   scoring or touch limit right now (both existed in commit `3359c7b`; see
   RULE-02 in docs/backlog.md). The team without the ball can't hit it and gets
   pushed aside if it runs into the team with the ball.
-- After the ball lands, the game waits for the server to press pass (A) to serve.
-- Serving is a stand-in: the ball is fed off the net to the receiver.
+- Serving is a duel (`src/sim/serve.ts`): the server aims a target on the net
+  with the stick, holds a hit button to charge and releases; more charge =
+  more aim wobble. Two tries per serve. The renderer shows a camera behind the
+  receiver until the return, and human stick input follows the camera.
+  `feedBall` (feeding the ball off the net) is only a test/practice helper.
 - Hits charge while the button is held and swing on release (`chargePower`).
 - Dives are automatic: swinging at a ball just out of reach dives for it
   (`autoDiveTarget` in `src/sim/hit.ts`). There is no dive button.

@@ -3,7 +3,7 @@ import { createTuning } from '../config/tuning';
 import { stepBall, type BallEvent } from './ball';
 import { autoDiveTarget, hitQuality, tryHit } from './hit';
 import { createPlayer, NEUTRAL_INTENT, startDive, stepPlayer, type Intent } from './player';
-import { createWorld, serve, stepWorld, type SimEvent, type World } from './world';
+import { createMatch, createWorld, feedBall, stepWorld, type SimEvent, type World } from './world';
 
 const t = createTuning();
 
@@ -93,8 +93,8 @@ describe('world', () => {
     expect(JSON.stringify(a)).toBe(JSON.stringify(b));
   });
 
-  it('waits for the server to press pass, then serves to the receiver', () => {
-    const world = createWorld();
+  it('waits for the server to aim and release, then serves to the receiver', () => {
+    const world = createMatch(t);
     // Red serves first, to Blue. Nothing happens until Red serves.
     for (let i = 0; i < 120; i++) stepWorld(world, [], t);
     expect(world.waitingForServe).toBe(true);
@@ -116,7 +116,7 @@ describe('world', () => {
   });
 
   it("only the server's pass starts the serve", () => {
-    const world = createWorld();
+    const world = createMatch(t);
     // Blue is receiving, so Blue tapping pass does nothing.
     stepWorld(world, [{ ...NEUTRAL_INTENT, pass: true }], t);
     stepWorld(world, [], t);
@@ -125,7 +125,7 @@ describe('world', () => {
 
   it('after the ball lands, the game waits for the next serve', () => {
     const world = createWorld();
-    serve(world, 0, t);
+    feedBall(world, 0, t);
     for (let i = 0; i < 600 && world.ball.alive; i++) stepWorld(world, [], t);
     for (let i = 0; i < t.practice.resetDelayTicks + 1; i++) stepWorld(world, [], t);
     expect(world.waitingForServe).toBe(true);
@@ -138,7 +138,7 @@ describe('rally rules', () => {
   /** A world where Blue (player 0) has the ball, ready to play it. */
   function blueHasBall() {
     const world = createWorld();
-    serve(world, 0, t);
+    feedBall(world, 0, t);
     const p = world.players[0];
     world.possession = 0;
     world.ball.pos = { x: p.pos.x, y: t.player.contactHeight, z: p.pos.z + 0.2 };
@@ -210,13 +210,13 @@ describe('swing feedback', () => {
 
   it('explains a swing at a ball still heading to the net', () => {
     const world = createWorld();
-    serve(world, 0, t); // fresh serve, on its way to the net
+    feedBall(world, 0, t); // fresh serve, on its way to the net
     expect(runUntilWhiff(world)).toMatchObject({ type: 'whiff', reason: 'notYet' });
   });
 
   it('explains a swing at a playable ball that is out of reach', () => {
     const world = createWorld();
-    serve(world, 0, t);
+    feedBall(world, 0, t);
     world.possession = 0;
     world.ball.lastTouch = 'net';
     world.ball.pos = { x: 3, y: 1.3, z: 3 };
@@ -421,7 +421,7 @@ describe('automatic dive', () => {
 
   it('in a rally, swinging at a ball just out of reach dives and makes the hit', () => {
     const world = createWorld();
-    serve(world, 0, t);
+    feedBall(world, 0, t);
     const p = world.players[0];
     world.possession = 0;
     world.ball.lastTouch = 'net';
@@ -474,5 +474,64 @@ describe('drop shot', () => {
     const events: BallEvent[] = [];
     for (let i = 0; i < 400 && ball.alive; i++) stepBall(ball, t, events);
     expect(events[0].type).toBe('net');
+  });
+});
+
+describe('serve duel', () => {
+  const red = (intent: Partial<Intent>): Intent[] => [NEUTRAL_INTENT, { ...NEUTRAL_INTENT, ...intent }];
+
+  it('places the server behind the serve line and the receiver opposite', () => {
+    const world = createMatch(t);
+    const [blue, redPlayer] = world.players;
+    expect(Math.hypot(redPlayer.pos.x, redPlayer.pos.z)).toBeGreaterThan(t.net.radius + t.net.frameWidth + t.court.serveLineDistance);
+    expect(Math.sign(blue.pos.z)).toBe(-Math.sign(redPlayer.pos.z));
+  });
+
+  it("the server's stick moves the aim, not the server", () => {
+    const world = createMatch(t);
+    const server = world.players[1];
+    const spot = { ...server.pos };
+    for (let i = 0; i < 20; i++) stepWorld(world, red({ moveX: 1 }), t);
+    expect(server.pos.x).toBeCloseTo(spot.x);
+    expect(server.pos.z).toBeCloseTo(spot.z);
+    expect(world.serve.aim.x).toBeGreaterThan(0.2);
+  });
+
+  it('a serve aimed at the net lands on it, near the aim', () => {
+    const world = createMatch(t);
+    for (let i = 0; i < 10; i++) stepWorld(world, red({ moveX: 1 }), t);
+    const aim = { ...world.serve.aim };
+    stepWorld(world, red({ spike: true }), t);
+    stepWorld(world, [], t);
+    let net: SimEvent | undefined;
+    for (let i = 0; i < 120 && !net; i++) {
+      stepWorld(world, [], t);
+      net = world.events.find((e) => e.type === 'net');
+    }
+    expect(net).toBeDefined();
+    if (net?.type === 'net') expect(Math.hypot(net.at.x - aim.x, net.at.z - aim.z)).toBeLessThan(0.1);
+  });
+
+  it('two faults lose the serve; one fault gives a second serve', () => {
+    // Normally the aim stays on the net and faults come from charge wobble;
+    // here we let the aim go off the net to force a fault.
+    const loose = createTuning();
+    loose.serve.aimLimit = 10;
+    const world = createMatch(loose);
+    const serveOffNet = () => {
+      world.serve.aim = { x: 3, z: 0 };
+      stepWorld(world, red({ spike: true }), loose);
+      stepWorld(world, [], loose);
+      const faults: SimEvent[] = [];
+      for (let i = 0; i < 240 && !world.waitingForServe; i++) {
+        stepWorld(world, [], loose);
+        faults.push(...world.events.filter((e) => e.type === 'fault'));
+      }
+      return faults;
+    };
+    expect(serveOffNet()).toEqual([{ type: 'fault', team: 1, lost: false }]);
+    expect(world.nextReceiver).toBe(0); // Red serves again
+    expect(serveOffNet()).toEqual([{ type: 'fault', team: 1, lost: true }]);
+    expect(world.nextReceiver).toBe(1); // the serve passed to Blue
   });
 });
