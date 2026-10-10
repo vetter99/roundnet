@@ -8,6 +8,14 @@ the rest. Critique freely: reorder, cut, split, or rewrite.
 *"Read CLAUDE.md and the MECH-01 card in docs/backlog.md, then implement it"*.
 Once items are GitHub issues: *"Work on issue #12"*.
 
+## Guiding principle
+
+Keep it arcade. Inputs stay simple; depth comes from timing, positioning and
+reading the opponent. A new mechanic should be learnable within a few rallies
+and shouldn't need a manual. (Playtest 1: "Mechanics are simple and
+straightforward. Need to think more on how to improve them without ruining
+the arcadey vibe.")
+
 ## Where things stand (2026-10-10)
 
 - 1v1 mechanics sandbox: you (Blue) vs. a CPU (Red). No scoring.
@@ -33,16 +41,18 @@ Once items are GitHub issues: *"Work on issue #12"*.
 | ID | Title | Pri | Size | Depends on |
 |---|---|---|---|---|
 | MECH-01 | Dive ✅ done | P0 | M | |
-| MECH-02 | Jump-spike bonus | P0 | S | |
+| MECH-02 | Jump-spike bonus (playtest: tried it, couldn't time it) | P0 | S | BUG-01 |
 | MECH-03 | Recovery after weak hits and dives | P1 | S | MECH-01 |
 | MECH-04 | Quick-step / pivot | P2 | S | |
 | MECH-05 | Momentum into hits | P2 | M | |
-| SHOT-01 | Drop shot (soft touch) | P0 | M | |
+| SHOT-01 | Drop shot (soft touch) (playtest: wanted) | P0 | M | |
 | SHOT-02 | Readable wind-up tells | P1 | M | |
 | SHOT-03 | Fake / cancel a charge | P1 | S | |
-| SHOT-04 | Spin shots (needs design decision) | P2 | M | |
+| SHOT-04 | Spin shots → merged into SHOT-06 | – | – | |
+| SHOT-05 | Power sweet spot / overcharge risk (playtest) | P1 | M | |
+| SHOT-06 | Right-stick shot control, starting with placement (playtest) | P2 | L | |
 | RULE-01 | Real serving | P0 | M | |
-| RULE-02 | Match mode: scoring + 3-touch limit | P1 | S | RULE-01 |
+| RULE-02 | Match mode: scoring + 3-touch limit (playtest: wanted) | P0 | S | RULE-01 |
 | RULE-03 | 2v2 teams | P1 | L | RULE-02, INPUT-01 |
 | RULE-04 | Serve rotation and side switching | P2 | S | RULE-03 |
 | AI-01 | CPU difficulty levels | P1 | M | |
@@ -54,13 +64,16 @@ Once items are GitHub issues: *"Work on issue #12"*.
 | INPUT-03 | Button remapping | P2 | M | UX-03 |
 | INPUT-04 | Split keyboard for 2 players | P2 | S | INPUT-01 |
 | INPUT-05 | Touch controls for phones | P3 | L | |
+| INPUT-06 | Triggers as the main hit buttons (playtest) | P1 | S | |
 | UX-01 | Title screen | P1 | M | |
 | UX-02 | Pause menu | P1 | S | |
 | UX-03 | Settings screen | P1 | M | UX-02 |
 | UX-04 | Hide dev panels for players | P0 | S | |
 | UX-05 | How-to-play / tutorial | P2 | M | UX-01 |
 | UX-06 | Character select | P2 | M | ART-03 |
-| ART-01 | Court environment: park | P1 | M | |
+| UX-07 | Make the timing guide stand out (playtest) | P0 | S | |
+| UX-08 | Teach the dive and jump (playtest) | P1 | S | |
+| ART-01 | Court environment: park (playtest: clearer visuals help) | P1 | M | |
 | ART-02 | Ball and net models | P2 | S | |
 | ART-03 | Character variety | P2 | M | |
 | ART-04 | Celebrations and reactions | P2 | M | |
@@ -69,6 +82,7 @@ Once items are GitHub issues: *"Work on issue #12"*.
 | AUDIO-01 | Music rotation + menu track | P2 | S | UX-01 |
 | AUDIO-02 | Crowd reactions | P2 | M | |
 | AUDIO-03 | Footsteps and landing sounds | P3 | S | |
+| AUDIO-04 | Satisfying hit feedback for the player (playtest) | P0 | S | |
 | MODE-01 | Training drills | P2 | M | |
 | MODE-02 | Party mode with power-ups | P3 | L | RULE-02 |
 | MODE-03 | Tournament vs. CPU | P3 | L | AI-01, RULE-02 |
@@ -82,7 +96,7 @@ Once items are GitHub issues: *"Work on issue #12"*.
 | TECH-08 | Performance: bundle size, FPS counter | P2 | S | |
 | TECH-09 | Accessibility basics | P2 | S | |
 | TECH-10 | Custom domain | P3 | S | |
-| BUG-01 | Timing guide assumes the player is on the ground | P1 | S | |
+| BUG-01 | Timing guide assumes the player is on the ground | P0 | S | |
 | BUG-02 | Near-side player's tail may hide the ball (confirm) | P1 | S | |
 | BUG-03 | Ball can be lost far away during a rally | P2 | S | |
 
@@ -113,6 +127,11 @@ since it's harder to time.
 **Done when:** a spike hit while airborne near the jump's peak gets a speed
 bonus (tunable), shown in the dev panel. Grounded spikes are unchanged. Test
 compares airborne vs. grounded spike speed.
+
+**Playtest 1:** the tester naturally tried to jump and spike but could never
+time it, and didn't know why they'd want to. Fix BUG-01 first (the timing
+guide ignores jumping), make the bonus visible (sound/label), and teach it in
+UX-08.
 
 ### MECH-03 · Recovery after weak hits and dives
 **P1 · S** · Depends on MECH-01 · Files: `src/sim/player.ts`
@@ -159,6 +178,8 @@ It beats a defender standing far back.
 while a charged spike carries 3 m or more. The CPU has to sprint to return
 drop shots. Test checks both distances.
 
+**Playtest 1:** "A drop shot would be dope." 
+
 ### SHOT-02 · Readable wind-up tells
 **P1 · M** · Files: `src/render/character.ts`
 
@@ -177,12 +198,47 @@ swinging, to bait the defender into committing early.
 **Done when:** cancel works with no swing, no hit, and a short cooldown before
 charging again.
 
-### SHOT-04 · Spin shots (needs design decision)
-**P2 · M**
+### SHOT-04 · Spin shots → merged into SHOT-06
 
-Real roundnet uses spin to curve the bounce. We removed spike aiming, so spin
-needs a different input (e.g. holding a shoulder button while releasing).
-**Decide first:** do we want any directional control on spikes at all?
+### SHOT-05 · Power sweet spot / overcharge risk
+**P1 · M** · Files: `src/sim/player.ts`, `src/sim/hit.ts`, `src/render/renderer.ts` (charge meter)
+
+From playtest 1: put a marker on the charge meter at about 7/8. Releasing
+right at the marker ("perfect power") adds no risk. Charging past it up to
+full adds speed but also risk: a bigger chance of a mishit unless the timing
+is also perfect. Turns charging into a second timing skill, so maximum power
+isn't always the right choice.
+
+**Decided:** past the marker the spike keeps getting faster, but mishit risk
+rises unless the timing is perfect. Releasing right at the marker is fast and
+safe. A real risk/reward choice.
+
+**Done when:** the meter shows the sweet-spot marker; releasing in the
+overcharge zone visibly raises mishit risk (dev panel shows it); a perfectly
+timed hit at perfect power never mishits. Tests cover all three cases.
+
+### SHOT-06 · Right-stick shot control: aim, spin, side hits
+**P2 · L** · Needs a design decision first
+
+From playtest 1 (items 5 and 8): use the **right stick** at the moment of
+release to shape the spike, like aiming a pitch in Mario baseball games.
+Possible uses, from simplest to richest:
+
+1. **Placement on the net:** flick toward a part of the net (near edge, far
+   edge, sides). Edge hits bounce off lower and flatter, harder to return
+   but riskier.
+2. **Spike types:** flick direction picks a cut, a side hit, or a straight
+   power shot.
+3. **Spin:** holding a direction curves the ball after the net bounce.
+
+Earlier we removed aiming from the left stick (it also moves you, so it
+pushed shots off the net by accident). The right stick avoids that problem,
+since it doesn't move you. Cost: input is easy (gamepads report the right
+stick already); the work is design, physics for spin and edge bounces, CPU
+handling and tuning. Keyboard players would need an alternative.
+
+**Decided:** start with **placement (1)** on the right stick. Spike types
+and spin (2–3) come later, if placement plays well.
 
 ---
 
@@ -200,7 +256,11 @@ fault (re-serve for now, a point later in match mode); the CPU serves the
 same way. Tests cover a legal serve, a fault and a foot fault.
 
 ### RULE-02 · Match mode: scoring + 3-touch limit
-**P1 · S** · Depends on RULE-01 · Files: `src/sim/world.ts`, `src/main.ts`
+**P0 · S** · Files: `src/sim/world.ts`, `src/main.ts`
+
+**Playtest 1:** "Playing 1v1 and keeping a score would immediately give us
+more feedback." Moved up to P0. **Decided:** build it right after real
+serving (RULE-01), on top of it, rather than with the stand-in serve.
 
 Bring back scoring (rally scoring to 21, win by 2) and the 3-touch limit as a
 **Match** mode, keeping today's **Practice** mode. Most of this code exists in
@@ -284,6 +344,14 @@ WASD side and arrow-keys side on one keyboard.
 
 Virtual stick and buttons. Needs a performance check on phones first.
 
+### INPUT-06 · Triggers as the main hit buttons
+**P1 · S** · Files: `src/main.ts` (help text), `README.md`
+
+**Playtest 1:** the tester preferred RT for spiking: "felt more intuitive to
+time". RT/LT already work; make them the headline controls in the help line,
+README and tutorial (RT spike, LT pass), with A/B as alternates. Idea to
+evaluate later: use analog trigger depth as an alternative way to charge.
+
 ---
 
 ## UX: menus and HUD
@@ -323,6 +391,25 @@ A short interactive tutorial: move, pass, spike with timing, serve.
 ### UX-06 · Character select
 **P2 · M** · Depends on ART-03
 
+### UX-07 · Make the timing guide stand out
+**P0 · S** · Files: `src/render/renderer.ts`, `src/config/tuning.ts` (`marker`)
+
+**Playtest 1:** the tester only discovered the rings late and timed by watching
+the ball instead. Make the guide more pronounced: brighter and thicker rings,
+a pulse or "ding" when they meet, maybe a second cue near the player (e.g. a
+ring around your squirrel that fills as the moment approaches). Keep it
+readable but not cluttered.
+
+**Done when:** a first-time player notices the rings in their first rally
+(check with the next playtester).
+
+### UX-08 · Teach the dive and jump
+**P1 · S**
+
+**Playtest 1:** the tester didn't use dive or jump. Short on-screen hints the
+first few times (e.g. "Too far? Press X to dive" when a ball lands just out of
+reach), until the tutorial (UX-05) exists.
+
 ---
 
 ## ART: visuals
@@ -332,6 +419,10 @@ A short interactive tutorial: move, pass, spike with timing, serve.
 
 Replace the flat green plane: grass texture, trees, a path, sky, soft shadows
 under players.
+
+**Playtest 1:** "Mechanics get even better sometimes once you're able to see
+player movement more clearly." Include clearer player silhouettes and
+shadows.
 
 ### ART-02 · Ball and net models
 **P2 · S**
@@ -393,6 +484,27 @@ sounded like a plane cabin).
 
 ### AUDIO-03 · Footsteps and landing sounds
 **P3 · S**
+
+### AUDIO-04 · Satisfying hit feedback for the player
+**P0 · S** · Files: `src/audio/sfx.ts`, `src/main.ts`
+
+**Playtest 1:** the tester loved the sound on the CPU's hits but didn't hear
+it on their own: "Any timing mechanism in a game that's 'perfect', sound is a
+huge component... makes it addicting." The goal is a dopamine hit every time
+*you* hit the ball, and a bigger one on a perfect.
+
+Likely cause: hit sounds get louder with charge power, and the CPU's spikes
+are usually heavily charged while players' quick hits are soft. The CPU also
+hits perfect far more often, so most chimes came from the CPU.
+
+- Every player hit gets a clear, punchy sound regardless of power (power
+  can still add brightness, but not decide whether you hear it).
+- Player perfects get their own satisfying jingle; the CPU's hits and
+  perfects play a bit quieter, so your own stand out.
+- Optional: the perfect jingle rises in pitch with consecutive perfects.
+
+**Done when:** in a blind test, the tester can hear every one of their own
+hits and clearly tell a perfect from a normal hit.
 
 ---
 
@@ -481,7 +593,9 @@ flashing text, readable font sizes.
 ## BUG: known issues
 
 ### BUG-01 · Timing guide assumes the player is on the ground
-**P1 · S** · Files: `src/render/renderer.ts`
+**P0 · S** · Files: `src/render/renderer.ts`
+
+Raised to P0 by playtest 1: jump-spiking is what new players try naturally.
 
 The rings turn green when the ball reaches standing contact height. When
 jumping, the perfect moment is later. The guide should use the human
@@ -499,3 +613,24 @@ ball outline that shows through.
 
 A badly mistimed hit can land far from the court. Fine for now (the rally
 ends), but needs court bounds or a "ball out" call once scoring returns.
+
+---
+
+## Playtest log
+
+### Playtest 1 (2026-10-10)
+
+| # | Feedback | Backlog |
+|---|---|---|
+| + | Loved the CPU's hit/perfect sounds; didn't hear them on their own hits | AUDIO-04 |
+| + | RT felt more intuitive than B for spiking | INPUT-06 |
+| + | Simple mechanics; keep the arcade vibe | Guiding principle |
+| 1 | Noticed the timing rings late; make them more pronounced | UX-07 |
+| 2 | Didn't use dive or jump; tried jump-spike but couldn't time it | MECH-02, BUG-01, UX-08 |
+| 3 | Charge sweet-spot marker at ~7/8, overcharge = mishit risk | SHOT-05 |
+| 4 | More polished graphics to see movement clearly | ART-01, ART-02 |
+| 5 | Aim the spike on the net (like Mario baseball) | SHOT-06 |
+| 6 | Drop shot | SHOT-01 |
+| 7 | 1v1 with scoring for faster, gut-feel feedback | RULE-01 → RULE-02 (both P0) |
+| 8 | Right-stick shots: spike types, side hits, spin | SHOT-06 |
+
