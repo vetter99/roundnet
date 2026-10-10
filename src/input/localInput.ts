@@ -16,18 +16,51 @@ const STANDARD_LAYOUT: ButtonLayout = { A: 0, B: 1, X: 2, Y: 3, LB: 4, RB: 5, LT
 // that skips slots 2 and 5, with the triggers reported as axes instead of buttons.
 const XBOX_RAW_LAYOUT: ButtonLayout = { A: 0, B: 1, X: 3, Y: 4, LB: 6, RB: 7, LT: -1, RT: -1, VIEW: 10 };
 
-const KEYS = {
-  up: ['KeyW', 'ArrowUp'],
-  down: ['KeyS', 'ArrowDown'],
-  left: ['KeyA', 'ArrowLeft'],
-  right: ['KeyD', 'ArrowRight'],
-  jump: ['Space'],
-  pass: ['KeyJ'],
-  spike: ['KeyK'],
-  feed: ['KeyR'],
+type KeyMap = Record<'up' | 'down' | 'left' | 'right' | 'jump' | 'pass' | 'spike' | 'feed', string[]>;
+
+/**
+ * Keyboard layouts. 'all' is for one player (either set of movement keys);
+ * 'left' and 'right' split one keyboard between two players.
+ */
+export type KeyboardScheme = 'all' | 'left' | 'right';
+
+const KEYMAPS: Record<KeyboardScheme, KeyMap> = {
+  all: {
+    up: ['KeyW', 'ArrowUp'],
+    down: ['KeyS', 'ArrowDown'],
+    left: ['KeyA', 'ArrowLeft'],
+    right: ['KeyD', 'ArrowRight'],
+    jump: ['Space'],
+    pass: ['KeyJ'],
+    spike: ['KeyK'],
+    feed: ['KeyR'],
+  },
+  left: {
+    up: ['KeyW'],
+    down: ['KeyS'],
+    left: ['KeyA'],
+    right: ['KeyD'],
+    jump: ['Space'],
+    pass: ['KeyJ'],
+    spike: ['KeyK'],
+    feed: ['KeyR'],
+  },
+  right: {
+    up: ['ArrowUp'],
+    down: ['ArrowDown'],
+    left: ['ArrowLeft'],
+    right: ['ArrowRight'],
+    jump: ['Slash'],
+    pass: ['Comma'],
+    spike: ['Period'],
+    feed: [],
+  },
 };
 
-const CAPTURED_KEYS = new Set(Object.values(KEYS).flat());
+/** The key shown in prompts for passing/serving in each scheme. */
+export const PASS_KEY_LABEL: Record<KeyboardScheme, string> = { all: 'J', left: 'J', right: ',' };
+
+const CAPTURED_KEYS = new Set(Object.values(KEYMAPS).flatMap((map) => Object.values(map).flat()));
 
 /**
  * Reads the keyboard and every connected gamepad separately, so each can
@@ -51,20 +84,25 @@ export class LocalInput {
     target.addEventListener('blur', () => this.held.clear());
   }
 
-  pollKeyboard(): InputFrame {
+  /**
+   * Read the keyboard once per tick, as a frame for each scheme (so two
+   * players can share one keyboard). Presses since the last poll are cleared.
+   */
+  pollKeyboard(): Record<KeyboardScheme, InputFrame> {
     const isHeld = (codes: string[]) => codes.some((c) => this.held.has(c));
     const wasPressed = (codes: string[]) => codes.some((c) => this.pressed.has(c));
-    const frame: InputFrame = {
-      moveX: (isHeld(KEYS.right) ? 1 : 0) - (isHeld(KEYS.left) ? 1 : 0),
-      moveZ: (isHeld(KEYS.up) ? 1 : 0) - (isHeld(KEYS.down) ? 1 : 0),
-      jump: wasPressed(KEYS.jump),
+    const read = (keys: KeyMap): InputFrame => ({
+      moveX: (isHeld(keys.right) ? 1 : 0) - (isHeld(keys.left) ? 1 : 0),
+      moveZ: (isHeld(keys.up) ? 1 : 0) - (isHeld(keys.down) ? 1 : 0),
+      jump: wasPressed(keys.jump),
       // Held, not pressed: holding charges the hit and releasing swings.
-      pass: isHeld(KEYS.pass),
-      spike: isHeld(KEYS.spike),
-      feed: wasPressed(KEYS.feed),
-    };
+      pass: isHeld(keys.pass),
+      spike: isHeld(keys.spike),
+      feed: wasPressed(keys.feed),
+    });
+    const frames = { all: read(KEYMAPS.all), left: read(KEYMAPS.left), right: read(KEYMAPS.right) };
     this.pressed.clear();
-    return frame;
+    return frames;
   }
 
   /** Connected gamepads in the order the browser lists them. */

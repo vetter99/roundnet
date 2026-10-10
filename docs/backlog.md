@@ -131,19 +131,16 @@ and UX cards.
 
 ## MECH: movement
 
-### MECH-01 · Dive ✅ done (2026-10-10)
-**P0 · M** · Files: `src/sim/player.ts`, `src/sim/hit.ts`, `src/render/character.ts`, `src/config/tuning.ts` (`player.dive`)
+### MECH-01 · Dive ✅ done (2026-10-10), now automatic
+**P0 · M** · Files: `src/sim/hit.ts` (`autoDiveTarget`), `src/sim/player.ts`, `src/render/character.ts`, `src/config/tuning.ts` (`player.dive`)
 
-Shipped: X (keyboard L) lunges ~2.7 m in the stick direction (or the way
-you're moving). While lunging you can tap A or B to pass or spike: reach is
-measured from the outstretched paws (0.7 m ahead) with +0.7 m bonus, balls up
-to 1.8 m high, a low ideal contact height and 60% power, and a hit released
-mid-lunge stays ready until the lunge ends. Then you lie on the ground for
-0.12 s (no moving, jumping or hitting) and get back up. "Reset stuck ball" moved to
-the View/Back button (keyboard R). Tests in `src/sim/world.test.ts`.
-
-Follow-ups: the CPU doesn't dive yet (add to AI-03); dive tuning needs play
-feedback.
+Shipped, then changed to **automatic, Mario Tennis 64 style**: there's no
+dive button. Releasing a pass or spike at a ball that's just out of reach
+(up to `dive.autoRange` beyond it), and that won't come into reach on its
+own, dives toward it; the hit happens during the dive. While lunging: reach
+measured from the outstretched paws with a bonus, balls up to 1.8 m high, a
+low ideal contact height and 60% power. Then a short recovery on the ground.
+The CPU gets auto-dives too. Tests in `src/sim/world.test.ts`.
 
 ### MECH-02 · Jump-spike bonus
 **P0 · S** · Files: `src/sim/hit.ts`, `src/config/tuning.ts`
@@ -433,9 +430,9 @@ readable but not cluttered.
 ### UX-08 · Teach the dive and jump
 **P1 · S**
 
-**Playtest 1:** the tester didn't use dive or jump. Short on-screen hints the
-first few times (e.g. "Too far? Press X to dive" when a ball lands just out of
-reach), until the tutorial (UX-05) exists.
+**Playtest 1:** the tester didn't use dive or jump. Dive is now automatic
+(MECH-01), so this is mainly about jumping: short on-screen hints the first
+few times, until the tutorial (UX-05) exists.
 
 ---
 

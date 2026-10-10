@@ -18,7 +18,7 @@ import { isPlayable, predictDescentTo } from '../sim/hit';
 import type { HitKind } from '../sim/player';
 import { DT } from '../sim/time';
 import { cameraPosition, frame, type Framing } from './cameraFraming';
-import { Character, FUR } from './character';
+import { Character } from './character';
 import { addHaze, createBallMaterial, createLawn, createNetMaterial, createScenery, createShadows, SKY } from './environment';
 import { createStadium, type Stadium } from './stadium';
 import type { ShadowGenerator } from '@babylonjs/core/Lights/Shadows/shadowGenerator';
@@ -330,7 +330,7 @@ export class Renderer {
 
   private createPlayerView(team: 0 | 1): PlayerView {
     const scene = this.scene;
-    const character = new Character(scene, TEAM_COLORS[team], team === 0 ? FUR.red : FUR.gray);
+    const character = new Character(scene, TEAM_COLORS[team], team === 0 ? 'squirrel' : 'raccoon');
     for (const mesh of character.root.getChildMeshes()) this.shadows.addShadowCaster(mesh);
 
     const reachRing = MeshBuilder.CreateTorus('reach', { diameter: 2, thickness: 0.04, tessellation: 48 }, scene);

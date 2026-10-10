@@ -55,7 +55,10 @@ src/main.ts           wires it together; fixed 60Hz loop with render interpolati
 - After the ball lands, the game waits for the server to press pass (A) to serve.
 - Serving is a stand-in: the ball is fed off the net to the receiver.
 - Hits charge while the button is held and swing on release (`chargePower`).
-- `src/ai/bot.ts` is a deterministic CPU player. Red is always the CPU for now.
+- Dives are automatic: swinging at a ball just out of reach dives for it
+  (`autoDiveTarget` in `src/sim/hit.ts`). There is no dive button.
+- `src/ai/bot.ts` is a deterministic CPU player. Red is the CPU unless the
+  on-screen 2 Player toggle hands it to a second controller or keyboard half.
 - Hit quality comes from timing: how close the ball is to the player's
   contact height at contact. Bad hits are weaker and drift off target.
 - Spikes always target the net center; the stick only aims passes. The worst-

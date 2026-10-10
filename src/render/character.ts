@@ -19,10 +19,58 @@ const LAND_SQUASH_TIME = 0.18;
 const CREAM = new Color3(0.99, 0.9, 0.74);
 const DARK = new Color3(0.08, 0.06, 0.06);
 
-/** Fur colors, so the two players are easy to tell apart. */
-export const FUR = {
-  red: new Color3(0.78, 0.43, 0.17),
-  gray: new Color3(0.56, 0.53, 0.5),
+export type Species = 'squirrel' | 'raccoon';
+
+interface SpeciesLook {
+  fur: Color3;
+  // Paws and feet.
+  extremities: Color3;
+  muzzle: Color3;
+  // Width, height, depth multipliers for the hips and torso (body shape).
+  hips: [number, number, number];
+  torso: [number, number, number];
+  headWidth: number;
+  // Tail control points [y, z, diameter] from the base, and whether it's ringed.
+  tail: [number, number, number][];
+  ringed: boolean;
+}
+
+const SPECIES: Record<Species, SpeciesLook> = {
+  // Slim, orange, with pointy ears and a big curled tail.
+  squirrel: {
+    fur: new Color3(0.78, 0.43, 0.17),
+    extremities: new Color3(0.55, 0.3, 0.12),
+    muzzle: new Color3(0.99, 0.9, 0.74),
+    hips: [1, 0.75, 0.95],
+    torso: [1, 0.95, 0.85],
+    headWidth: 1,
+    tail: [
+      [0, 0, 0.17],
+      [0.13, -0.15, 0.25],
+      [0.34, -0.25, 0.31],
+      [0.58, -0.25, 0.33],
+      [0.78, -0.14, 0.29],
+      [0.86, 0.01, 0.21],
+    ],
+    ringed: false,
+  },
+  // Chunky and gray, with a black mask, round ears and a thick ringed tail.
+  raccoon: {
+    fur: new Color3(0.55, 0.55, 0.58),
+    extremities: new Color3(0.16, 0.16, 0.18),
+    muzzle: new Color3(0.95, 0.95, 0.95),
+    hips: [1.18, 0.85, 1.08],
+    torso: [1.12, 0.98, 0.95],
+    headWidth: 1.1,
+    tail: [
+      [0, 0, 0.19],
+      [0.1, -0.18, 0.25],
+      [0.24, -0.38, 0.28],
+      [0.4, -0.56, 0.27],
+      [0.55, -0.7, 0.22],
+    ],
+    ringed: true,
+  },
 };
 
 // Swing animations as keyframes over normalized time 0..1.
@@ -63,18 +111,11 @@ const SWING_ANIMS: Record<HitKind, SwingAnim> = {
 // holds there; releasing plays the rest of the swing from that point.
 const WINDUP_PHASE: Record<HitKind, number> = { pass: 0.25, spike: 0.3 };
 
-// The tail's shape: control points curling up behind the back, base to tip,
-// as [y, z, diameter] relative to the tail's base pivot. Many overlapping
-// spheres are blended between them so it reads as one bushy tail.
-const TAIL_SHAPE: [number, number, number][] = [
-  [0, 0, 0.17],
-  [0.13, -0.15, 0.25],
-  [0.34, -0.25, 0.31],
-  [0.58, -0.25, 0.33],
-  [0.78, -0.14, 0.29],
-  [0.86, 0.01, 0.21],
-];
+// The tail is many overlapping spheres blended between its control points,
+// so it reads as one bushy shape.
 const TAIL_STEPS_PER_SEGMENT = 8;
+// Overall tail size relative to the control points above.
+const TAIL_SCALE = 0.68;
 
 /** Where a player is in a dive: lunging forward, or down and getting back up. */
 export interface DiveView {
@@ -92,9 +133,9 @@ export interface ChargeView {
 }
 
 /**
- * A rounded cartoon squirrel in a team-color shirt, with arm/leg/tail swings
- * and bouncy squash-and-stretch driven by the player's sim state. Purely
- * visual: reach and hit timing are set by tuning, not by this model.
+ * A rounded cartoon critter (squirrel or raccoon) in a team-color shirt, with
+ * arm/leg/tail swings and bouncy squash-and-stretch driven by the player's sim
+ * state. Purely visual: reach and hit timing are set by tuning, not by this model.
  */
 export class Character {
   readonly root: TransformNode;
@@ -111,15 +152,17 @@ export class Character {
   private landTimer = 0;
   private wasGrounded = true;
 
-  constructor(scene: Scene, teamColor: Color3, furColor: Color3) {
+  constructor(scene: Scene, teamColor: Color3, species: Species) {
+    const look = SPECIES[species];
     this.root = new TransformNode('player', scene);
     // Everything that squashes, leans and dips hangs off `bounce`.
     this.bounce = new TransformNode('bounce', scene);
     this.bounce.parent = this.root;
 
     const shirt = material(scene, 'shirt', teamColor);
-    const fur = material(scene, 'fur', furColor);
-    const darkFur = material(scene, 'darkFur', furColor.scale(0.7));
+    const fur = material(scene, 'fur', look.fur);
+    const extremities = material(scene, 'extremities', look.extremities);
+    const muzzleMat = material(scene, 'muzzle', look.muzzle);
     const cream = material(scene, 'cream', CREAM);
     const dark = material(scene, 'dark', DARK);
     dark.specularColor = new Color3(0.6, 0.6, 0.6);
@@ -138,15 +181,16 @@ export class Character {
     // Body: furry hips with a round team shirt on top.
     const hips = ball('hips', 0.36, fur, this.bounce);
     hips.position.y = 0.3;
-    hips.scaling.set(1, 0.75, 0.95);
+    hips.scaling.set(...look.hips);
     const torso = ball('torso', 0.44, shirt, this.bounce);
     torso.position.y = 0.5;
-    torso.scaling.set(1, 0.95, 0.85);
+    torso.scaling.set(...look.torso);
 
-    // Head with muzzle, nose, eyes and ears.
+    // Head with muzzle and nose; eyes and ears depend on the species.
     const head = ball('head', HEAD_DIAMETER, fur, this.bounce, 28);
     head.position.y = HEAD_Y;
-    const muzzle = ball('muzzle', 0.24, cream, this.bounce);
+    head.scaling.x = look.headWidth;
+    const muzzle = ball('muzzle', 0.24, muzzleMat, this.bounce);
     muzzle.position.set(0, HEAD_Y - 0.08, 0.16);
     muzzle.scaling.set(1.1, 0.75, 0.75);
     const nose = ball('nose', 0.075, dark, this.bounce, 12);
@@ -154,37 +198,69 @@ export class Character {
     nose.scaling.set(1.2, 0.85, 0.9);
 
     for (const side of [-1, 1]) {
+      if (species === 'raccoon') {
+        // The bandit mask: a dark patch around each eye, slanting down and
+        // outward, with a white ring so the eye still reads against it.
+        const patch = ball('maskPatch', 0.13, extremities, this.bounce, 16);
+        patch.position.set(side * 0.1, HEAD_Y + 0.035, 0.185);
+        patch.scaling.set(1.45, 0.95, 0.45);
+        patch.rotation.z = side * 0.3;
+        const white = ball('eyeWhite', 0.095, muzzleMat, this.bounce, 14);
+        white.position.set(side * 0.09, HEAD_Y + 0.05, 0.203);
+        white.scaling.set(0.95, 1.25, 0.45);
+      }
       // Tall glossy oval eyes with a white shine, cartoon style.
       const eye = ball('eye', 0.075, dark, this.bounce, 14);
-      eye.position.set(side * 0.085, HEAD_Y + 0.05, 0.205);
+      eye.position.set(side * (species === 'raccoon' ? 0.09 : 0.085), HEAD_Y + 0.05, 0.21);
       eye.scaling.set(0.85, 1.45, 0.6);
       const glint = ball('glint', 0.025, shine, this.bounce, 8);
-      glint.position.set(side * 0.085 + 0.012, HEAD_Y + 0.08, 0.23);
+      glint.position.set(side * 0.085 + 0.012, HEAD_Y + 0.08, 0.235);
 
-      const ear = MeshBuilder.CreateCylinder('ear', { height: 0.17, diameterTop: 0, diameterBottom: 0.12, tessellation: 16 }, scene);
-      ear.material = fur;
-      ear.parent = this.bounce;
-      ear.position.set(side * 0.14, HEAD_Y + 0.23, -0.02);
-      ear.rotation.z = -side * 0.35;
-      const innerEar = MeshBuilder.CreateCylinder('innerEar', { height: 0.11, diameterTop: 0, diameterBottom: 0.07, tessellation: 12 }, scene);
-      innerEar.material = cream;
-      innerEar.parent = ear;
-      innerEar.position.set(0, -0.02, 0.025);
+      if (species === 'raccoon') {
+        // Round ears with a white rim.
+        const rim = ball('earRim', 0.15, muzzleMat, this.bounce, 14);
+        rim.position.set(side * 0.16, HEAD_Y + 0.2, -0.03);
+        rim.scaling.set(1, 1.05, 0.45);
+        const ear = ball('ear', 0.12, extremities, this.bounce, 14);
+        ear.position.set(side * 0.16, HEAD_Y + 0.2, -0.01);
+        ear.scaling.set(1, 1.05, 0.45);
+      } else {
+        const ear = MeshBuilder.CreateCylinder('ear', { height: 0.17, diameterTop: 0, diameterBottom: 0.12, tessellation: 16 }, scene);
+        ear.material = fur;
+        ear.parent = this.bounce;
+        ear.position.set(side * 0.14, HEAD_Y + 0.23, -0.02);
+        ear.rotation.z = -side * 0.35;
+        const innerEar = MeshBuilder.CreateCylinder('innerEar', { height: 0.11, diameterTop: 0, diameterBottom: 0.07, tessellation: 12 }, scene);
+        innerEar.material = cream;
+        innerEar.parent = ear;
+        innerEar.position.set(0, -0.02, 0.025);
+      }
     }
 
-    // Big bushy tail curling up behind; its pivot sways while running.
+    // The tail: a squirrel's curls up with a cream tip; a raccoon's sweeps back
+    // in dark rings with a dark tip. Its pivot sways while running.
     this.tail = new TransformNode('tail', scene);
     this.tail.parent = this.bounce;
-    this.tail.position.set(0, 0.26, -0.2);
-    for (let i = 0; i < TAIL_SHAPE.length - 1; i++) {
-      const [y0, z0, d0] = TAIL_SHAPE[i];
-      const [y1, z1, d1] = TAIL_SHAPE[i + 1];
-      const last = i === TAIL_SHAPE.length - 2;
-      for (let s = 0; s <= (last ? TAIL_STEPS_PER_SEGMENT : TAIL_STEPS_PER_SEGMENT - 1); s++) {
+    this.tail.position.set(0, 0.26, -0.17);
+    this.tail.scaling.setAll(TAIL_SCALE);
+    const shape = look.tail;
+    const totalPuffs = (shape.length - 1) * TAIL_STEPS_PER_SEGMENT + 1;
+    let puffIndex = 0;
+    for (let i = 0; i < shape.length - 1; i++) {
+      const [y0, z0, d0] = shape[i];
+      const [y1, z1, d1] = shape[i + 1];
+      const last = i === shape.length - 2;
+      for (let s = 0; s <= (last ? TAIL_STEPS_PER_SEGMENT : TAIL_STEPS_PER_SEGMENT - 1); s++, puffIndex++) {
         const u = s / TAIL_STEPS_PER_SEGMENT;
-        // The last few puffs at the tip are cream.
-        const tip = last && u > 0.5;
-        const puff = ball('tail', lerp(d0, d1, u), tip ? cream : fur, this.tail, 14);
+        const nearTip = puffIndex > totalPuffs - 5;
+        const mat = look.ringed
+          ? nearTip || Math.floor(puffIndex / 4) % 2 === 1
+            ? extremities
+            : fur
+          : nearTip
+            ? cream
+            : fur;
+        const puff = ball('tail', lerp(d0, d1, u), mat, this.tail, 14);
         puff.position.set(0, lerp(y0, y1, u), lerp(z0, z1, u));
       }
     }
@@ -193,13 +269,13 @@ export class Character {
     this.arms = [-1, 1].map((side) => {
       const pivot = new TransformNode('shoulder', scene);
       pivot.parent = this.bounce;
-      pivot.position.set(side * SHOULDER_X, SHOULDER_Y, 0);
+      pivot.position.set(side * SHOULDER_X * look.torso[0], SHOULDER_Y, 0);
       ball('sleeve', 0.13, shirt, pivot);
       const arm = MeshBuilder.CreateCapsule('arm', { height: 0.26, radius: 0.05 }, scene);
       arm.material = fur;
       arm.parent = pivot;
       arm.position.y = -0.12;
-      const paw = ball('paw', 0.1, cream, pivot, 12);
+      const paw = ball('paw', 0.1, species === 'raccoon' ? extremities : cream, pivot, 12);
       paw.position.y = -0.25;
       return pivot;
     });
@@ -207,13 +283,13 @@ export class Character {
     this.legs = [-1, 1].map((side) => {
       const pivot = new TransformNode('hip', scene);
       pivot.parent = this.bounce;
-      pivot.position.set(side * 0.1, HIP_Y, 0);
+      pivot.position.set(side * 0.1 * look.hips[0], HIP_Y, 0);
       const leg = MeshBuilder.CreateCapsule('leg', { height: 0.2, radius: 0.065 }, scene);
       leg.material = fur;
       leg.parent = pivot;
       leg.position.y = -0.1;
       // Oversized cartoon feet.
-      const foot = ball('foot', 0.15, darkFur, pivot, 14);
+      const foot = ball('foot', 0.15, extremities, pivot, 14);
       foot.scaling.set(0.95, 0.55, 1.45);
       foot.position.set(0, -HIP_Y + 0.04, 0.05);
       return pivot;

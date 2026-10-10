@@ -2,7 +2,7 @@ import { botIntent } from './ai/bot';
 import { Sfx } from './audio/sfx';
 import { tuning } from './config/tuning';
 import { createTuningPane } from './debug/tuningPane';
-import { LocalInput, type InputFrame } from './input/localInput';
+import { LocalInput, PASS_KEY_LABEL, type InputFrame, type KeyboardScheme } from './input/localInput';
 import { Renderer, snapshot } from './render/renderer';
 import type { MissReason } from './sim/hit';
 import { chargePower, isDiving } from './sim/player';
@@ -16,6 +16,7 @@ const flash = document.getElementById('flash') as HTMLElement;
 const help = document.getElementById('help') as HTMLElement;
 const soundButton = document.getElementById('sound') as HTMLButtonElement;
 const prompt = document.getElementById('prompt') as HTMLElement;
+const twoPlayerButton = document.getElementById('twoPlayer') as HTMLButtonElement;
 
 const TEAM_NAMES = ['Blue', 'Red'];
 const TEAM_CSS = ['#5b8cff', '#ff6b5b'];
@@ -43,18 +44,46 @@ let prev = snapshot(world);
 let accumulator = 0;
 let lastTime = performance.now();
 let flashTimer = 0;
-type Device = 'keyboard' | 'cpu' | Gamepad;
+// A device is a keyboard scheme, the CPU, or a gamepad.
+type Device = KeyboardScheme | 'cpu' | Gamepad;
+
+// When on, a second human plays Red instead of the CPU (toggled on screen).
+let twoPlayer = false;
+twoPlayerButton.addEventListener('click', () => {
+  twoPlayer = !twoPlayer;
+  twoPlayerButton.textContent = twoPlayer ? '🤖 Red: back to CPU' : '👥 2 Player';
+  twoPlayerButton.blur();
+  canvas.focus();
+});
 
 /**
- * Decide which device drives each player: [Blue, Red]. Blue is the first
- * controller (or the keyboard); Red is always the CPU for now.
+ * Decide which device drives each player: [Blue, Red]. One player: Blue gets
+ * the first controller (or the whole keyboard) and Red is the CPU. Two
+ * players: one controller each; or controller + keyboard; or, with no
+ * controllers, the keyboard split into a WASD half and an arrow-keys half.
  */
 function assignDevices(): [Device, Device] {
-  return [input.gamepads()[0] ?? 'keyboard', 'cpu'];
+  const pads = input.gamepads();
+  if (!twoPlayer) return [pads[0] ?? 'all', 'cpu'];
+  if (pads.length >= 2) return [pads[0], pads[1]];
+  if (pads.length === 1) return [pads[0], 'all'];
+  return ['left', 'right'];
 }
 
 function deviceName(d: Device): string {
-  return d === 'keyboard' ? 'Keyboard' : d === 'cpu' ? 'CPU' : 'Controller';
+  if (d === 'cpu') return 'CPU';
+  if (d === 'all') return 'Keyboard';
+  if (d === 'left') return 'WASD keys';
+  if (d === 'right') return 'Arrow keys';
+  return 'Controller';
+}
+
+/** Controls help for one device. */
+function controlsHelp(d: Device): string {
+  if (d === 'cpu') return '';
+  if (d === 'right') return 'arrows move · hold , pass/serve · hold . spike · / jump';
+  if (d === 'all' || d === 'left') return 'WASD move · hold J pass/serve · hold K spike · Space jump · R reset ball';
+  return 'stick move · hold A pass/serve · hold B spike · Y jump · View reset ball';
 }
 
 renderer.engine.runRenderLoop(() => {
@@ -71,11 +100,11 @@ renderer.engine.runRenderLoop(() => {
     prev = snapshot(world);
     const keyboard = input.pollKeyboard();
     const frames: InputFrame[] = devices.map((d, i) => {
-      if (d === 'keyboard') return keyboard;
       if (d === 'cpu') return { ...botIntent(world, i, tuning), feed: false };
+      if (typeof d === 'string') return keyboard[d];
       return input.pollGamepad(d);
     });
-    if (world.ball.alive && (frames.some((f) => f.feed) || keyboard.feed)) resetRally(world);
+    if (world.ball.alive && (frames.some((f) => f.feed) || keyboard.all.feed)) resetRally(world);
     stepWorld(world, frames, tuning);
     for (const e of world.events) onEvent(e);
     world.players.forEach((p, i) => {
@@ -220,7 +249,7 @@ function updateHud(frameSeconds: number, devices: [Device, Device]): void {
   const serverDevice = devices[world.players.findIndex((p) => p.team === server)];
   prompt.style.display = world.waitingForServe ? 'block' : 'none';
   if (world.waitingForServe) {
-    const key = serverDevice === 'keyboard' ? 'J' : 'A';
+    const key = serverDevice === 'cpu' ? '' : typeof serverDevice === 'string' ? PASS_KEY_LABEL[serverDevice] : 'A';
     prompt.innerHTML =
       serverDevice === 'cpu' ? `${teamSpan(server)} is about to serve…` : `${teamSpan(server)}: press <b>${key}</b> to serve`;
   }
@@ -238,8 +267,9 @@ function updateHud(frameSeconds: number, devices: [Device, Device]): void {
 
   soundButton.style.display = sfx.locked ? 'block' : 'none';
   const sound = sfx.muted ? 'Sound muted (M)' : 'M mute';
+  const [blue, red] = devices;
   help.textContent =
-    `${sound}   |   Blue: ${deviceName(devices[0])} · Red: ${deviceName(devices[1])}   |   ` +
-    `Controller: stick move · hold A pass/serve · hold B spike (out of reach = auto dive) · Y jump · View reset ball   |   ` +
-    `Keyboard: WASD · hold J pass/serve · hold K spike · Space jump · R reset ball · \` tuning`;
+    `${sound} · \` tuning · swing at a ball just out of reach to dive   |   ` +
+    `Blue (${deviceName(blue)}): ${controlsHelp(blue)}` +
+    (red === 'cpu' ? '   |   Red: CPU' : `   |   Red (${deviceName(red)}): ${controlsHelp(red)}`);
 }
