@@ -136,6 +136,11 @@ export interface DiveView {
 // angle (so a small aim change is visible) and leans sideways into it.
 const SERVE_AIM_EXAGGERATION = 3;
 const SERVE_AIM_LEAN = 0.35;
+// Serve spin: while charging, the hitting arm cocks out to one side (radians)
+// and the body twists with it; on release the arm sweeps across to the other
+// side, the direction the ball will curve.
+const SERVE_SPIN_ARM = 0.9;
+const SERVE_SPIN_TWIST = 0.35;
 
 // Dive pose: how far the body pitches forward (radians) at full stretch.
 const DIVE_PITCH = 1.3;
@@ -318,8 +323,19 @@ export class Character {
     for (const mesh of this.root.getChildMeshes()) mesh.visibility = alpha;
   }
 
+  // The spin of a serve being swung right now (the arm sweeps across).
+  private serveSweep: number | null = null;
+
+  /** The serve swing: a spike that sweeps the arm across in the spin direction. */
+  playServe(spin: number): void {
+    // The swing event usually started the animation already this tick.
+    if (!this.swing) this.playSwing('spike');
+    this.serveSweep = spin;
+  }
+
   /** Play the pass or spike animation; call whenever this player swings. */
   playSwing(kind: ShotKind): void {
+    this.serveSweep = null;
     const anim = SWING_ANIMS[kind];
     const startPhase = this.heldPhase?.kind === kind ? this.heldPhase.phase : 0;
     this.swing = { anim, time: startPhase * anim.duration };
@@ -337,6 +353,7 @@ export class Character {
     dive: DiveView | null,
     faceNet = false,
     serveAim?: { x: number; z: number },
+    serveSpin = 0,
   ): void {
     this.root.position.set(x, y, z);
     this.root.scaling.setAll(size);
@@ -367,7 +384,10 @@ export class Character {
       this.swing.time += dt;
       phase = this.swing.time / this.swing.anim.duration;
       anim = this.swing.anim;
-      if (phase >= 1) this.swing = null;
+      if (phase >= 1) {
+        this.swing = null;
+        this.serveSweep = null;
+      }
     } else if (charge) {
       // Wind up quickly at first, then hold the pose as power builds.
       phase = WINDUP_PHASE[charge.kind] * Math.min(1, 0.4 + charge.power);
@@ -416,6 +436,20 @@ export class Character {
       arm.rotation.x = -(i === 0 ? 1 : -1) * stride * run * 0.9;
       arm.rotation.z = p.grounded ? side * 0.15 : -side * 0.7;
     });
+
+    // Serve spin, read from the arm: cocked away from the spin while charging,
+    // then swept across through the hit. Positive = cocked to the server's left.
+    let cock = 0;
+    if (this.serveSweep !== null) {
+      const u = clamp((phase - 0.3) / 0.35, 0, 1);
+      cock = this.serveSweep * (1 - 2 * u * u * (3 - 2 * u));
+    } else if (charge && serveAim) {
+      cock = serveSpin;
+    }
+    if (cock !== 0) {
+      this.arms[1].rotation.z += cock * SERVE_SPIN_ARM;
+      this.root.rotation.y -= cock * SERVE_SPIN_TWIST;
+    }
 
     if (dive) this.applyDivePose(dive, anim !== undefined);
   }

@@ -216,6 +216,7 @@ function onEvent(e: SimEvent): void {
     showFlash(`${TEAM_NAMES[e.winner]} wins ${Math.max(...world.score)}–${Math.min(...world.score)}!`, TEAM_CSS[e.winner], 3);
     sfx.perfect(true, 4);
   } else if (e.type === 'serve') {
+    renderer.playServe(e.playerId, e.spin);
     sfx.hit('spike', e.power, 1, world.players[e.playerId].team === 0);
   } else if (e.type === 'fault') {
     sfx.ground();
@@ -312,7 +313,7 @@ function updateHud(frameSeconds: number, devices: [Device, Device]): void {
     prompt.innerHTML =
       serverDevice === 'cpu'
         ? `${teamSpan(server)} is serving…${second}`
-        : `${teamSpan(server)}: stick aims · hold <b>${key}</b> to charge · release, then stick ←→ for spin${second}`;
+        : `${teamSpan(server)}: stick aims · hold <b>${key}</b> to charge (stick ←→ while holding = spin) · release to serve${second}`;
   }
   const match = world.mode === 'match';
   const touches = match && world.ball.alive && world.ball.lastTouch !== 'feed' ? ` · touch ${world.touches} of ${tuning.match.maxTouches}` : '';

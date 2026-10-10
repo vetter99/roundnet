@@ -9,7 +9,6 @@ import {
   serverIntent,
   serveWobble,
   setUpServe,
-  steerServe,
   stepServeAim,
   type ServeState,
 } from './serve';
@@ -27,7 +26,7 @@ export type SimEvent =
   // The ball came off the net, so the other team must now play it.
   | { type: 'possession'; team: Team }
   // A serve was hit; a serve that missed the net (lost = out of tries).
-  | { type: 'serve'; playerId: number; power: number }
+  | { type: 'serve'; playerId: number; power: number; spin: number }
   | { type: 'fault'; team: Team; lost: boolean }
   // Match mode: a point scored, and the end of a game.
   | { type: 'point'; team: Team }
@@ -158,14 +157,12 @@ export function stepWorld(world: World, intents: readonly Intent[], t: Tuning): 
     const intent = intents[i] ?? NEUTRAL_INTENT;
     // No serving once the game is over (waiting for a rematch).
     const serving = world.waitingForServe && world.winner === null && p.team === serverTeam(world);
-    // After releasing, the server stays put and the stick puts spin on the serve.
-    const spinning = world.serve.inFlight && p.team === world.lastHitTeam;
     // Read the wobble before stepping, so a release this tick uses where the aim was.
     const wobble = serving ? serveWobble(world, p, t) : null;
-    const wasDiving = p.dive !== null;
-    const swing = stepPlayer(p, serving || spinning ? serverIntent(intent) : intent, t);
+    // Aim (or, while charging, spin) from the stick before the release is processed.
     if (serving) stepServeAim(world, p, intent, t);
-    if (spinning) steerServe(world, intent, t);
+    const wasDiving = p.dive !== null;
+    const swing = stepPlayer(p, serving ? serverIntent(intent) : intent, t);
     if (p.dive && !wasDiving) world.events.push({ type: 'dive', playerId: p.id });
     if (p.dive?.ticks === diveTicks(t)) world.events.push({ type: 'diveLand', playerId: p.id });
     if (!swing) return;
@@ -174,7 +171,7 @@ export function stepWorld(world: World, intents: readonly Intent[], t: Tuning): 
     if (serving && wobble) {
       p.hitBuffer = null;
       launchServe(world, p, swing.power, wobble, t);
-      world.events.push({ type: 'serve', playerId: p.id, power: swing.power });
+      world.events.push({ type: 'serve', playerId: p.id, power: swing.power, spin: world.serve.spin });
     }
   });
   separatePlayers(world, t);

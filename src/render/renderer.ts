@@ -212,7 +212,9 @@ export class Renderer {
       const aiming = world.waitingForServe && world.winner === null && p.team === serverTeam(world);
       const wobble = aiming ? serveWobble(world, p, t) : null;
       const aim = wobble ? { x: world.serve.aim.x + wobble.x, z: world.serve.aim.z + wobble.z } : undefined;
-      view.character.update(p, x, y, z, t.player.size, frameSeconds, charge, dive, world.waitingForServe, aim);
+      // Spin shows in the arm: cocked to one side while charging.
+      const spin = aiming ? world.serve.spin : 0;
+      view.character.update(p, x, y, z, t.player.size, frameSeconds, charge, dive, world.waitingForServe, aim, spin);
       this.updateMeter(view.meter, charge?.power ?? null, x, y + 1.55 * t.player.size, z);
       // Reach rings are a debug aid only (they were confused with the timing rings).
       view.reachRing.isVisible = t.debug.showReach;
@@ -292,6 +294,11 @@ export class Renderer {
   }
 
   /** Play the pass or spike animation for a player. */
+  /** The serve swing: the arm sweeps across in the spin direction (-1..1). */
+  playServe(playerId: number, spin: number): void {
+    this.players[playerId]?.character.playServe(spin);
+  }
+
   playSwing(playerId: number, kind: ShotKind): void {
     this.players[playerId]?.character.playSwing(kind);
   }
@@ -340,10 +347,13 @@ export class Renderer {
     const receiver = world.players.find((p) => p.team === world.nextReceiver) ?? world.players[0];
     const server = world.players.find((p) => p.team !== world.nextReceiver) ?? world.players[0];
     const away = Math.hypot(receiver.pos.x, receiver.pos.z) || 1;
+    const ux = receiver.pos.x / away;
+    const uz = receiver.pos.z / away;
+    // Over the receiver's right shoulder, so their whole body shows beside the view.
     const duelPos = {
-      x: receiver.pos.x + (receiver.pos.x / away) * c.duelBack,
+      x: receiver.pos.x + ux * c.duelBack + uz * c.duelSide,
       y: c.duelHeight,
-      z: receiver.pos.z + (receiver.pos.z / away) * c.duelBack,
+      z: receiver.pos.z + uz * c.duelBack - ux * c.duelSide,
     };
     // Look across the net toward the server, about where the serve will come from.
     const duelTarget = { x: server.pos.x * 0.6, y: 0.75, z: server.pos.z * 0.6 };

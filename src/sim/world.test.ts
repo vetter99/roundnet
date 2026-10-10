@@ -539,18 +539,23 @@ describe('serve duel', () => {
 });
 
 describe('serve spin', () => {
-  /** Serve straight at the net center; `stick` is held sideways while it flies. Returns where it hits the net and its sideways speed after. */
-  function serveWithSpin(stickX: number) {
+  /**
+   * Serve straight at the net center with `spinX` sideways stick held while
+   * charging, and `flightX` held after release. Returns where it hits the net
+   * and its sideways speed after.
+   */
+  function serveWithSpin(spinX: number, flightX = 0) {
     const world = createMatch(t);
     const red = (intent: Partial<Intent>): Intent[] => [NEUTRAL_INTENT, { ...NEUTRAL_INTENT, ...intent }];
-    stepWorld(world, red({ spike: true }), t);
+    stepWorld(world, red({ spike: true }), t); // start charging: the aim locks
+    for (let i = 0; i < 3; i++) stepWorld(world, red({ spike: true, moveX: spinX }), t);
     stepWorld(world, red({}), t); // release: the serve is in the air
     let net: SimEvent | undefined;
     for (let i = 0; i < 120 && !net; i++) {
-      stepWorld(world, red({ moveX: stickX }), t);
+      stepWorld(world, red({ moveX: flightX }), t);
       net = world.events.find((e) => e.type === 'net');
     }
-    return { at: net?.type === 'net' ? net.at : undefined, sideways: world.ball.vel.x };
+    return { at: net?.type === 'net' ? net.at : undefined, sideways: world.ball.vel.x, aim: world.serve.aim };
   }
 
   it('curves the serve in the direction the stick is pushed', () => {
@@ -564,6 +569,25 @@ describe('serve spin', () => {
 
   it('kicks the ball sideways off the net in the spin direction', () => {
     expect(serveWithSpin(1).sideways).toBeGreaterThan(serveWithSpin(0).sideways + 0.3);
+  });
+
+  it('locks the aim while charging (the stick only sets spin)', () => {
+    expect(serveWithSpin(1).aim).toEqual({ x: 0, z: 0 });
+  });
+
+  it('cannot be steered after release', () => {
+    expect(serveWithSpin(0, 1).at).toEqual(serveWithSpin(0, 0).at);
+  });
+
+  it('reports the spin on the serve event', () => {
+    const world = createMatch(t);
+    const red = (intent: Partial<Intent>): Intent[] => [NEUTRAL_INTENT, { ...NEUTRAL_INTENT, ...intent }];
+    stepWorld(world, red({ spike: true }), t);
+    stepWorld(world, red({ spike: true, moveX: 1 }), t);
+    stepWorld(world, red({ moveX: 1 }), t);
+    const serve = world.events.find((e) => e.type === 'serve');
+    expect(serve).toMatchObject({ type: 'serve' });
+    expect(serve?.type === 'serve' && Math.abs(serve.spin)).toBeCloseTo(1);
   });
 });
 

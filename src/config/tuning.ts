@@ -163,8 +163,8 @@ export const DEFAULT_TUNING = {
     handHeight: 1.1,
     // Attempts per serve before it's lost.
     tries: 2,
-    // Spin: pushing the stick sideways after release curves the serve this
-    // hard (m/s² at full stick; a slow serve bends ~0.6 m, a fast one ~0.15 m),
+    // Spin: sideways stick while charging sets sidespin; the serve curves this
+    // hard (m/s² at full spin; a slow serve bends ~0.6 m, a fast one ~0.15 m),
     // and the net kicks it sideways by the curve times spinKick (s).
     spinCurve: 3,
     spinKick: 0.22,
@@ -198,14 +198,15 @@ export const DEFAULT_TUNING = {
     // Seconds of player movement to look ahead, so running toward the camera
     // shows where you're going before you get there.
     lookAhead: 0.5,
-    // Serve duel camera: nearly the receiver's point of view, this far behind
-    // and this high above their feet (about eye level), with this field of
+    // Serve duel camera: close behind the receiver, this far back, this far
+    // off to the side (over their shoulder) and this high, with this field of
     // view, easing in/out at duelBlendSpeed. The receiver turns see-through.
-    duelBack: 0.9,
-    duelHeight: 1.35,
-    duelFov: 0.95,
+    duelBack: 3.4,
+    duelSide: 1,
+    duelHeight: 2.3,
+    duelFov: 0.9,
     // How see-through the receiver is in the duel view (1 = solid).
-    duelReceiverOpacity: 0.3,
+    duelReceiverOpacity: 0.45,
     duelBlendSpeed: 3,
   },
 
