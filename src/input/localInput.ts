@@ -7,13 +7,14 @@ export interface InputFrame extends Intent {
 
 const STICK_DEADZONE = 0.2;
 
-type ButtonLayout = Record<'A' | 'B' | 'X' | 'Y' | 'LB' | 'RB' | 'LT' | 'RT', number>;
+type ButtonLayout = Record<'A' | 'B' | 'X' | 'Y' | 'LB' | 'RB' | 'LT' | 'RT' | 'VIEW', number>;
 
 // Standard gamepad layout (Xbox naming; PlayStation/Switch map to the same slots).
-const STANDARD_LAYOUT: ButtonLayout = { A: 0, B: 1, X: 2, Y: 3, LB: 4, RB: 5, LT: 6, RT: 7 };
+// (VIEW is Back/View/Share/Select, left of the center button.)
+const STANDARD_LAYOUT: ButtonLayout = { A: 0, B: 1, X: 2, Y: 3, LB: 4, RB: 5, LT: 6, RT: 7, VIEW: 8 };
 // Xbox controllers over Bluetooth can report a raw layout (mapping !== 'standard')
 // that skips slots 2 and 5, with the triggers reported as axes instead of buttons.
-const XBOX_RAW_LAYOUT: ButtonLayout = { A: 0, B: 1, X: 3, Y: 4, LB: 6, RB: 7, LT: -1, RT: -1 };
+const XBOX_RAW_LAYOUT: ButtonLayout = { A: 0, B: 1, X: 3, Y: 4, LB: 6, RB: 7, LT: -1, RT: -1, VIEW: 10 };
 
 const KEYS = {
   up: ['KeyW', 'ArrowUp'],
@@ -21,6 +22,7 @@ const KEYS = {
   left: ['KeyA', 'ArrowLeft'],
   right: ['KeyD', 'ArrowRight'],
   jump: ['Space'],
+  dive: ['KeyL'],
   pass: ['KeyJ'],
   spike: ['KeyK'],
   feed: ['KeyR'],
@@ -57,6 +59,7 @@ export class LocalInput {
       moveX: (isHeld(KEYS.right) ? 1 : 0) - (isHeld(KEYS.left) ? 1 : 0),
       moveZ: (isHeld(KEYS.up) ? 1 : 0) - (isHeld(KEYS.down) ? 1 : 0),
       jump: wasPressed(KEYS.jump),
+      dive: wasPressed(KEYS.dive),
       // Held, not pressed: holding charges the hit and releasing swings.
       pass: isHeld(KEYS.pass),
       spike: isHeld(KEYS.spike),
@@ -87,7 +90,8 @@ export class LocalInput {
       pass: down(PAD.A) || down(PAD.LB) || down(PAD.LT),
       spike: down(PAD.B) || down(PAD.RB) || down(PAD.RT),
       jump: edge(PAD.Y),
-      feed: edge(PAD.X),
+      dive: edge(PAD.X),
+      feed: edge(PAD.VIEW),
     };
     const sx = pad.axes[0] ?? 0;
     // Stick up is negative on gamepads; up should mean away from the camera.

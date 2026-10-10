@@ -1,7 +1,7 @@
 import type { Tuning } from '../config/tuning';
 import { createBall, launchBallAt, netContactHeight, stepBall, type Ball, type BallEvent } from './ball';
 import { missReason, tryHit, type HitResult, type MissReason } from './hit';
-import { createPlayer, NEUTRAL_INTENT, stepPlayer, type HitKind, type Intent, type Player } from './player';
+import { createPlayer, diveTicks, NEUTRAL_INTENT, stepPlayer, type HitKind, type Intent, type Player } from './player';
 
 export type Team = 0 | 1;
 
@@ -14,7 +14,10 @@ export type SimEvent =
   // A swing's buffer ran out without touching the ball.
   | { type: 'whiff'; playerId: number; kind: HitKind; reason: MissReason }
   // The ball came off the net, so the other team must now play it.
-  | { type: 'possession'; team: Team };
+  | { type: 'possession'; team: Team }
+  // A player started a dive, and later hit the ground at the end of the lunge.
+  | { type: 'dive'; playerId: number }
+  | { type: 'diveLand'; playerId: number };
 
 /**
  * The whole game state: 1v1 rallies for working on mechanics. When the ball
@@ -91,7 +94,10 @@ export function stepWorld(world: World, intents: readonly Intent[], t: Tuning): 
   world.events.length = 0;
 
   world.players.forEach((p, i) => {
+    const wasDiving = p.dive !== null;
     const swing = stepPlayer(p, intents[i] ?? NEUTRAL_INTENT, t);
+    if (p.dive && !wasDiving) world.events.push({ type: 'dive', playerId: p.id });
+    if (p.dive?.ticks === diveTicks(t)) world.events.push({ type: 'diveLand', playerId: p.id });
     if (!swing) return;
     world.events.push({ type: 'swing', playerId: p.id, ...swing });
     // The server's pass swing puts the ball in play instead of hitting.

@@ -21,8 +21,9 @@ Open http://localhost:5173.
 | Pass (pop up) | J | A, LB or LT |
 | Spike | K | B, RB or RT |
 | Jump | Space | Y |
+| Dive (then A/B to save it) | L | X |
 | Serve | J | A |
-| Reset a stuck rally | R | X |
+| Reset a stuck rally | R | View / Back |
 | Tuning panel | ` | — |
 
 Current mode is a 1v1 mechanics sandbox (no scoring yet). When the ball comes

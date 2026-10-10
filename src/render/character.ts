@@ -76,6 +76,16 @@ const TAIL_SHAPE: [number, number, number][] = [
 ];
 const TAIL_STEPS_PER_SEGMENT = 8;
 
+/** Where a player is in a dive: lunging forward, or down and getting back up. */
+export interface DiveView {
+  lunging: boolean;
+  // 0..1 through the current part (lunge or recovery).
+  progress: number;
+}
+
+// Dive pose: how far the body pitches forward (radians) at full stretch.
+const DIVE_PITCH = 1.3;
+
 export interface ChargeView {
   kind: HitKind;
   power: number;
@@ -218,7 +228,16 @@ export class Character {
     this.heldPhase = null;
   }
 
-  update(p: Player, x: number, y: number, z: number, size: number, dt: number, charge: ChargeView | null): void {
+  update(
+    p: Player,
+    x: number,
+    y: number,
+    z: number,
+    size: number,
+    dt: number,
+    charge: ChargeView | null,
+    dive: DiveView | null,
+  ): void {
     this.root.position.set(x, y, z);
     this.root.scaling.setAll(size);
 
@@ -284,6 +303,35 @@ export class Character {
       arm.rotation.x = -(i === 0 ? 1 : -1) * stride * run * 0.9;
       arm.rotation.z = p.grounded ? side * 0.15 : -side * 0.7;
     });
+
+    if (dive) this.applyDivePose(dive, anim !== undefined);
+  }
+
+  /** Stretch out flat in the lunge, lie there, then push back up. Overrides the normal pose. */
+  private applyDivePose(dive: DiveView, swinging: boolean): void {
+    let stretch: number;
+    let lift = 0;
+    if (dive.lunging) {
+      stretch = clamp(dive.progress / 0.4, 0, 1);
+      // A small hop off the ground at the start of the lunge.
+      lift = Math.sin(dive.progress * Math.PI) * 0.15;
+    } else {
+      // Lie flat for the first 60% of recovery, then get up.
+      stretch = 1 - clamp((dive.progress - 0.6) / 0.4, 0, 1);
+    }
+    const eased = stretch * stretch * (3 - 2 * stretch);
+    this.bounce.rotation.x = eased * DIVE_PITCH;
+    this.bounce.position.y = lift;
+    this.bounce.scaling.setAll(1);
+    this.tail.rotation.x = -0.7 * eased;
+    // Legs trail behind; arms reach out ahead (unless mid-swing).
+    this.legs.forEach((leg) => (leg.rotation.x = 0.35 * eased));
+    if (!swinging) {
+      this.arms.forEach((arm, i) => {
+        arm.rotation.x = -2.9 * eased;
+        arm.rotation.z = (i === 0 ? -1 : 1) * 0.15 * eased;
+      });
+    }
   }
 }
 

@@ -18,9 +18,11 @@ export interface Intent {
   // Spike and pass are held state: holding charges the hit, releasing swings.
   spike: boolean;
   pass: boolean;
+  // Dive is a press this tick (an edge).
+  dive: boolean;
 }
 
-export const NEUTRAL_INTENT: Intent = { moveX: 0, moveZ: 0, jump: false, spike: false, pass: false };
+export const NEUTRAL_INTENT: Intent = { moveX: 0, moveZ: 0, jump: false, spike: false, pass: false, dive: false };
 
 export interface Player {
   id: number;
@@ -35,6 +37,9 @@ export interface Player {
   // turns it into a 'whiff' event when ticksLeft runs out. Power is 0..1.
   hitBuffer: { kind: HitKind; ticksLeft: number; power: number } | null;
   cooldown: number;
+  // An active dive: a short lunge (where you can still pass or spike with
+  // extra reach), then lying on the ground recovering. `ticks` counts up from 0.
+  dive: { ticks: number; dirX: number; dirZ: number } | null;
 }
 
 export function createPlayer(id: number, team: 0 | 1, x: number, z: number): Player {
@@ -47,7 +52,26 @@ export function createPlayer(id: number, team: 0 | 1, x: number, z: number): Pla
     charge: null,
     hitBuffer: null,
     cooldown: 0,
+    dive: null,
   };
+}
+
+export function diveTicks(t: Tuning): number {
+  return Math.round(t.player.dive.duration / DT);
+}
+
+export function diveRecoveryTicks(t: Tuning): number {
+  return Math.round(t.player.dive.recovery / DT);
+}
+
+/** Lunging through the air in a dive (can still hit, with extra reach). */
+export function isDiving(p: Player, t: Tuning): boolean {
+  return p.dive !== null && p.dive.ticks < diveTicks(t);
+}
+
+/** Down on the ground after a dive: can't move, jump or hit. */
+export function isRecovering(p: Player, t: Tuning): boolean {
+  return p.dive !== null && p.dive.ticks >= diveTicks(t);
 }
 
 /** Stick input clamped to unit length. */
@@ -70,6 +94,9 @@ export interface Swing {
 export function stepPlayer(p: Player, intent: Intent, t: Tuning): Swing | null {
   const stick = stickOf(intent);
   const moving = stick.x !== 0 || stick.z !== 0;
+
+  if (intent.dive && !p.dive && p.grounded) startDive(p, stick);
+  if (p.dive) return stepDive(p, intent, t);
 
   // Accelerate horizontal velocity toward the stick's target velocity.
   // Charging a hit slows you down: power costs mobility.
@@ -105,20 +132,60 @@ export function stepPlayer(p: Player, intent: Intent, t: Tuning): Swing | null {
     }
   }
 
-  // Players can't stand on or inside the net.
-  const minDist = netOuterRadius(t) + t.player.radius;
-  const d = Math.hypot(p.pos.x, p.pos.z);
-  if (d < minDist) {
-    const nx = d > 1e-6 ? p.pos.x / d : 0;
-    const nz = d > 1e-6 ? p.pos.z / d : -1;
-    p.pos.x = nx * minDist;
-    p.pos.z = nz * minDist;
-  }
+  keepOutOfNet(p, t);
+  return stepHitButtons(p, intent, t);
+}
 
+/** Dive toward the stick, or the way you're already moving if it's centered. */
+function startDive(p: Player, stick: { x: number; z: number }): void {
+  let dx = stick.x;
+  let dz = stick.z;
+  if (Math.hypot(dx, dz) < 0.2) {
+    dx = p.vel.x;
+    dz = p.vel.z;
+  }
+  if (Math.hypot(dx, dz) < 1e-3) {
+    // Standing still with the stick centered: dive toward the net.
+    dx = -p.pos.x;
+    dz = -p.pos.z;
+  }
+  const len = Math.hypot(dx, dz) || 1;
+  p.dive = { ticks: 0, dirX: dx / len, dirZ: dz / len };
+}
+
+function stepDive(p: Player, intent: Intent, t: Tuning): Swing | null {
+  const dive = p.dive!;
+  const lunge = diveTicks(t);
+  if (dive.ticks < lunge) {
+    // The lunge slows down as you reach the ground.
+    const speed = t.player.dive.speed * (1 - 0.6 * (dive.ticks / lunge));
+    p.vel.x = dive.dirX * speed;
+    p.vel.z = dive.dirZ * speed;
+  } else {
+    p.vel.x = 0;
+    p.vel.z = 0;
+    // Lying on the ground: any charge is dropped and new presses are ignored.
+    p.charge = null;
+  }
+  p.pos.x += p.vel.x * DT;
+  p.pos.z += p.vel.z * DT;
+  keepOutOfNet(p, t);
+
+  const swing = dive.ticks < lunge ? stepHitButtons(p, intent, t) : tickTimers(p);
+  if (++dive.ticks >= lunge + diveRecoveryTicks(t)) p.dive = null;
+  return swing;
+}
+
+function tickTimers(p: Player): null {
   if (p.cooldown > 0) p.cooldown--;
   if (p.hitBuffer) p.hitBuffer.ticksLeft--;
+  return null;
+}
 
-  // Hold to charge; letting go (or switching buttons) releases the swing.
+/** Hold a hit button to charge; letting go (or switching buttons) releases the swing. */
+function stepHitButtons(p: Player, intent: Intent, t: Tuning): Swing | null {
+  tickTimers(p);
+
   const held: HitKind | null = intent.spike ? 'spike' : intent.pass ? 'pass' : null;
   if (p.charge && held === p.charge.kind) {
     p.charge.ticks++;
@@ -132,4 +199,16 @@ export function stepPlayer(p: Player, intent: Intent, t: Tuning): Swing | null {
   }
   if (held) p.charge = { kind: held, ticks: 0 };
   return swing;
+}
+
+/** Players can't stand on or inside the net. */
+function keepOutOfNet(p: Player, t: Tuning): void {
+  const minDist = netOuterRadius(t) + t.player.radius;
+  const d = Math.hypot(p.pos.x, p.pos.z);
+  if (d < minDist) {
+    const nx = d > 1e-6 ? p.pos.x / d : 0;
+    const nz = d > 1e-6 ? p.pos.z / d : -1;
+    p.pos.x = nx * minDist;
+    p.pos.z = nz * minDist;
+  }
 }

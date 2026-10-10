@@ -5,7 +5,7 @@ import { createTuningPane } from './debug/tuningPane';
 import { LocalInput, type InputFrame } from './input/localInput';
 import { Renderer, snapshot } from './render/renderer';
 import type { MissReason } from './sim/hit';
-import { chargePower } from './sim/player';
+import { chargePower, isDiving } from './sim/player';
 import { DT } from './sim/time';
 import { createWorld, resetRally, serverTeam, stepWorld, type SimEvent, type Team } from './sim/world';
 
@@ -120,6 +120,10 @@ function onEvent(e: SimEvent): void {
     sfx.net(e.speed);
   } else if (e.type === 'ground') {
     sfx.ground();
+  } else if (e.type === 'dive') {
+    sfx.swing(1);
+  } else if (e.type === 'diveLand') {
+    sfx.diveLand();
   }
 }
 
@@ -129,6 +133,7 @@ function teamSpan(team: Team): string {
 
 const MISS_MESSAGES: Record<MissReason, string> = {
   cooldown: 'too soon after the last hit',
+  recovering: 'still getting up from a dive',
   noBall: 'no ball in play',
   notYet: 'too early, wait for the ball to come off the net',
   notYourBall: "not your ball, it's the other player's turn",
@@ -184,7 +189,8 @@ function liveSection(devices: [Device, Device]): string {
   world.players.forEach((p, i) => {
     const speed = Math.hypot(p.vel.x, p.vel.z);
     const air = p.grounded ? '' : ` · air ${p.pos.y.toFixed(2)} m`;
-    body += row(`${teamSpan(p.team)} <small>${deviceName(devices[i])}</small>`, `${speed.toFixed(1)} m/s${air}`);
+    const dive = !p.dive ? '' : isDiving(p, tuning) ? ' · diving' : ' · getting up';
+    body += row(`${teamSpan(p.team)} <small>${deviceName(devices[i])}</small>`, `${speed.toFixed(1)} m/s${air}${dive}`);
     if (p.charge) {
       const power = chargePower(p.charge.ticks, tuning);
       body += row(`&nbsp;&nbsp;charging ${p.charge.kind}`, `${percentBar(power, '#ff9a3d')} ${Math.round(power * 100)}%`);
@@ -219,6 +225,6 @@ function updateHud(frameSeconds: number, devices: [Device, Device]): void {
   const sound = sfx.muted ? 'Sound muted (M)' : 'M mute';
   help.textContent =
     `${sound}   |   Blue: ${deviceName(devices[0])} · Red: ${deviceName(devices[1])}   |   ` +
-    `Controller: stick move/aim · hold A pass/serve · hold B spike · Y jump · X reset ball   |   ` +
-    `Keyboard: WASD · hold J pass/serve · hold K spike · Space jump · R reset ball · \` tuning`;
+    `Controller: stick move · hold A pass/serve · hold B spike · X dive · Y jump · View reset ball   |   ` +
+    `Keyboard: WASD · hold J pass/serve · hold K spike · L dive · Space jump · R reset ball · \` tuning`;
 }

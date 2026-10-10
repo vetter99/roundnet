@@ -56,6 +56,20 @@ export const DEFAULT_TUNING = {
     // How far below / above the contact height the ball can still be hit.
     lowReach: 1.2,
     highReach: 0.8,
+    dive: {
+      // Lunge speed at the start of a dive (it slows toward the end).
+      speed: 8,
+      // Seconds lunging, when you can still pass or spike.
+      duration: 0.32,
+      // Seconds lying on the ground afterward: no moving, jumping or hitting.
+      recovery: 0.5,
+      // Extra horizontal reach while diving.
+      reachBonus: 0.5,
+      // Ideal contact height while diving: you're stretched out low.
+      contactHeight: 0.6,
+      // Dive hits are saves: their power is scaled down by this.
+      powerScale: 0.6,
+    },
   },
 
   hit: {

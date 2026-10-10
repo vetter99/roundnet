@@ -109,6 +109,12 @@ export class Sfx {
     this.noiseBurst({ freq: 700, freqTo: 2400, q: 1.2, gain: 0.25 + 0.2 * power, attack: 0.03, decay: 0.12 });
   }
 
+  /** Landing on the grass at the end of a dive: a soft body thud and a scuff. */
+  diveLand(): void {
+    this.tone({ type: 'sine', from: 120, to: 55, gain: 0.4, decay: 0.14 });
+    this.noiseBurst({ freq: 600, freqTo: 250, q: 0.6, gain: 0.25, attack: 0.005, decay: 0.18 });
+  }
+
   /** A charge has reached full power. */
   chargeFull(): void {
     this.tone({ type: 'triangle', from: 990, to: 990, gain: 0.12, decay: 0.15 });

@@ -32,7 +32,7 @@ Once items are GitHub issues: *"Work on issue #12"*.
 
 | ID | Title | Pri | Size | Depends on |
 |---|---|---|---|---|
-| MECH-01 | Dive | P0 | M | |
+| MECH-01 | Dive ✅ done | P0 | M | |
 | MECH-02 | Jump-spike bonus | P0 | S | |
 | MECH-03 | Recovery after weak hits and dives | P1 | S | MECH-01 |
 | MECH-04 | Quick-step / pivot | P2 | S | |
@@ -90,22 +90,17 @@ Once items are GitHub issues: *"Work on issue #12"*.
 
 ## MECH: movement
 
-### MECH-01 · Dive
-**P0 · M** · Files: `src/sim/player.ts`, `src/input/localInput.ts`, `src/render/character.ts`, `src/config/tuning.ts`
+### MECH-01 · Dive ✅ done (2026-10-10)
+**P0 · M** · Files: `src/sim/player.ts`, `src/sim/hit.ts`, `src/render/character.ts`, `src/config/tuning.ts` (`player.dive`)
 
-A dive lets you reach balls just out of range, at a cost: you're on the
-ground and helpless for a moment afterward.
+Shipped: X (keyboard L) lunges in the stick direction (or the way you're
+moving). While lunging you can tap A or B to pass or spike with +0.5 m reach,
+a low ideal contact height and 60% power; then you lie on the ground for 0.5 s
+(no moving, jumping or hitting) and get back up. "Reset stuck ball" moved to
+the View/Back button (keyboard R). Tests in `src/sim/world.test.ts`.
 
-- New button (proposal: X on controller, L on keyboard; X currently resets a
-  stuck rally, which moves to the pause menu or Back/View).
-- Dive in the stick direction: a short burst of speed, extended reach during
-  the dive, then a recovery period with no movement or hits.
-- Squirrel dive and get-up animations.
-
-**Done when:** a ball 1.5–2 m away that you can't reach by running can be
-saved with a well-timed dive, and a missed dive leaves you visibly
-out of position. Dive distance, reach bonus and recovery time are in tuning.
-Tests cover the dive path and the recovery lockout.
+Follow-ups: the CPU doesn't dive yet (add to AI-03); dive tuning needs play
+feedback.
 
 ### MECH-02 · Jump-spike bonus
 **P0 · S** · Files: `src/sim/hit.ts`, `src/config/tuning.ts`

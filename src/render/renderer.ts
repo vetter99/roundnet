@@ -16,7 +16,7 @@ import { isPlayable, predictDescentTo } from '../sim/hit';
 import type { HitKind } from '../sim/player';
 import { DT } from '../sim/time';
 import { Character, FUR } from './character';
-import { chargePower } from '../sim/player';
+import { chargePower, diveRecoveryTicks, diveTicks } from '../sim/player';
 import { clamp, lerp, type Vec3 } from '../sim/vec';
 import type { World } from '../sim/world';
 
@@ -149,7 +149,13 @@ export class Renderer {
       const z = lerp(from.z, p.pos.z, alpha);
       const y = lerp(from.y, p.pos.y, alpha);
       const charge = p.charge ? { kind: p.charge.kind, power: chargePower(p.charge.ticks, t) } : null;
-      view.character.update(p, x, y, z, t.player.size, frameSeconds, charge);
+      const lunge = diveTicks(t);
+      const dive = p.dive
+        ? p.dive.ticks < lunge
+          ? { lunging: true, progress: p.dive.ticks / lunge }
+          : { lunging: false, progress: (p.dive.ticks - lunge) / diveRecoveryTicks(t) }
+        : null;
+      view.character.update(p, x, y, z, t.player.size, frameSeconds, charge, dive);
       this.updateMeter(view.meter, charge?.power ?? null, x, y + 1.55 * t.player.size, z);
       // A team-colored ring marks the player(s) whose ball it is.
       const myBall = p.team === world.possession && world.ball.alive && world.ball.lastTouch !== 'feed';

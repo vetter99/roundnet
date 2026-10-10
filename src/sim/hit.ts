@@ -1,6 +1,6 @@
 import type { Tuning } from '../config/tuning';
 import { cloneBall, launchBallAt, netContactHeight, stepBall, type Ball, type BallEvent } from './ball';
-import { stickOf, type HitKind, type Intent, type Player } from './player';
+import { isDiving, isRecovering, stickOf, type HitKind, type Intent, type Player } from './player';
 import { clamp, lerp, type Vec3 } from './vec';
 
 export interface HitResult {
@@ -57,6 +57,7 @@ export function predictDescentTo(current: Ball, height: number, t: Tuning, maxTi
 
 export type MissReason =
   | 'cooldown'
+  | 'recovering'
   | 'noBall'
   | 'notYet'
   | 'notYourBall'
@@ -69,14 +70,25 @@ export interface Turn {
   possession: 0 | 1;
 }
 
+/** Horizontal reach right now: longer while lunging in a dive. */
+export function reachOf(p: Player, t: Tuning): number {
+  return t.player.reach + (isDiving(p, t) ? t.player.dive.reachBonus : 0);
+}
+
+/** Ideal contact height above the feet right now: low while diving. */
+export function contactHeightOf(p: Player, t: Tuning): number {
+  return isDiving(p, t) ? t.player.dive.contactHeight : t.player.contactHeight;
+}
+
 /** Why a swing right now would not connect, or null if it would. */
 export function missReason(p: Player, ball: Ball, t: Tuning, turn?: Turn): MissReason | null {
   if (p.cooldown > 0) return 'cooldown';
+  if (isRecovering(p, t)) return 'recovering';
   if (!ball.alive) return 'noBall';
   if (!isPlayable(ball)) return 'notYet';
   if (turn && turn.possession !== p.team) return 'notYourBall';
-  if (Math.hypot(ball.pos.x - p.pos.x, ball.pos.z - p.pos.z) > t.player.reach) return 'tooFar';
-  const heightError = ball.pos.y - (p.pos.y + t.player.contactHeight);
+  if (Math.hypot(ball.pos.x - p.pos.x, ball.pos.z - p.pos.z) > reachOf(p, t)) return 'tooFar';
+  const heightError = ball.pos.y - (p.pos.y + contactHeightOf(p, t));
   if (heightError > t.player.highReach) return 'tooHigh';
   if (heightError < -t.player.lowReach) return 'tooLow';
   return null;
@@ -86,9 +98,11 @@ export function missReason(p: Player, ball: Ball, t: Tuning, turn?: Turn): MissR
 export function tryHit(p: Player, ball: Ball, intent: Intent, t: Tuning, turn?: Turn): HitResult | null {
   if (!p.hitBuffer || missReason(p, ball, t, turn) !== null) return null;
 
-  const heightError = ball.pos.y - (p.pos.y + t.player.contactHeight);
+  const heightError = ball.pos.y - (p.pos.y + contactHeightOf(p, t));
   const quality = hitQuality(heightError, t);
-  const { kind, power } = p.hitBuffer;
+  const { kind } = p.hitBuffer;
+  // Dive hits are saves, not attacks.
+  const power = p.hitBuffer.power * (isDiving(p, t) ? t.player.dive.powerScale : 1);
   const aim = stickOf(intent);
 
   if (kind === 'spike') {

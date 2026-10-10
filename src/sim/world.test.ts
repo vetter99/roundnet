@@ -81,6 +81,7 @@ describe('world', () => {
     jump: tick % 45 === 0,
     spike: tick % 17 < 4,
     pass: tick % 29 < 6,
+    dive: tick % 97 === 0,
   });
 
   it('is deterministic: same inputs give the exact same state', () => {
@@ -304,5 +305,58 @@ describe('spike targeting', () => {
     const { quality, first } = spikeAt(t.player.contactHeight - 0.9, 0, 0);
     expect(quality).toBeLessThan(0.1);
     expect(first?.type).toBe('ground');
+  });
+});
+
+describe('dive', () => {
+  const diveIntent = (x: number, z: number): Intent => ({ ...NEUTRAL_INTENT, moveX: x, moveZ: z, dive: true });
+
+  it('lunges further than running in the same time, then stays down', () => {
+    const diver = createPlayer(0, 0, -3, -3);
+    const runner = createPlayer(1, 0, -3, -3);
+    const lunge = Math.round(t.player.dive.duration * 60);
+    stepPlayer(diver, diveIntent(1, 0), t);
+    stepPlayer(runner, { ...NEUTRAL_INTENT, moveX: 1 }, t);
+    for (let i = 1; i < lunge; i++) {
+      stepPlayer(diver, { ...NEUTRAL_INTENT, moveX: 1 }, t);
+      stepPlayer(runner, { ...NEUTRAL_INTENT, moveX: 1 }, t);
+    }
+    expect(diver.pos.x - -3).toBeGreaterThan(runner.pos.x - -3);
+
+    // Recovering: holding the stick doesn't move you.
+    const lyingAt = diver.pos.x;
+    for (let i = 0; i < 10; i++) stepPlayer(diver, { ...NEUTRAL_INTENT, moveX: 1 }, t);
+    expect(diver.pos.x).toBe(lyingAt);
+  });
+
+  it('can hit a ball out of normal reach while lunging, with less power', () => {
+    const p = createPlayer(0, 0, 0, -2.5);
+    stepPlayer(p, diveIntent(1, 0), t);
+    p.hitBuffer = { kind: 'pass', ticksLeft: 5, power: 1 };
+    // Beyond standing reach, but within dive reach, at dive contact height.
+    const ball = {
+      pos: { x: p.pos.x + t.player.reach + 0.3, y: t.player.dive.contactHeight, z: p.pos.z },
+      vel: { x: 0, y: -1, z: 0 },
+      alive: true,
+      lastTouch: 'net' as const,
+    };
+    const hit = tryHit(p, ball, NEUTRAL_INTENT, t)!;
+    expect(hit).not.toBeNull();
+    expect(hit.power).toBeCloseTo(t.player.dive.powerScale);
+    expect(hit.quality).toBe(1);
+  });
+
+  it("can't hit while getting back up, and can't dive in the air", () => {
+    const p = createPlayer(0, 0, 0, -2.5);
+    stepPlayer(p, diveIntent(1, 0), t);
+    for (let i = 0; i < Math.round(t.player.dive.duration * 60) + 2; i++) stepPlayer(p, NEUTRAL_INTENT, t);
+    p.hitBuffer = { kind: 'pass', ticksLeft: 5, power: 1 };
+    const ball = { pos: { ...p.pos, y: t.player.contactHeight }, vel: { x: 0, y: -1, z: 0 }, alive: true, lastTouch: 'net' as const };
+    expect(tryHit(p, ball, NEUTRAL_INTENT, t)).toBeNull();
+
+    const jumper = createPlayer(1, 0, 0, -2.5);
+    stepPlayer(jumper, { ...NEUTRAL_INTENT, jump: true }, t);
+    stepPlayer(jumper, diveIntent(1, 0), t);
+    expect(jumper.dive).toBeNull();
   });
 });
