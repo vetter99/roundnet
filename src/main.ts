@@ -40,20 +40,14 @@ let prev = snapshot(world);
 let accumulator = 0;
 let lastTime = performance.now();
 let flashTimer = 0;
-// With P1 on a controller, P toggles Red between the CPU and the keyboard.
-let keyboardIsP2 = false;
-window.addEventListener('keydown', (e) => {
-  if (e.code === 'KeyP' && !e.repeat) keyboardIsP2 = !keyboardIsP2;
-});
-
 type Device = 'keyboard' | 'cpu' | Gamepad;
 
-/** Decide which device drives each player: [P1, P2]. */
+/**
+ * Decide which device drives each player: [Blue, Red]. Blue is the first
+ * controller (or the keyboard); Red is always the CPU for now.
+ */
 function assignDevices(): [Device, Device] {
-  const pads = input.gamepads();
-  const p1: Device = pads[0] ?? 'keyboard';
-  const p2: Device = pads[1] ?? (pads[0] && keyboardIsP2 ? 'keyboard' : 'cpu');
-  return [p1, p2];
+  return [input.gamepads()[0] ?? 'keyboard', 'cpu'];
 }
 
 function deviceName(d: Device): string {
@@ -218,13 +212,10 @@ function updateHud(frameSeconds: number, devices: [Device, Device]): void {
   last.innerHTML = hitSection() + miss + netSection() + liveSection(devices);
   if (flashTimer > 0 && (flashTimer -= frameSeconds) <= 0) flash.style.opacity = '0';
 
-  // P only matters when Blue is on a controller and Red has no controller.
-  const canToggleRed = devices[0] !== 'keyboard' && (devices[1] === 'cpu' || devices[1] === 'keyboard');
-  const join = !canToggleRed ? '' : devices[1] === 'cpu' ? ' (P: play Red on keyboard)' : ' (P: back to CPU)';
   soundButton.style.display = sfx.locked ? 'block' : 'none';
   const sound = sfx.muted ? 'Sound muted (M)' : 'M mute';
   help.textContent =
-    `${sound}   |   Blue: ${deviceName(devices[0])} · Red: ${deviceName(devices[1])}${join}   |   ` +
+    `${sound}   |   Blue: ${deviceName(devices[0])} · Red: ${deviceName(devices[1])}   |   ` +
     `Controller: stick move/aim · hold A pass/serve · hold B spike · Y jump · X reset ball   |   ` +
     `Keyboard: WASD · hold J pass/serve · hold K spike · Space jump · R reset ball · \` tuning`;
 }

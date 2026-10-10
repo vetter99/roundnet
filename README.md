@@ -21,15 +21,16 @@ Open http://localhost:5173.
 | Pass (pop up) | J | A, LB or LT |
 | Spike | K | B, RB or RT |
 | Jump | Space | Y |
-| New serve / rematch | R | X |
+| Serve | J | A |
+| Reset a stuck rally | R | X |
 | Tuning panel | ` | — |
 
-Current mode is a 1v1 rally game. When the ball comes off the net it's the
-other player's ball: they get up to 3 touches to put it back on the net. Let
-it hit the ground and the other side scores. First to 21, win by 2. Hold a
-hit button to charge it and release to swing. Player 1 uses the first
-controller (or the keyboard); player 2 uses a second controller, the keyboard
-once someone presses a key, or otherwise the CPU.
+Current mode is a 1v1 mechanics sandbox (no scoring yet). When the ball comes
+off the net it's the other player's ball, and they have to put it back on the
+net. After the ball lands, the server presses A (or J) to serve. Hold a hit
+button to charge it and release to swing; the rings at the landing spot turn
+green at the perfect moment. You play Blue with the first controller (or the
+keyboard); Red is always the CPU for now. Click the page once to turn on sound.
 
 ## Deploy
 

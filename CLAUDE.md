@@ -54,7 +54,7 @@ src/main.ts           wires it together; fixed 60Hz loop with render interpolati
   pushed aside if it runs into the team with the ball.
 - Serving is a stand-in: the ball is fed off the net to the receiver.
 - Hits charge while the button is held and swing on release (`chargePower`).
-- `src/ai/bot.ts` is a deterministic CPU player used when P2 has no device.
+- `src/ai/bot.ts` is a deterministic CPU player. Red is always the CPU for now.
 - Hit quality comes from timing: how close the ball is to the player's
   contact height at contact. Bad hits are weaker and drift off target.
 
