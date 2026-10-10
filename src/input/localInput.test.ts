@@ -14,8 +14,10 @@ function fakePad(held: number[]) {
 
 function setup() {
   let held: number[] = [];
-  vi.stubGlobal('navigator', { getGamepads: () => [fakePad(held)] });
-  const input = new LocalInput(new EventTarget() as unknown as Window);
+  vi.stubGlobal('navigator', { getGamepads: () => [{ ...fakePad(held), index: 0 }] });
+  const local = new LocalInput(new EventTarget() as unknown as Window);
+  // Poll the first gamepad, the way the game does each tick.
+  const input = { poll: () => local.pollGamepad(local.gamepads()[0]) };
   return { input, hold: (buttons: number[]) => (held = buttons) };
 }
 
@@ -32,15 +34,24 @@ describe('LocalInput gamepad', () => {
     }
   });
 
-  it('fires once per press, not every tick while held', () => {
+  it('jump fires once per press, not every tick while held', () => {
     const { input, hold } = setup();
     input.poll();
-    hold([1]);
-    expect(input.poll().spike).toBe(true);
-    expect(input.poll().spike).toBe(false);
+    hold([3]);
+    expect(input.poll().jump).toBe(true);
+    expect(input.poll().jump).toBe(false);
     hold([]);
     input.poll();
+    hold([3]);
+    expect(input.poll().jump).toBe(true);
+  });
+
+  it('pass and spike report held state so hits can charge', () => {
+    const { input, hold } = setup();
     hold([1]);
     expect(input.poll().spike).toBe(true);
+    expect(input.poll().spike).toBe(true);
+    hold([]);
+    expect(input.poll().spike).toBe(false);
   });
 });

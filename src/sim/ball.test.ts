@@ -31,11 +31,11 @@ describe('ball vs net', () => {
     expect(ball.vel.y).toBeGreaterThan(0);
   });
 
-  it('reports a rim hit when landing on the frame', () => {
-    const rimCenter = t.net.radius + t.net.rimWidth / 2;
-    const ball = ballAt(rimCenter, 2, 0);
-    expect(firstEvent(ball)?.type).toBe('rim');
-    expect(ball.vel.x).toBeGreaterThan(0); // deflected outward
+  it('treats the frame as part of the net (no rim faults)', () => {
+    const frameCenter = t.net.radius + t.net.frameWidth / 2;
+    const ball = ballAt(frameCenter, 2, 0);
+    expect(firstEvent(ball)?.type).toBe('net');
+    expect(ball.vel.y).toBeGreaterThan(0);
   });
 
   it('lands on the ground away from the net', () => {

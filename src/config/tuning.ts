@@ -23,9 +23,10 @@ export const DEFAULT_TUNING = {
   },
 
   net: {
-    // Radius of the bouncy surface (a real net is ~0.45m).
-    radius: 0.5,
-    rimWidth: 0.05,
+    // Radius of the bouncy surface (a real net is ~0.45m; bigger is friendlier).
+    radius: 0.65,
+    // Width of the frame around the surface. It bounces like the net (no rim faults).
+    frameWidth: 0.05,
     height: 0.25,
     // Vertical speed kept after a net bounce (1 = perfect trampoline).
     bounce: 0.8,
@@ -33,8 +34,6 @@ export const DEFAULT_TUNING = {
     horizontalKeep: 0.85,
     // Even a soft touch pops up at least this fast.
     minUpSpeed: 3,
-    // Vertical speed kept after a rim hit.
-    rimBounce: 0.4,
   },
 
   player: {
@@ -59,23 +58,30 @@ export const DEFAULT_TUNING = {
   },
 
   hit: {
-    // Horizontal speed of a perfect spike.
-    spikeSpeed: 11,
+    // Horizontal speed of a perfectly timed spike: a quick tap vs. full charge.
+    spikeSpeedMin: 9,
+    spikeSpeedMax: 16,
     // Power of a worst-quality hit, as a fraction of a perfect one.
     minQualityPower: 0.6,
     // How far from net center the stick can aim, as a fraction of net radius.
     aimSpread: 0.6,
-    // A bad hit drifts this far (in net radii) past the aim point, toward the rim.
+    // A bad hit drifts this far (in net radii) past the aim point, and can miss the net.
     mishitDrift: 1.1,
     // Contact within this height of the ideal counts as perfect.
     perfectWindow: 0.15,
     // Quality falls from 1 to 0 over this much extra height error.
     qualityFalloff: 0.6,
-    passUpSpeed: 7,
+    // Upward speed of a pass: a quick tap vs. full charge.
+    passUpSpeedMin: 5.5,
+    passUpSpeedMax: 10.5,
     passHorizontalSpeed: 2,
     // Shortest allowed flight time when aiming at a point, to avoid absurd speeds.
     minFlightTime: 0.12,
-    // A hit pressed this many ticks early still fires when the ball arrives.
+    // Seconds of holding a hit button to reach full power.
+    chargeTime: 0.6,
+    // Movement speed multiplier while charging.
+    chargeMoveFactor: 0.55,
+    // A hit released this many ticks early still fires when the ball arrives.
     inputBufferTicks: 6,
     cooldownTicks: 15,
   },
@@ -88,8 +94,19 @@ export const DEFAULT_TUNING = {
     shrinkTime: 1.0,
   },
 
+  court: {
+    // Servers stand behind this line, measured out from the net's edge
+    // (real roundnet uses 6ft = 1.83m).
+    serveLineDistance: 2.4,
+  },
+
+  match: {
+    pointsToWin: 21,
+  },
+
+  // The temporary serve: a ball fed off the net toward the receiving player.
   practice: {
-    // Ticks after the ball dies before the next feed (60 = 1 second).
+    // Ticks after the ball dies before the next serve (60 = 1 second).
     resetDelayTicks: 50,
     feedDistance: 2.2,
     feedHeight: 2.2,
@@ -104,7 +121,8 @@ export const DEFAULT_TUNING = {
   },
 
   debug: {
-    showReach: true,
+    // Show every player's reach ring, not just the team in possession.
+    showReach: false,
   },
 };
 

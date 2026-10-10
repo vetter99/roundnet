@@ -15,11 +15,10 @@ import { predictLanding } from '../sim/ball';
 import type { HitKind } from '../sim/player';
 import { DT } from '../sim/time';
 import { Character } from './character';
+import { chargePower } from '../sim/player';
 import { clamp, lerp, type Vec3 } from '../sim/vec';
 import type { World } from '../sim/world';
 
-// Real roundnet: servers stand 6ft (1.83m) back from the rim.
-const SERVE_LINE_DISTANCE = 1.83;
 const TEAM_COLORS = [new Color3(0.2, 0.45, 0.95), new Color3(0.95, 0.3, 0.25)];
 
 /** Positions from the previous tick, used to interpolate between ticks. */
@@ -38,7 +37,19 @@ export function snapshot(world: World): Snapshot {
 interface PlayerView {
   character: Character;
   reachRing: Mesh;
+  meter: ChargeMeter;
 }
+
+interface ChargeMeter {
+  root: TransformNode;
+  fill: Mesh;
+  fillMat: StandardMaterial;
+}
+
+const METER_WIDTH = 0.5;
+const METER_HEIGHT = 0.07;
+const METER_LOW = new Color3(1, 0.85, 0.2);
+const METER_HIGH = new Color3(1, 0.25, 0.1);
 
 /**
  * Draws the world. It only reads sim state and never changes it.
@@ -110,14 +121,32 @@ export class Renderer {
       const from = prev.players[i] ?? p.pos;
       const x = lerp(from.x, p.pos.x, alpha);
       const z = lerp(from.z, p.pos.z, alpha);
-      view.character.update(p, x, lerp(from.y, p.pos.y, alpha), z, t.player.size, frameSeconds);
-      view.reachRing.isVisible = t.debug.showReach;
+      const y = lerp(from.y, p.pos.y, alpha);
+      const charge = p.charge ? { kind: p.charge.kind, power: chargePower(p.charge.ticks, t) } : null;
+      view.character.update(p, x, y, z, t.player.size, frameSeconds, charge);
+      this.updateMeter(view.meter, charge?.power ?? null, x, y + 1.55 * t.player.size, z);
+      // A team-colored ring marks the player(s) whose ball it is.
+      const myBall = p.team === world.possession && world.ball.alive && world.ball.lastTouch !== 'feed';
+      view.reachRing.isVisible = myBall || t.debug.showReach;
       view.reachRing.position.set(x, 0.02, z);
       view.reachRing.scaling.set(t.player.reach, 1, t.player.reach);
     });
 
     this.updateMarker(world, t);
     this.scene.render();
+  }
+
+  /** Show a power bar above a charging player; hidden when power is null. */
+  private updateMeter(meter: ChargeMeter, power: number | null, x: number, y: number, z: number): void {
+    meter.root.setEnabled(power !== null);
+    if (power === null) return;
+    meter.root.position.set(x, y, z);
+    const width = Math.max(power, 0.001) * METER_WIDTH;
+    meter.fill.scaling.x = width / METER_WIDTH;
+    meter.fill.position.x = (width - METER_WIDTH) / 2;
+    // Yellow to red as it charges; pulses white when full.
+    const color = Color3.Lerp(METER_LOW, METER_HIGH, power);
+    meter.fillMat.emissiveColor = power >= 1 && Math.sin(this.time * 30) > 0 ? new Color3(1, 1, 1) : color;
   }
 
   /** Play the pass or spike animation for a player. */
@@ -149,26 +178,50 @@ export class Renderer {
     const scene = this.scene;
     const character = new Character(scene, TEAM_COLORS[team]);
 
-    const reachRing = MeshBuilder.CreateTorus('reach', { diameter: 2, thickness: 0.02, tessellation: 48 }, scene);
-    const reachMat = flatMaterial('reach', new Color3(1, 1, 1), scene);
-    reachMat.alpha = 0.35;
+    const reachRing = MeshBuilder.CreateTorus('reach', { diameter: 2, thickness: 0.04, tessellation: 48 }, scene);
+    const reachMat = flatMaterial('reach', TEAM_COLORS[team], scene);
+    reachMat.alpha = 0.7;
     reachMat.disableLighting = true;
-    reachMat.emissiveColor = new Color3(1, 1, 1);
+    reachMat.emissiveColor = TEAM_COLORS[team];
     reachRing.material = reachMat;
 
-    return { character, reachRing };
+    return { character, reachRing, meter: this.createMeter() };
+  }
+
+  private createMeter(): ChargeMeter {
+    const scene = this.scene;
+    const root = new TransformNode('chargeMeter', scene);
+    // Always face the camera.
+    root.billboardMode = TransformNode.BILLBOARDMODE_ALL;
+
+    const back = MeshBuilder.CreatePlane('meterBack', { width: METER_WIDTH + 0.04, height: METER_HEIGHT + 0.04 }, scene);
+    const backMat = flatMaterial('meterBack', new Color3(0, 0, 0), scene);
+    backMat.disableLighting = true;
+    backMat.alpha = 0.6;
+    back.material = backMat;
+    back.parent = root;
+
+    const fill = MeshBuilder.CreatePlane('meterFill', { width: METER_WIDTH, height: METER_HEIGHT }, scene);
+    const fillMat = flatMaterial('meterFill', METER_LOW, scene);
+    fillMat.disableLighting = true;
+    fill.material = fillMat;
+    fill.parent = root;
+    // Slightly in front of the background (planes face -z).
+    fill.position.z = -0.005;
+    root.setEnabled(false);
+    return { root, fill, fillMat };
   }
 
   /** Net and serve line are rebuilt whenever their tuning values change. */
   private rebuildCourtIfChanged(t: Tuning): void {
-    const key = `${t.net.radius}|${t.net.rimWidth}|${t.net.height}`;
+    const key = `${t.net.radius}|${t.net.frameWidth}|${t.net.height}|${t.court.serveLineDistance}`;
     if (key === this.courtKey) return;
     this.courtKey = key;
     this.court?.dispose(false, true);
 
     const scene = this.scene;
     const court = (this.court = new TransformNode('court', scene));
-    const { radius, rimWidth, height } = t.net;
+    const { radius, frameWidth, height } = t.net;
 
     const netSurface = MeshBuilder.CreateCylinder('netSurface', { diameter: radius * 2, height: 0.01, tessellation: 64 }, scene);
     netSurface.position.y = height;
@@ -177,21 +230,21 @@ export class Renderer {
     netSurface.material = netMat;
     netSurface.parent = court;
 
-    const rim = MeshBuilder.CreateTorus('rim', { diameter: radius * 2 + rimWidth, thickness: rimWidth, tessellation: 64 }, scene);
-    rim.position.y = height;
-    rim.material = flatMaterial('rim', new Color3(1, 0.85, 0.1), scene);
-    rim.parent = court;
+    const frame = MeshBuilder.CreateTorus('frame', { diameter: radius * 2 + frameWidth, thickness: frameWidth, tessellation: 64 }, scene);
+    frame.position.y = height;
+    frame.material = flatMaterial('frame', new Color3(1, 0.85, 0.1), scene);
+    frame.parent = court;
 
     const legMat = flatMaterial('leg', new Color3(0.15, 0.15, 0.15), scene);
     for (let i = 0; i < 5; i++) {
       const angle = (i / 5) * Math.PI * 2;
       const leg = MeshBuilder.CreateCylinder('leg', { diameter: 0.035, height }, scene);
-      leg.position.set(Math.cos(angle) * (radius + rimWidth / 2), height / 2, Math.sin(angle) * (radius + rimWidth / 2));
+      leg.position.set(Math.cos(angle) * (radius + frameWidth / 2), height / 2, Math.sin(angle) * (radius + frameWidth / 2));
       leg.material = legMat;
       leg.parent = court;
     }
 
-    const serveDiameter = (radius + rimWidth + SERVE_LINE_DISTANCE) * 2;
+    const serveDiameter = (radius + frameWidth + t.court.serveLineDistance) * 2;
     const serveLine = MeshBuilder.CreateTorus('serveLine', { diameter: serveDiameter, thickness: 0.04, tessellation: 96 }, scene);
     serveLine.position.y = 0.01;
     serveLine.scaling.y = 0.1;

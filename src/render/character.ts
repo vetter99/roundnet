@@ -52,6 +52,15 @@ const SWING_ANIMS: Record<HitKind, SwingAnim> = {
   },
 };
 
+// While charging, the pose winds up to this point in the swing animation and
+// holds there; releasing plays the rest of the swing from that point.
+const WINDUP_PHASE: Record<HitKind, number> = { pass: 0.25, spike: 0.3 };
+
+export interface ChargeView {
+  kind: HitKind;
+  power: number;
+}
+
 /**
  * A blocky athlete made from boxes, with arm/leg swings and squash-and-stretch
  * driven by the player's sim state. Purely visual: reach and hit timing are
@@ -66,6 +75,8 @@ export class Character {
   private facing = 0;
   private walkPhase = 0;
   private swing: { anim: SwingAnim; time: number } | null = null;
+  // The wind-up pose phase held while charging, so the release continues from it.
+  private heldPhase: { kind: HitKind; phase: number } | null = null;
   private landTimer = 0;
   private wasGrounded = true;
 
@@ -122,10 +133,13 @@ export class Character {
 
   /** Play the pass or spike animation; call whenever this player swings. */
   playSwing(kind: HitKind): void {
-    this.swing = { anim: SWING_ANIMS[kind], time: 0 };
+    const anim = SWING_ANIMS[kind];
+    const startPhase = this.heldPhase?.kind === kind ? this.heldPhase.phase : 0;
+    this.swing = { anim, time: startPhase * anim.duration };
+    this.heldPhase = null;
   }
 
-  update(p: Player, x: number, y: number, z: number, size: number, dt: number): void {
+  update(p: Player, x: number, y: number, z: number, size: number, dt: number, charge: ChargeView | null): void {
     this.root.position.set(x, y, z);
     this.root.scaling.setAll(size);
 
@@ -138,12 +152,20 @@ export class Character {
     this.landTimer = Math.max(0, this.landTimer - dt);
 
     let phase = 0;
+    let anim: SwingAnim | undefined;
     if (this.swing) {
       this.swing.time += dt;
       phase = this.swing.time / this.swing.anim.duration;
+      anim = this.swing.anim;
       if (phase >= 1) this.swing = null;
+    } else if (charge) {
+      // Wind up quickly at first, then hold the pose as power builds.
+      phase = WINDUP_PHASE[charge.kind] * Math.min(1, 0.4 + charge.power);
+      anim = SWING_ANIMS[charge.kind];
+      this.heldPhase = { kind: charge.kind, phase };
+    } else {
+      this.heldPhase = null;
     }
-    const anim = this.swing?.anim;
 
     // Stretch going up, squash on landing.
     let stretch = 0;

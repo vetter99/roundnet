@@ -1,6 +1,7 @@
 import type { Tuning } from '../config/tuning';
+import { netOuterRadius } from './ball';
 import { DT } from './time';
-import type { Vec3 } from './vec';
+import { clamp, type Vec3 } from './vec';
 
 export type HitKind = 'spike' | 'pass';
 
@@ -12,8 +13,9 @@ export interface Intent {
   // Movement / aim stick, each in [-1, 1]. +z is away from the camera.
   moveX: number;
   moveZ: number;
-  // Button presses this tick (edges, not holds).
+  // Jump is a press this tick (an edge).
   jump: boolean;
+  // Spike and pass are held state: holding charges the hit, releasing swings.
   spike: boolean;
   pass: boolean;
 }
@@ -27,9 +29,11 @@ export interface Player {
   pos: Vec3;
   vel: Vec3;
   grounded: boolean;
-  // A recently pressed hit that fires as soon as the ball is in reach. The
-  // world turns it into a 'whiff' event when ticksLeft runs out.
-  hitBuffer: { kind: HitKind; ticksLeft: number } | null;
+  // A hit button being held down, charging up power.
+  charge: { kind: HitKind; ticks: number } | null;
+  // A released swing that fires as soon as the ball is in reach. The world
+  // turns it into a 'whiff' event when ticksLeft runs out. Power is 0..1.
+  hitBuffer: { kind: HitKind; ticksLeft: number; power: number } | null;
   cooldown: number;
 }
 
@@ -40,6 +44,7 @@ export function createPlayer(id: number, team: 0 | 1, x: number, z: number): Pla
     pos: { x, y: 0, z },
     vel: { x: 0, y: 0, z: 0 },
     grounded: true,
+    charge: null,
     hitBuffer: null,
     cooldown: 0,
   };
@@ -51,13 +56,26 @@ export function stickOf(intent: Intent): { x: number; z: number } {
   return len > 1 ? { x: intent.moveX / len, z: intent.moveZ / len } : { x: intent.moveX, z: intent.moveZ };
 }
 
-export function stepPlayer(p: Player, intent: Intent, t: Tuning): void {
+/** Charge power 0..1 after holding a hit button for `ticks`. */
+export function chargePower(ticks: number, t: Tuning): number {
+  return clamp((ticks * DT) / t.hit.chargeTime, 0, 1);
+}
+
+export interface Swing {
+  kind: HitKind;
+  power: number;
+}
+
+/** Advance a player one tick. Returns the swing released this tick, if any. */
+export function stepPlayer(p: Player, intent: Intent, t: Tuning): Swing | null {
   const stick = stickOf(intent);
   const moving = stick.x !== 0 || stick.z !== 0;
 
   // Accelerate horizontal velocity toward the stick's target velocity.
-  const targetX = stick.x * t.player.maxSpeed;
-  const targetZ = stick.z * t.player.maxSpeed;
+  // Charging a hit slows you down: power costs mobility.
+  const topSpeed = t.player.maxSpeed * (p.charge ? t.hit.chargeMoveFactor : 1);
+  const targetX = stick.x * topSpeed;
+  const targetZ = stick.z * topSpeed;
   const control = p.grounded ? 1 : t.player.airControl;
   const maxDelta = (moving ? t.player.accel : t.player.decel) * control * DT;
   const dx = targetX - p.vel.x;
@@ -88,7 +106,7 @@ export function stepPlayer(p: Player, intent: Intent, t: Tuning): void {
   }
 
   // Players can't stand on or inside the net.
-  const minDist = t.net.radius + t.net.rimWidth + t.player.radius;
+  const minDist = netOuterRadius(t) + t.player.radius;
   const d = Math.hypot(p.pos.x, p.pos.z);
   if (d < minDist) {
     const nx = d > 1e-6 ? p.pos.x / d : 0;
@@ -97,12 +115,21 @@ export function stepPlayer(p: Player, intent: Intent, t: Tuning): void {
     p.pos.z = nz * minDist;
   }
 
-  if (intent.spike) {
-    p.hitBuffer = { kind: 'spike', ticksLeft: t.hit.inputBufferTicks };
-  } else if (intent.pass) {
-    p.hitBuffer = { kind: 'pass', ticksLeft: t.hit.inputBufferTicks };
-  } else if (p.hitBuffer) {
-    p.hitBuffer.ticksLeft--;
-  }
   if (p.cooldown > 0) p.cooldown--;
+  if (p.hitBuffer) p.hitBuffer.ticksLeft--;
+
+  // Hold to charge; letting go (or switching buttons) releases the swing.
+  const held: HitKind | null = intent.spike ? 'spike' : intent.pass ? 'pass' : null;
+  if (p.charge && held === p.charge.kind) {
+    p.charge.ticks++;
+    return null;
+  }
+  let swing: Swing | null = null;
+  if (p.charge) {
+    swing = { kind: p.charge.kind, power: chargePower(p.charge.ticks, t) };
+    p.hitBuffer = { ...swing, ticksLeft: t.hit.inputBufferTicks };
+    p.charge = null;
+  }
+  if (held) p.charge = { kind: held, ticks: 0 };
+  return swing;
 }

@@ -1,7 +1,7 @@
 import type { Intent } from '../sim/player';
 
 export interface InputFrame extends Intent {
-  // Practice only: toss a new ball.
+  // Toss a new ball, or start a rematch once the match is over.
   feed: boolean;
 }
 
@@ -29,22 +29,25 @@ const KEYS = {
 const CAPTURED_KEYS = new Set(Object.values(KEYS).flat());
 
 /**
- * Turns one keyboard and the first connected gamepad into an Intent per tick.
- * Presses are remembered until the next poll so quick taps are never missed.
+ * Reads the keyboard and every connected gamepad separately, so each can
+ * drive a different player. Presses are remembered until the next poll so
+ * quick taps are never missed.
  */
 export class LocalInput {
   private readonly held = new Set<string>();
   private readonly pressed = new Set<string>();
-  private prevPadButtons: boolean[] = [];
-  padName: string | null = null;
-  // For the on-screen readout: the pad's reported layout and buttons held now.
-  padMapping = '';
-  padButtonsHeld: number[] = [];
+  // Previous buttons per gamepad index, to detect new presses.
+  private readonly prevPadButtons = new Map<number, boolean[]>();
+  // True once any game key has been pressed.
+  keyboardUsed = false;
 
   constructor(target: Window) {
     target.addEventListener('keydown', (e) => {
       if (e.target instanceof HTMLInputElement) return;
-      if (CAPTURED_KEYS.has(e.code)) e.preventDefault();
+      if (CAPTURED_KEYS.has(e.code)) {
+        e.preventDefault();
+        this.keyboardUsed = true;
+      }
       if (!e.repeat) this.pressed.add(e.code);
       this.held.add(e.code);
     });
@@ -52,48 +55,54 @@ export class LocalInput {
     target.addEventListener('blur', () => this.held.clear());
   }
 
-  poll(): InputFrame {
+  pollKeyboard(): InputFrame {
     const isHeld = (codes: string[]) => codes.some((c) => this.held.has(c));
     const wasPressed = (codes: string[]) => codes.some((c) => this.pressed.has(c));
-
-    const moveX = (isHeld(KEYS.right) ? 1 : 0) - (isHeld(KEYS.left) ? 1 : 0);
-    const moveZ = (isHeld(KEYS.up) ? 1 : 0) - (isHeld(KEYS.down) ? 1 : 0);
     const frame: InputFrame = {
-      moveX,
-      moveZ,
+      moveX: (isHeld(KEYS.right) ? 1 : 0) - (isHeld(KEYS.left) ? 1 : 0),
+      moveZ: (isHeld(KEYS.up) ? 1 : 0) - (isHeld(KEYS.down) ? 1 : 0),
       jump: wasPressed(KEYS.jump),
-      pass: wasPressed(KEYS.pass),
-      spike: wasPressed(KEYS.spike),
+      // Held, not pressed: holding charges the hit and releasing swings.
+      pass: isHeld(KEYS.pass),
+      spike: isHeld(KEYS.spike),
       feed: wasPressed(KEYS.feed),
     };
     this.pressed.clear();
+    return frame;
+  }
 
-    const pad = firstGamepad();
-    this.padName = pad?.id ?? null;
-    if (pad) {
-      const PAD = layoutFor(pad);
-      const buttons = pad.buttons.map((b) => b.pressed || b.value > 0.5);
-      this.padMapping = pad.mapping || 'non-standard';
-      this.padButtonsHeld = buttons.flatMap((held, i) => (held ? [i] : []));
-      // Compare against last poll's buttons to detect new presses.
-      const prevButtons = this.prevPadButtons;
-      const edge = (i: number) => (buttons[i] ?? false) && !(prevButtons[i] ?? false);
-      this.prevPadButtons = buttons;
+  /** Connected gamepads in the order the browser lists them. */
+  gamepads(): Gamepad[] {
+    if (typeof navigator === 'undefined' || !navigator.getGamepads) return [];
+    return navigator.getGamepads().filter((p): p is Gamepad => p !== null && p.connected);
+  }
 
-      const sx = pad.axes[0] ?? 0;
-      // Stick up is negative on gamepads; up should mean away from the camera.
-      const sz = -(pad.axes[1] ?? 0);
-      const mag = Math.hypot(sx, sz);
-      if (moveX === 0 && moveZ === 0 && mag > STICK_DEADZONE) {
-        // Rescale so movement starts at zero just outside the deadzone.
-        const scaled = Math.min((mag - STICK_DEADZONE) / (1 - STICK_DEADZONE), 1) / mag;
-        frame.moveX = sx * scaled;
-        frame.moveZ = sz * scaled;
-      }
-      frame.pass ||= edge(PAD.A) || edge(PAD.LB) || edge(PAD.LT);
-      frame.spike ||= edge(PAD.B) || edge(PAD.RB) || edge(PAD.RT);
-      frame.jump ||= edge(PAD.Y);
-      frame.feed ||= edge(PAD.X);
+  pollGamepad(pad: Gamepad): InputFrame {
+    const PAD = layoutFor(pad);
+    const buttons = pad.buttons.map((b) => b.pressed || b.value > 0.5);
+    // Compare against last poll's buttons to detect new presses.
+    const prevButtons = this.prevPadButtons.get(pad.index) ?? [];
+    this.prevPadButtons.set(pad.index, buttons);
+    const edge = (i: number) => (buttons[i] ?? false) && !(prevButtons[i] ?? false);
+    const down = (i: number) => buttons[i] ?? false;
+
+    const frame: InputFrame = {
+      moveX: 0,
+      moveZ: 0,
+      pass: down(PAD.A) || down(PAD.LB) || down(PAD.LT),
+      spike: down(PAD.B) || down(PAD.RB) || down(PAD.RT),
+      jump: edge(PAD.Y),
+      feed: edge(PAD.X),
+    };
+    const sx = pad.axes[0] ?? 0;
+    // Stick up is negative on gamepads; up should mean away from the camera.
+    const sz = -(pad.axes[1] ?? 0);
+    const mag = Math.hypot(sx, sz);
+    if (mag > STICK_DEADZONE) {
+      // Rescale so movement starts at zero just outside the deadzone.
+      const scaled = Math.min((mag - STICK_DEADZONE) / (1 - STICK_DEADZONE), 1) / mag;
+      frame.moveX = sx * scaled;
+      frame.moveZ = sz * scaled;
     }
     return frame;
   }
@@ -102,12 +111,4 @@ export class LocalInput {
 function layoutFor(pad: Gamepad): ButtonLayout {
   if (pad.mapping === 'standard') return STANDARD_LAYOUT;
   return /xbox|045e/i.test(pad.id) ? XBOX_RAW_LAYOUT : STANDARD_LAYOUT;
-}
-
-function firstGamepad(): Gamepad | null {
-  if (typeof navigator === 'undefined' || !navigator.getGamepads) return null;
-  for (const pad of navigator.getGamepads()) {
-    if (pad?.connected) return pad;
-  }
-  return null;
 }

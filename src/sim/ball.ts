@@ -2,7 +2,7 @@ import type { Tuning } from '../config/tuning';
 import { DT } from './time';
 import { copyVec3, type Vec3 } from './vec';
 
-export type Touch = 'none' | 'feed' | 'player' | 'net' | 'rim';
+export type Touch = 'none' | 'feed' | 'player' | 'net';
 
 export interface Ball {
   pos: Vec3;
@@ -14,7 +14,6 @@ export interface Ball {
 
 export type BallEvent =
   | { type: 'net'; at: Vec3; speed: number }
-  | { type: 'rim'; at: Vec3 }
   | { type: 'ground'; at: Vec3 };
 
 export function createBall(): Ball {
@@ -23,6 +22,11 @@ export function createBall(): Ball {
 
 export function cloneBall(b: Ball): Ball {
   return { pos: copyVec3(b.pos), vel: copyVec3(b.vel), alive: b.alive, lastTouch: b.lastTouch };
+}
+
+/** Radius of the whole net including its frame. */
+export function netOuterRadius(t: Tuning): number {
+  return t.net.radius + t.net.frameWidth;
 }
 
 // Height of the ball's center when it rests on the net surface.
@@ -55,23 +59,14 @@ function stepBallOnce(ball: Ball, dt: number, t: Tuning, events: BallEvent[]): v
 
   const r = t.ball.radius;
   const surface = netContactHeight(t);
-  const outer = t.net.radius + t.net.rimWidth + r;
   const d = Math.hypot(pos.x, pos.z);
 
-  // Coming down onto the net from above.
-  if (vel.y < 0 && prevY >= surface && pos.y < surface && d <= outer) {
+  // Coming down onto the net from above. The frame counts as net too (no rim
+  // faults for now), plus half a ball of grace so edge hits feel fair.
+  if (vel.y < 0 && prevY >= surface && pos.y < surface && d <= netOuterRadius(t) + r * 0.5) {
     pos.y = surface;
-    if (d <= t.net.radius) {
-      netBounce(ball, t, events);
-    } else {
-      rimHit(ball, d, t, events, true);
-    }
+    netBounce(ball, t, events);
     return;
-  }
-
-  // Clipping the side of the frame from below the surface.
-  if (pos.y < surface && d < outer) {
-    rimHit(ball, d, t, events, false);
   }
 
   if (pos.y <= r) {
@@ -92,31 +87,6 @@ function netBounce(ball: Ball, t: Tuning, events: BallEvent[]): void {
   events.push({ type: 'net', at: copyVec3(ball.pos), speed: inSpeed });
 }
 
-function rimHit(ball: Ball, d: number, t: Tuning, events: BallEvent[], fromAbove: boolean): void {
-  const { pos, vel } = ball;
-  // Outward direction from net center (pick one arbitrarily if dead center).
-  const nx = d > 1e-6 ? pos.x / d : 0;
-  const nz = d > 1e-6 ? pos.z / d : 1;
-
-  if (fromAbove) {
-    vel.y = Math.abs(vel.y) * t.net.rimBounce;
-  } else {
-    // Pushed back outside the frame.
-    const outer = t.net.radius + t.net.rimWidth + t.ball.radius;
-    pos.x = nx * outer;
-    pos.z = nz * outer;
-  }
-
-  // Reflect the radial velocity so the ball always deflects away from the net.
-  const radial = vel.x * nx + vel.z * nz;
-  const outward = Math.max(Math.abs(radial) * 0.6, 1.5);
-  vel.x += (outward - radial) * nx;
-  vel.z += (outward - radial) * nz;
-
-  ball.lastTouch = 'rim';
-  events.push({ type: 'rim', at: copyVec3(pos) });
-}
-
 /**
  * Set the ball's velocity so its center reaches `target` with the given
  * horizontal speed (ignoring air drag, which is small).
@@ -134,7 +104,7 @@ export function launchBallAt(ball: Ball, target: Vec3, horizontalSpeed: number, 
 export interface LandingPrediction {
   point: Vec3;
   ticks: number;
-  // True if the ball touches the net or rim before landing.
+  // True if the ball touches the net before landing.
   viaNet: boolean;
 }
 
