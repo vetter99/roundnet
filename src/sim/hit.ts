@@ -75,6 +75,18 @@ export function reachOf(p: Player, t: Tuning): number {
   return t.player.reach + (isDiving(p, t) ? t.player.dive.reachBonus : 0);
 }
 
+/** Where reach is measured from: the feet, or the outstretched paws mid-dive. */
+export function reachCenterOf(p: Player, t: Tuning): { x: number; z: number } {
+  if (!isDiving(p, t) || !p.dive) return { x: p.pos.x, z: p.pos.z };
+  const ahead = t.player.dive.reachOffset;
+  return { x: p.pos.x + p.dive.dirX * ahead, z: p.pos.z + p.dive.dirZ * ahead };
+}
+
+/** How far above the ideal contact height a ball can still be hit. */
+function highReachOf(p: Player, t: Tuning): number {
+  return isDiving(p, t) ? t.player.dive.highReach : t.player.highReach;
+}
+
 /** Ideal contact height above the feet right now: low while diving. */
 export function contactHeightOf(p: Player, t: Tuning): number {
   return isDiving(p, t) ? t.player.dive.contactHeight : t.player.contactHeight;
@@ -87,9 +99,10 @@ export function missReason(p: Player, ball: Ball, t: Tuning, turn?: Turn): MissR
   if (!ball.alive) return 'noBall';
   if (!isPlayable(ball)) return 'notYet';
   if (turn && turn.possession !== p.team) return 'notYourBall';
-  if (Math.hypot(ball.pos.x - p.pos.x, ball.pos.z - p.pos.z) > reachOf(p, t)) return 'tooFar';
+  const from = reachCenterOf(p, t);
+  if (Math.hypot(ball.pos.x - from.x, ball.pos.z - from.z) > reachOf(p, t)) return 'tooFar';
   const heightError = ball.pos.y - (p.pos.y + contactHeightOf(p, t));
-  if (heightError > t.player.highReach) return 'tooHigh';
+  if (heightError > highReachOf(p, t)) return 'tooHigh';
   if (heightError < -t.player.lowReach) return 'tooLow';
   return null;
 }

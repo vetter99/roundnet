@@ -93,10 +93,12 @@ Once items are GitHub issues: *"Work on issue #12"*.
 ### MECH-01 · Dive ✅ done (2026-10-10)
 **P0 · M** · Files: `src/sim/player.ts`, `src/sim/hit.ts`, `src/render/character.ts`, `src/config/tuning.ts` (`player.dive`)
 
-Shipped: X (keyboard L) lunges in the stick direction (or the way you're
-moving). While lunging you can tap A or B to pass or spike with +0.5 m reach,
-a low ideal contact height and 60% power; then you lie on the ground for 0.25 s
-(no moving, jumping or hitting) and get back up. "Reset stuck ball" moved to
+Shipped: X (keyboard L) lunges ~2.7 m in the stick direction (or the way
+you're moving). While lunging you can tap A or B to pass or spike: reach is
+measured from the outstretched paws (0.7 m ahead) with +0.7 m bonus, balls up
+to 1.8 m high, a low ideal contact height and 60% power, and a hit released
+mid-lunge stays ready until the lunge ends. Then you lie on the ground for
+0.12 s (no moving, jumping or hitting) and get back up. "Reset stuck ball" moved to
 the View/Back button (keyboard R). Tests in `src/sim/world.test.ts`.
 
 Follow-ups: the CPU doesn't dive yet (add to AI-03); dive tuning needs play

@@ -172,6 +172,9 @@ function stepDive(p: Player, intent: Intent, t: Tuning): Swing | null {
   keepOutOfNet(p, t);
 
   const swing = dive.ticks < lunge ? stepHitButtons(p, intent, t) : tickTimers(p);
+  // A pass or spike released mid-lunge stays ready for the rest of the lunge,
+  // so it connects as soon as the ball comes into the dive's reach.
+  if (p.hitBuffer && dive.ticks < lunge) p.hitBuffer.ticksLeft = Math.max(p.hitBuffer.ticksLeft, lunge - dive.ticks);
   if (++dive.ticks >= lunge + diveRecoveryTicks(t)) p.dive = null;
   return swing;
 }

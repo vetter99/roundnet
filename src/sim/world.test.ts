@@ -323,10 +323,13 @@ describe('dive', () => {
     }
     expect(diver.pos.x - -3).toBeGreaterThan(runner.pos.x - -3);
 
-    // Recovering: holding the stick doesn't move you.
+    // Recovering: holding the stick doesn't move you until you're back up.
     const lyingAt = diver.pos.x;
-    for (let i = 0; i < 10; i++) stepPlayer(diver, { ...NEUTRAL_INTENT, moveX: 1 }, t);
+    const recovery = Math.round(t.player.dive.recovery * 60);
+    for (let i = 0; i < recovery - 1; i++) stepPlayer(diver, { ...NEUTRAL_INTENT, moveX: 1 }, t);
     expect(diver.pos.x).toBe(lyingAt);
+    for (let i = 0; i < 5; i++) stepPlayer(diver, { ...NEUTRAL_INTENT, moveX: 1 }, t);
+    expect(diver.pos.x).toBeGreaterThan(lyingAt);
   });
 
   it('can hit a ball out of normal reach while lunging, with less power', () => {
@@ -344,6 +347,26 @@ describe('dive', () => {
     expect(hit).not.toBeNull();
     expect(hit.power).toBeCloseTo(t.player.dive.powerScale);
     expect(hit.quality).toBe(1);
+  });
+
+  it('measures dive reach from the outstretched paws, ahead of the feet', () => {
+    const p = createPlayer(0, 0, 0, -3);
+    stepPlayer(p, diveIntent(1, 0), t);
+    // Released early in the lunge: the hit waits for the ball to come into reach.
+    p.hitBuffer = { kind: 'pass', ticksLeft: 1, power: 1 };
+    const ahead = t.player.dive.reachOffset + t.player.reach + t.player.dive.reachBonus - 0.1;
+    const ball = { pos: { x: p.pos.x + ahead, y: 1.2, z: p.pos.z }, vel: { x: 0, y: -1, z: 0 }, alive: true, lastTouch: 'net' as const };
+    expect(tryHit(p, ball, NEUTRAL_INTENT, t)).not.toBeNull();
+  });
+
+  it('keeps a mid-lunge hit ready until the lunge ends', () => {
+    const p = createPlayer(0, 0, 0, -3);
+    stepPlayer(p, diveIntent(1, 0), t);
+    stepPlayer(p, { ...NEUTRAL_INTENT, pass: true }, t);
+    stepPlayer(p, NEUTRAL_INTENT, t); // release: the swing is buffered
+    const lunge = Math.round(t.player.dive.duration * 60);
+    for (let i = 0; i < lunge - 6; i++) stepPlayer(p, NEUTRAL_INTENT, t);
+    expect(p.hitBuffer).not.toBeNull();
   });
 
   it("can't hit while getting back up, and can't dive in the air", () => {

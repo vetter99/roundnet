@@ -21,7 +21,7 @@ const RANGES: Record<string, Ranges> = {
     perfectWindow: [0, 0.6], qualityFalloff: [0.1, 2], passUpSpeedMin: [2, 15], passUpSpeedMax: [2, 18], passHorizontalSpeed: [0, 6],
     inputBufferTicks: [0, 20, 1], cooldownTicks: [0, 40, 1],
   },
-  'player.dive': { speed: [2, 15], duration: [0.1, 0.8], recovery: [0, 1.5], reachBonus: [0, 1.5], contactHeight: [0.2, 1.5], powerScale: [0, 1] },
+  'player.dive': { speed: [2, 15], duration: [0.1, 0.8], recovery: [0, 1.5], reachOffset: [0, 1.5], reachBonus: [0, 1.5], highReach: [0, 2], contactHeight: [0.2, 1.5], powerScale: [0, 1] },
   court: { serveLineDistance: [1, 5] },
   marker: { maxRadius: [0.2, 2.5], targetRadius: [0.05, 1], approachTime: [0.2, 3] },
   practice: { resetDelayTicks: [0, 180, 1], feedDistance: [0.8, 4], feedHeight: [0.5, 4], feedSpeed: [2, 15] },
