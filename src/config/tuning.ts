@@ -126,11 +126,14 @@ export const DEFAULT_TUNING = {
     feedSpeed: 5,
   },
 
+  // Broadcast camera behind the near (-z) side, tilted ~55 degrees down so the
+  // ground shows about 7.5 m on the near side of the net and 9 m on the far
+  // side: balls hit toward the camera stay on screen.
   camera: {
-    height: 7.5,
+    height: 13,
     distance: 10.5,
     fov: 0.75,
-    lookAtZ: 0.8,
+    lookAtZ: -1.5,
   },
 
   audio: {
