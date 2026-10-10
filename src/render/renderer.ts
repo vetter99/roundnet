@@ -11,10 +11,11 @@ import { MeshBuilder } from '@babylonjs/core/Meshes/meshBuilder';
 import { TransformNode } from '@babylonjs/core/Meshes/transformNode';
 import { Scene } from '@babylonjs/core/scene';
 import type { Tuning } from '../config/tuning';
-import { predictLanding } from '../sim/ball';
+import { predictLanding, type LandingPrediction } from '../sim/ball';
 import { isPlayable, predictDescentTo } from '../sim/hit';
 import type { HitKind } from '../sim/player';
 import { DT } from '../sim/time';
+import { cameraPosition, frame, type Framing } from './cameraFraming';
 import { Character, FUR } from './character';
 import { chargePower, diveRecoveryTicks, diveTicks } from '../sim/player';
 import { clamp, lerp, type Vec3 } from '../sim/vec';
@@ -76,6 +77,8 @@ export class Renderer {
   private readonly ballShadowMat: StandardMaterial;
   private courtKey = '';
   private time = 0;
+  // The camera's current (smoothed) framing; null until the first frame.
+  private cameraFraming: Framing | null = null;
 
   constructor(canvas: HTMLCanvasElement) {
     this.engine = new Engine(canvas, true, { stencil: true });
@@ -131,7 +134,8 @@ export class Renderer {
   /** Update every mesh from the sim. `alpha` blends prev → current tick. */
   sync(world: World, prev: Snapshot, alpha: number, t: Tuning, frameSeconds: number): void {
     this.time += frameSeconds;
-    this.updateCamera(t);
+    const landing = predictLanding(world.ball, t);
+    this.updateCamera(world, landing, t, frameSeconds);
     this.rebuildCourtIfChanged(t);
 
     const b = world.ball.pos;
@@ -164,7 +168,7 @@ export class Renderer {
       view.reachRing.scaling.set(t.player.reach, 1, t.player.reach);
     });
 
-    this.updateMarker(world, t);
+    this.updateMarker(world, landing, t);
     this.scene.render();
   }
 
@@ -213,15 +217,46 @@ export class Renderer {
     this.players[playerId]?.character.playSwing(kind);
   }
 
-  private updateCamera(t: Tuning): void {
-    this.camera.position.set(0, t.camera.height, -t.camera.distance);
-    this.camera.setTarget(new Vector3(0, 0, t.camera.lookAtZ));
-    this.camera.fov = t.camera.fov;
+  /** Ease toward the closest view that keeps the players, ball, landing spot and net on screen. */
+  private updateCamera(world: World, landing: LandingPrediction | null, t: Tuning, dt: number): void {
+    const c = t.camera;
+    const pitch = (c.pitchDeg * Math.PI) / 180;
+    const points = [{ x: 0, y: t.net.height, z: 0 }];
+    for (const p of world.players) {
+      points.push({ x: p.pos.x, y: p.pos.y, z: p.pos.z }, { x: p.pos.x, y: p.pos.y + t.player.contactHeight, z: p.pos.z });
+    }
+    if (world.ball.alive) points.push({ ...world.ball.pos });
+    if (landing) {
+      // The whole timing guide, not just its center.
+      const r = t.marker.maxRadius;
+      const { x, z } = landing.point;
+      points.push({ x: x - r, y: 0, z }, { x: x + r, y: 0, z }, { x, y: 0, z: z - r }, { x, y: 0, z: z + r });
+    }
+
+    const goal = frame(points, {
+      pitch,
+      fovY: c.fov,
+      aspect: this.engine.getAspectRatio(this.camera),
+      margin: c.margin,
+      minDistance: c.minDistance,
+      maxDistance: c.maxDistance,
+    });
+    const cur = this.cameraFraming ?? (this.cameraFraming = goal);
+    // Pull back quickly so fast balls stay in view; come back in gently.
+    const zoomRate = goal.distance > cur.distance ? c.zoomOutSpeed : c.zoomInSpeed;
+    cur.distance += (goal.distance - cur.distance) * (1 - Math.exp(-zoomRate * dt));
+    const pan = 1 - Math.exp(-c.panSpeed * dt);
+    cur.center.x += (goal.center.x - cur.center.x) * pan;
+    cur.center.z += (goal.center.z - cur.center.z) * pan;
+
+    const pos = cameraPosition(cur, pitch);
+    this.camera.position.set(pos.x, pos.y, pos.z);
+    this.camera.setTarget(new Vector3(cur.center.x, cur.center.y, cur.center.z));
+    this.camera.fov = c.fov;
   }
 
-  private updateMarker(world: World, t: Tuning): void {
+  private updateMarker(world: World, landing: LandingPrediction | null, t: Tuning): void {
     const ball = world.ball;
-    const landing = predictLanding(ball, t);
     const show = landing !== null && (t.marker.mode === 'always' || !landing.viaNet);
     this.marker.setEnabled(show);
     if (!landing || !show) return;

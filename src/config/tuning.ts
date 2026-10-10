@@ -126,14 +126,22 @@ export const DEFAULT_TUNING = {
     feedSpeed: 5,
   },
 
-  // Broadcast camera behind the near (-z) side, tilted ~55 degrees down so the
-  // ground shows about 7.5 m on the near side of the net and 9 m on the far
-  // side: balls hit toward the camera stay on screen.
+  // Smart-framing broadcast camera behind the near (-z) side. Its angle is
+  // fixed; it pans and zooms to keep the players, ball, landing spot and net
+  // on screen, sitting as close as it can.
   camera: {
-    height: 13,
-    distance: 10.5,
+    // Downward tilt in degrees (higher = more top-down).
+    pitchDeg: 36,
     fov: 0.75,
-    lookAtZ: -1.5,
+    // How close it sits when the action is tight, and how far it may pull back.
+    minDistance: 12,
+    maxDistance: 26,
+    // Fraction of the screen the action may fill (lower = more breathing room).
+    margin: 0.78,
+    // How quickly it pulls back, comes back in, and pans (higher = snappier).
+    zoomOutSpeed: 4,
+    zoomInSpeed: 1.2,
+    panSpeed: 2.5,
   },
 
   audio: {

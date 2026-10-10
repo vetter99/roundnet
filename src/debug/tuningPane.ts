@@ -26,7 +26,10 @@ const RANGES: Record<string, Ranges> = {
   marker: { maxRadius: [0.2, 2.5], targetRadius: [0.05, 1], approachTime: [0.2, 3] },
   practice: { resetDelayTicks: [0, 180, 1], feedDistance: [0.8, 4], feedHeight: [0.5, 4], feedSpeed: [2, 15] },
   audio: { volume: [0, 1], music: [0, 1] },
-  camera: { height: [2, 20], distance: [3, 25], fov: [0.3, 1.4], lookAtZ: [-3, 5] },
+  camera: {
+    pitchDeg: [10, 85], fov: [0.4, 1.3], minDistance: [4, 30], maxDistance: [8, 45], margin: [0.4, 1],
+    zoomOutSpeed: [0.2, 15], zoomInSpeed: [0.2, 15], panSpeed: [0.2, 15],
+  },
 };
 
 /** Live sliders for every tuning value. Toggle with the backtick (`) key. */
