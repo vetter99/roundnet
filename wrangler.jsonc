@@ -1,0 +1,11 @@
+// Cloudflare Workers deploy config: serves the Vite build output in dist/ as a
+// static site. Cloudflare's Git integration runs `npm run build`, then
+// `npx wrangler deploy`. The name must match the Worker's name in the dashboard.
+{
+  "name": "roundnet",
+  "compatibility_date": "2026-10-01",
+  "assets": {
+    "directory": "./dist",
+    "not_found_handling": "single-page-application"
+  }
+}
