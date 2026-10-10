@@ -62,7 +62,7 @@ export const DEFAULT_TUNING = {
       // Seconds lunging, when you can still pass or spike.
       duration: 0.32,
       // Seconds lying on the ground afterward: no moving, jumping or hitting.
-      recovery: 0.5,
+      recovery: 0.25,
       // Extra horizontal reach while diving.
       reachBonus: 0.5,
       // Ideal contact height while diving: you're stretched out low.

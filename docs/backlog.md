@@ -95,7 +95,7 @@ Once items are GitHub issues: *"Work on issue #12"*.
 
 Shipped: X (keyboard L) lunges in the stick direction (or the way you're
 moving). While lunging you can tap A or B to pass or spike with +0.5 m reach,
-a low ideal contact height and 60% power; then you lie on the ground for 0.5 s
+a low ideal contact height and 60% power; then you lie on the ground for 0.25 s
 (no moving, jumping or hitting) and get back up. "Reset stuck ball" moved to
 the View/Back button (keyboard R). Tests in `src/sim/world.test.ts`.
 
