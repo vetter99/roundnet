@@ -122,6 +122,8 @@ export const DEFAULT_TUNING = {
   audio: {
     // Master volume, 0..1. M mutes.
     volume: 0.6,
+    // Background music, relative to master.
+    music: 0.35,
   },
 
   debug: {

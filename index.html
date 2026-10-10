@@ -33,6 +33,8 @@
       #prompt { position: fixed; bottom: 18%; left: 0; right: 0; display: none; text-align: center; pointer-events: none;
                 color: #fff; font-size: 30px; font-weight: 800; text-shadow: 0 2px 8px #000c; }
       #prompt b { display: inline-block; min-width: 1.4em; padding: 0 0.3em; border-radius: 999px; background: #3fbf5f; }
+      #credit { position: fixed; top: 12px; right: 16px; font-size: 11px; color: #fffb; text-shadow: 0 1px 2px #000a; }
+      #credit a { color: inherit; }
       #help { position: fixed; bottom: 10px; left: 16px; right: 16px; color: #fffd; font-size: 13px; text-shadow: 0 1px 2px #000a; pointer-events: none; }
     </style>
   </head>
@@ -42,6 +44,10 @@
     <div id="flash"></div>
     <div id="help"></div>
     <div id="prompt"></div>
+    <div id="credit">
+      Music: "Monkeys Spinning Monkeys" by Kevin MacLeod (<a href="https://incompetech.com" target="_blank" rel="noopener">incompetech.com</a>),
+      <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener">CC BY 4.0</a>
+    </div>
     <button id="sound">🔇 Click here to turn on sound</button>
     <script type="module" src="/src/main.ts"></script>
   </body>

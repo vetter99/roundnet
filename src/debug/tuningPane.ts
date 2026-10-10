@@ -23,7 +23,7 @@ const RANGES: Record<string, Ranges> = {
   court: { serveLineDistance: [1, 5] },
   marker: { maxRadius: [0.2, 2.5], targetRadius: [0.05, 1], approachTime: [0.2, 3] },
   practice: { resetDelayTicks: [0, 180, 1], feedDistance: [0.8, 4], feedHeight: [0.5, 4], feedSpeed: [2, 15] },
-  audio: { volume: [0, 1] },
+  audio: { volume: [0, 1], music: [0, 1] },
   camera: { height: [2, 20], distance: [3, 25], fov: [0.3, 1.4], lookAtZ: [-3, 5] },
 };
 

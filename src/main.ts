@@ -22,6 +22,9 @@ const TEAM_CSS = ['#5b8cff', '#ff6b5b'];
 
 const renderer = new Renderer(canvas);
 const sfx = new Sfx();
+// "Monkeys Spinning Monkeys" by Kevin MacLeod (incompetech.com), CC BY 4.0;
+// credited on screen (#credit in index.html) and in the README.
+void sfx.playMusic('music/monkeys-spinning-monkeys.m4a');
 soundButton.addEventListener('click', () => {
   sfx.unlock();
   canvas.focus();
@@ -83,7 +86,7 @@ renderer.engine.runRenderLoop(() => {
     accumulator -= DT;
   }
 
-  sfx.setVolume(tuning.audio.volume);
+  sfx.setVolume(tuning.audio.volume, tuning.audio.music);
   renderer.sync(world, prev, accumulator / DT, tuning, frameSeconds);
   updateHud(frameSeconds, devices);
 });

@@ -37,3 +37,9 @@ keyboard); Red is always the CPU for now. Click the page once to turn on sound.
 `npm run build` produces a static site in `dist/`. Host it on Cloudflare Pages,
 Netlify, Vercel (build command `npm run build`, output `dist`), or zip `dist/`
 and upload it to itch.io as an HTML5 game.
+
+## Credits
+
+Music: "Monkeys Spinning Monkeys" by Kevin MacLeod (incompetech.com),
+licensed under Creative Commons: By Attribution 4.0
+(http://creativecommons.org/licenses/by/4.0/).

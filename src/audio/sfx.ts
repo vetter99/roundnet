@@ -11,6 +11,9 @@ export class Sfx {
   private readonly ctx: AudioContext | null;
   private readonly master: GainNode | null;
   private readonly noise: AudioBuffer | null;
+  // Background music, on its own volume under the master volume.
+  private readonly musicBus: GainNode | null;
+  private musicStarted = false;
   muted = false;
 
   constructor() {
@@ -19,10 +22,13 @@ export class Sfx {
     if (!this.ctx) {
       this.master = null;
       this.noise = null;
+      this.musicBus = null;
       return;
     }
     this.master = this.ctx.createGain();
     this.master.connect(this.ctx.destination);
+    this.musicBus = this.ctx.createGain();
+    this.musicBus.connect(this.master);
     // One second of white noise, reused for every noisy sound.
     this.noise = this.ctx.createBuffer(1, this.ctx.sampleRate, this.ctx.sampleRate);
     const data = this.noise.getChannelData(0);
@@ -42,8 +48,27 @@ export class Sfx {
     return this.ctx?.state === 'suspended';
   }
 
-  setVolume(volume: number): void {
+  setVolume(volume: number, music: number): void {
     if (this.master) this.master.gain.value = this.muted ? 0 : volume;
+    if (this.musicBus) this.musicBus.gain.value = music;
+  }
+
+  /** Load a music file and loop it forever on the music bus (starts once). */
+  async playMusic(url: string): Promise<void> {
+    if (!this.ctx || !this.musicBus || this.musicStarted) return;
+    this.musicStarted = true;
+    try {
+      const data = await (await fetch(url)).arrayBuffer();
+      const buffer = await this.ctx.decodeAudioData(data);
+      const src = this.ctx.createBufferSource();
+      src.buffer = buffer;
+      src.loop = true;
+      src.connect(this.musicBus);
+      src.start();
+    } catch (err) {
+      // The game works fine without music.
+      console.warn('Music failed to load', err);
+    }
   }
 
   /** The ball is struck: a punchy smack for spikes, a softer bump for passes. */
