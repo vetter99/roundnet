@@ -34,6 +34,11 @@ export interface World {
   possessionTick: number;
   // The team that last sent the ball (by hitting or serving it).
   lastHitTeam: Team;
+  // The kind of the last player hit (null after a serve), e.g. so a player
+  // knows a ball they passed to themselves is theirs to play again.
+  lastHitKind: HitKind | null;
+  // Charge power (0..1) of the last player hit; 0 after a serve.
+  lastHitPower: number;
   // Ticks since the ball died; the serve prompt appears after a short pause.
   deadTicks: number;
   // True while the game waits for the server to serve (press and release pass).
@@ -54,6 +59,8 @@ export function createWorld(): World {
     possession: 0,
     possessionTick: 0,
     lastHitTeam: 1,
+    lastHitKind: null,
+    lastHitPower: 0,
     deadTicks: 0,
     waitingForServe: true,
     serveReadyTick: 0,
@@ -101,6 +108,8 @@ export function stepWorld(world: World, intents: readonly Intent[], t: Tuning): 
     if (hit) {
       world.events.push({ type: 'hit', ...hit });
       world.lastHitTeam = p.team;
+      world.lastHitKind = hit.kind;
+      world.lastHitPower = hit.power;
     } else if (p.hitBuffer && p.hitBuffer.ticksLeft <= 0) {
       const reason = missReason(p, world.ball, t, turn) ?? 'tooFar';
       world.events.push({ type: 'whiff', playerId: p.id, kind: p.hitBuffer.kind, reason });
@@ -156,6 +165,8 @@ export function serve(world: World, receiver: Team, t: Tuning): void {
 
   // The serving team "sent" it, so the net hands possession to the receiver.
   world.lastHitTeam = otherTeam(receiver);
+  world.lastHitKind = null;
+  world.lastHitPower = 0;
   world.possession = otherTeam(receiver);
   world.possessionTick = world.tick;
   world.deadTicks = 0;

@@ -22,3 +22,25 @@ describe('bot', () => {
     expect(possessionChanges).toBeGreaterThan(points * 2);
   });
 });
+
+describe('bot two-touch play', () => {
+  it('usually passes to itself first, then spikes the second touch', () => {
+    const world = createWorld();
+    let touches: string[] = [];
+    const patterns: string[] = [];
+    for (let i = 0; i < 60 * 300; i++) {
+      stepWorld(world, [botIntent(world, 0, t), botIntent(world, 1, t)], t);
+      for (const e of world.events) {
+        if (e.type === 'hit') touches.push(e.kind);
+        if (e.type === 'possession' || e.type === 'ground') {
+          if (touches.length) patterns.push(touches.join('>'));
+          touches = [];
+        }
+      }
+    }
+    const passThenSpike = patterns.filter((p) => p === 'pass>spike').length;
+    expect(passThenSpike / patterns.length).toBeGreaterThan(0.5);
+    // It never passes and then forgets to play its second touch.
+    expect(patterns.every((p) => p === 'spike' || p === 'pass>spike')).toBe(true);
+  });
+});
