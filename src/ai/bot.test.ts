@@ -7,7 +7,7 @@ const t = createTuning();
 
 describe('bot', () => {
   it('two bots play real rallies: returns onto the net between serves', () => {
-    const world = createWorld(t);
+    const world = createWorld();
     let possessionChanges = 0;
     let points = 0;
     for (let i = 0; i < 60 * 90; i++) {

@@ -1,7 +1,7 @@
 import type { Intent } from '../sim/player';
 
 export interface InputFrame extends Intent {
-  // Toss a new ball, or start a rematch once the match is over.
+  // End the current rally now (e.g. if the ball gets stuck).
   feed: boolean;
 }
 
@@ -38,16 +38,11 @@ export class LocalInput {
   private readonly pressed = new Set<string>();
   // Previous buttons per gamepad index, to detect new presses.
   private readonly prevPadButtons = new Map<number, boolean[]>();
-  // True once any game key has been pressed.
-  keyboardUsed = false;
 
   constructor(target: Window) {
     target.addEventListener('keydown', (e) => {
       if (e.target instanceof HTMLInputElement) return;
-      if (CAPTURED_KEYS.has(e.code)) {
-        e.preventDefault();
-        this.keyboardUsed = true;
-      }
+      if (CAPTURED_KEYS.has(e.code)) e.preventDefault();
       if (!e.repeat) this.pressed.add(e.code);
       this.held.add(e.code);
     });

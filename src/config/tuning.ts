@@ -105,7 +105,7 @@ export const DEFAULT_TUNING = {
 
   // The temporary serve: a ball fed off the net toward the receiving player.
   practice: {
-    // Ticks after the ball dies before the next serve (60 = 1 second).
+    // Ticks after the ball dies before the serve prompt appears (60 = 1 second).
     resetDelayTicks: 50,
     feedDistance: 2.2,
     feedHeight: 2.2,

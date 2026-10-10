@@ -2,7 +2,7 @@ import type { Tuning } from '../config/tuning';
 import { predictDescentTo } from '../sim/hit';
 import { NEUTRAL_INTENT, type Intent, type Player } from '../sim/player';
 import type { Vec3 } from '../sim/vec';
-import type { World } from '../sim/world';
+import { serverTeam, type World } from '../sim/world';
 
 // A simple computer player. It's deterministic (no randomness) like the sim,
 // and deliberately imperfect: it reacts late, doesn't move at full speed,
@@ -15,6 +15,8 @@ const MOVE_EFFORT = 0.85;
 // Start charging a spike this many ticks before contact (~half power).
 const CHARGE_LEAD_TICKS = 18;
 const WAIT_DISTANCE = 2.3;
+// Ticks the CPU waits before serving when it's its turn.
+const SERVE_DELAY_TICKS = 50;
 // Timing mistakes: release up to this far (m) above or below the ideal height.
 const TIMING_ERROR = 0.5;
 
@@ -27,6 +29,12 @@ export function botIntent(world: World, index: number, t: Tuning): Intent {
   const me = world.players[index];
   const opponent = world.players.find((p) => p.team !== me.team);
   const intent: Intent = { ...NEUTRAL_INTENT };
+
+  // Serve with a quick tap of pass (it serves on release) after a short pause.
+  if (world.waitingForServe && serverTeam(world) === me.team) {
+    intent.pass = world.tick - world.serveReadyTick === SERVE_DELAY_TICKS;
+    return intent;
+  }
   // Once we've hit it, wait for it to reach the net instead of swinging again.
   const myBall = world.possession === me.team && world.ball.alive && world.ball.lastTouch !== 'player';
   const reaction = REACTION_TICKS + Math.round(Math.abs(timingSlop(world)) * REACTION_SLOP_TICKS);

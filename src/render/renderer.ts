@@ -137,6 +137,8 @@ export class Renderer {
     const b = world.ball.pos;
     this.ball.position.set(lerp(prev.ball.x, b.x, alpha), lerp(prev.ball.y, b.y, alpha), lerp(prev.ball.z, b.z, alpha));
     this.ball.scaling.setAll(t.ball.radius * 2);
+    // No ball on court between rallies; it reappears with the serve.
+    this.ball.isVisible = !world.waitingForServe;
     this.updateBallShadow(this.ball.position, world.ball.alive, t);
     this.updateNetWobble(frameSeconds, t);
 

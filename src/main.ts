@@ -7,7 +7,7 @@ import { Renderer, snapshot } from './render/renderer';
 import type { MissReason } from './sim/hit';
 import { chargePower } from './sim/player';
 import { DT } from './sim/time';
-import { createWorld, serve, stepWorld, type SimEvent, type Team } from './sim/world';
+import { createWorld, resetRally, serverTeam, stepWorld, type SimEvent, type Team } from './sim/world';
 
 const canvas = document.getElementById('game') as HTMLCanvasElement;
 const stats = document.querySelector('#hud .stats') as HTMLElement;
@@ -15,6 +15,7 @@ const last = document.querySelector('#hud .last') as HTMLElement;
 const flash = document.getElementById('flash') as HTMLElement;
 const help = document.getElementById('help') as HTMLElement;
 const soundButton = document.getElementById('sound') as HTMLButtonElement;
+const prompt = document.getElementById('prompt') as HTMLElement;
 
 const TEAM_NAMES = ['Blue', 'Red'];
 const TEAM_CSS = ['#5b8cff', '#ff6b5b'];
@@ -31,7 +32,7 @@ window.addEventListener('keydown', (e) => {
 // Per player: whether their charge was already full, to ding once on reaching it.
 const chargeWasFull = [false, false];
 const input = new LocalInput(window);
-const world = createWorld(tuning);
+const world = createWorld();
 createTuningPane(tuning);
 canvas.focus();
 
@@ -39,16 +40,17 @@ let prev = snapshot(world);
 let accumulator = 0;
 let lastTime = performance.now();
 let flashTimer = 0;
-// Once someone uses the keyboard while P1 is on a controller, the keyboard
-// takes over P2 from the CPU for the rest of the session.
+// With P1 on a controller, P toggles Red between the CPU and the keyboard.
 let keyboardIsP2 = false;
+window.addEventListener('keydown', (e) => {
+  if (e.code === 'KeyP' && !e.repeat) keyboardIsP2 = !keyboardIsP2;
+});
 
 type Device = 'keyboard' | 'cpu' | Gamepad;
 
 /** Decide which device drives each player: [P1, P2]. */
 function assignDevices(): [Device, Device] {
   const pads = input.gamepads();
-  if (pads.length > 0 && input.keyboardUsed) keyboardIsP2 = true;
   const p1: Device = pads[0] ?? 'keyboard';
   const p2: Device = pads[1] ?? (pads[0] && keyboardIsP2 ? 'keyboard' : 'cpu');
   return [p1, p2];
@@ -76,9 +78,7 @@ renderer.engine.runRenderLoop(() => {
       if (d === 'cpu') return { ...botIntent(world, i, tuning), feed: false };
       return input.pollGamepad(d);
     });
-    if (frames.some((f) => f.feed) || (keyboard.feed && !devices.includes('keyboard'))) {
-      serve(world, world.nextReceiver, tuning);
-    }
+    if (world.ball.alive && (frames.some((f) => f.feed) || keyboard.feed)) resetRally(world);
     stepWorld(world, frames, tuning);
     for (const e of world.events) onEvent(e);
     world.players.forEach((p, i) => {
@@ -198,8 +198,17 @@ function liveSection(devices: [Device, Device]): string {
 
 function updateHud(frameSeconds: number, devices: [Device, Device]): void {
   const team: Team = world.possession;
-  stats.innerHTML =
-    world.ball.lastTouch === 'feed'
+  const server = serverTeam(world);
+  const serverDevice = devices[world.players.findIndex((p) => p.team === server)];
+  prompt.style.display = world.waitingForServe ? 'block' : 'none';
+  if (world.waitingForServe) {
+    const key = serverDevice === 'keyboard' ? 'J' : 'A';
+    prompt.innerHTML =
+      serverDevice === 'cpu' ? `${teamSpan(server)} is about to serve…` : `${teamSpan(server)}: press <b>${key}</b> to serve`;
+  }
+  stats.innerHTML = world.waitingForServe
+    ? `${teamSpan(server)} serves to ${teamSpan(world.nextReceiver)}`
+    : world.ball.lastTouch === 'feed'
       ? `${teamSpan(team)} serves to ${teamSpan(team === 0 ? 1 : 0)}`
       : world.ball.alive
         ? `${teamSpan(team)}'s ball`
@@ -209,11 +218,13 @@ function updateHud(frameSeconds: number, devices: [Device, Device]): void {
   last.innerHTML = hitSection() + miss + netSection() + liveSection(devices);
   if (flashTimer > 0 && (flashTimer -= frameSeconds) <= 0) flash.style.opacity = '0';
 
-  const join = devices[1] === 'cpu' ? ' (press a key or connect a 2nd controller to play Red)' : '';
+  // P only matters when Blue is on a controller and Red has no controller.
+  const canToggleRed = devices[0] !== 'keyboard' && (devices[1] === 'cpu' || devices[1] === 'keyboard');
+  const join = !canToggleRed ? '' : devices[1] === 'cpu' ? ' (P: play Red on keyboard)' : ' (P: back to CPU)';
   soundButton.style.display = sfx.locked ? 'block' : 'none';
   const sound = sfx.muted ? 'Sound muted (M)' : 'M mute';
   help.textContent =
     `${sound}   |   Blue: ${deviceName(devices[0])} · Red: ${deviceName(devices[1])}${join}   |   ` +
-    `Controller: stick move/aim · hold A pass · hold B spike · Y jump · X new serve   |   ` +
-    `Keyboard: WASD · hold J pass · hold K spike · Space jump · R new serve · \` tuning`;
+    `Controller: stick move/aim · hold A pass/serve · hold B spike · Y jump · X reset ball   |   ` +
+    `Keyboard: WASD · hold J pass/serve · hold K spike · Space jump · R reset ball · \` tuning`;
 }

@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { createTuning } from '../config/tuning';
 import { hitQuality, tryHit } from './hit';
 import { createPlayer, NEUTRAL_INTENT, stepPlayer, type Intent } from './player';
-import { createWorld, stepWorld, type SimEvent, type World } from './world';
+import { createWorld, serve, stepWorld, type SimEvent, type World } from './world';
 
 const t = createTuning();
 
@@ -83,8 +83,8 @@ describe('world', () => {
   });
 
   it('is deterministic: same inputs give the exact same state', () => {
-    const a = createWorld(t);
-    const b = createWorld(t);
+    const a = createWorld();
+    const b = createWorld();
     for (let i = 0; i < 2000; i++) {
       stepWorld(a, [script(i), script(i + 7)], t);
       stepWorld(b, [script(i), script(i + 7)], t);
@@ -92,23 +92,52 @@ describe('world', () => {
     expect(JSON.stringify(a)).toBe(JSON.stringify(b));
   });
 
-  it('the serve bounces off the net toward the receiver, who gets possession', () => {
-    const world = createWorld(t);
-    const receiver = world.players[0];
+  it('waits for the server to press pass, then serves to the receiver', () => {
+    const world = createWorld();
+    // Red serves first, to Blue. Nothing happens until Red serves.
+    for (let i = 0; i < 120; i++) stepWorld(world, [], t);
+    expect(world.waitingForServe).toBe(true);
+    expect(world.ball.alive).toBe(false);
+
+    // Red taps pass: the serve happens on release.
+    stepWorld(world, [NEUTRAL_INTENT, { ...NEUTRAL_INTENT, pass: true }], t);
+    stepWorld(world, [], t);
+    expect(world.waitingForServe).toBe(false);
+    expect(world.ball.alive).toBe(true);
+
     let possession: SimEvent | undefined;
     for (let i = 0; i < 120 && !possession; i++) {
       stepWorld(world, [], t);
       possession = world.events.find((e) => e.type === 'possession');
     }
     expect(possession).toEqual({ type: 'possession', team: 0 });
-    expect(Math.sign(world.ball.vel.z)).toBe(Math.sign(receiver.pos.z));
+    expect(Math.sign(world.ball.vel.z)).toBe(Math.sign(world.players[0].pos.z));
+  });
+
+  it("only the server's pass starts the serve", () => {
+    const world = createWorld();
+    // Blue is receiving, so Blue tapping pass does nothing.
+    stepWorld(world, [{ ...NEUTRAL_INTENT, pass: true }], t);
+    stepWorld(world, [], t);
+    expect(world.waitingForServe).toBe(true);
+  });
+
+  it('after the ball lands, the game waits for the next serve', () => {
+    const world = createWorld();
+    serve(world, 0, t);
+    for (let i = 0; i < 600 && world.ball.alive; i++) stepWorld(world, [], t);
+    for (let i = 0; i < t.practice.resetDelayTicks + 1; i++) stepWorld(world, [], t);
+    expect(world.waitingForServe).toBe(true);
+    // The serve switches sides: Blue serves next.
+    expect(world.nextReceiver).toBe(1);
   });
 });
 
 describe('rally rules', () => {
   /** A world where Blue (player 0) has the ball, ready to play it. */
   function blueHasBall() {
-    const world = createWorld(t);
+    const world = createWorld();
+    serve(world, 0, t);
     const p = world.players[0];
     world.possession = 0;
     world.ball.pos = { x: p.pos.x, y: t.player.contactHeight, z: p.pos.z + 0.2 };
@@ -179,12 +208,14 @@ describe('swing feedback', () => {
   }
 
   it('explains a swing at a ball still heading to the net', () => {
-    const world = createWorld(t); // fresh feed, on its way to the net
+    const world = createWorld();
+    serve(world, 0, t); // fresh serve, on its way to the net
     expect(runUntilWhiff(world)).toMatchObject({ type: 'whiff', reason: 'notYet' });
   });
 
   it('explains a swing at a playable ball that is out of reach', () => {
-    const world = createWorld(t);
+    const world = createWorld();
+    serve(world, 0, t);
     world.possession = 0;
     world.ball.lastTouch = 'net';
     world.ball.pos = { x: 3, y: 1.3, z: 3 };
