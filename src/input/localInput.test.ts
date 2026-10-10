@@ -1,0 +1,46 @@
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { LocalInput } from './localInput';
+
+// A fake standard-layout controller whose held buttons the test controls.
+function fakePad(held: number[]) {
+  return {
+    id: 'Xbox Wireless Controller (STANDARD GAMEPAD Vendor: 045e Product: 0b13)',
+    mapping: 'standard',
+    connected: true,
+    axes: [0, 0, 0, 0],
+    buttons: Array.from({ length: 17 }, (_, i) => ({ pressed: held.includes(i), value: held.includes(i) ? 1 : 0 })),
+  };
+}
+
+function setup() {
+  let held: number[] = [];
+  vi.stubGlobal('navigator', { getGamepads: () => [fakePad(held)] });
+  const input = new LocalInput(new EventTarget() as unknown as Window);
+  return { input, hold: (buttons: number[]) => (held = buttons) };
+}
+
+describe('LocalInput gamepad', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it('maps A to pass, B to spike, Y to jump, X to new ball', () => {
+    const cases: [number, 'pass' | 'spike' | 'jump' | 'feed'][] = [[0, 'pass'], [1, 'spike'], [3, 'jump'], [2, 'feed']];
+    for (const [button, action] of cases) {
+      const { input, hold } = setup();
+      input.poll();
+      hold([button]);
+      expect(input.poll()[action], `button ${button}`).toBe(true);
+    }
+  });
+
+  it('fires once per press, not every tick while held', () => {
+    const { input, hold } = setup();
+    input.poll();
+    hold([1]);
+    expect(input.poll().spike).toBe(true);
+    expect(input.poll().spike).toBe(false);
+    hold([]);
+    input.poll();
+    hold([1]);
+    expect(input.poll().spike).toBe(true);
+  });
+});
