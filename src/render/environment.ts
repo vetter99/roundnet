@@ -207,28 +207,3 @@ export function createBallMaterial(scene: Scene): StandardMaterial {
   mat.specularColor = new Color3(0.3, 0.3, 0.25);
   return mat;
 }
-
-/** The net surface: black webbing with a visible grid, like a real roundnet net. */
-export function createNetMaterial(scene: Scene): StandardMaterial {
-  const size = 256;
-  const tex = new DynamicTexture('netTex', { width: size, height: size }, scene, true);
-  const ctx = tex.getContext() as CanvasRenderingContext2D;
-  ctx.fillStyle = '#141414';
-  ctx.fillRect(0, 0, size, size);
-  ctx.strokeStyle = 'rgba(255, 255, 255, 0.22)';
-  ctx.lineWidth = 2;
-  const cells = 12;
-  for (let i = 0; i <= cells; i++) {
-    const p = (i / cells) * size;
-    ctx.beginPath();
-    ctx.moveTo(p, 0);
-    ctx.lineTo(p, size);
-    ctx.moveTo(0, p);
-    ctx.lineTo(size, p);
-    ctx.stroke();
-  }
-  tex.update();
-  const mat = material(scene, 'netSurface', new Color3(1, 1, 1));
-  mat.diffuseTexture = tex;
-  return mat;
-}

@@ -19,7 +19,8 @@ import type { ShotKind } from '../sim/player';
 import { DT } from '../sim/time';
 import { cameraPosition, frame, type Framing } from './cameraFraming';
 import { Character } from './character';
-import { addHaze, createBallMaterial, createLawn, createNetMaterial, createScenery, createShadows, SKY } from './environment';
+import { addHaze, createBallMaterial, createLawn, createScenery, createShadows, SKY } from './environment';
+import { buildRoundnetSet } from './roundnetSet';
 import { createStadium, type Stadium } from './stadium';
 import type { ShadowGenerator } from '@babylonjs/core/Lights/Shadows/shadowGenerator';
 import { chargePower, diveRecoveryTicks, diveTicks } from '../sim/player';
@@ -472,31 +473,9 @@ export class Renderer {
     const court = (this.court = new TransformNode('court', scene));
     const { radius, frameWidth, height } = t.net;
 
-    const netSurface = (this.netSurface = MeshBuilder.CreateCylinder(
-      'netSurface',
-      { diameter: radius * 2, height: 0.01, tessellation: 64 },
-      scene,
-    ));
-    netSurface.position.y = height;
-    netSurface.material = createNetMaterial(scene);
-    netSurface.receiveShadows = true;
-    netSurface.parent = court;
-
-    const frame = MeshBuilder.CreateTorus('frame', { diameter: radius * 2 + frameWidth, thickness: frameWidth, tessellation: 64 }, scene);
-    frame.position.y = height;
-    frame.material = flatMaterial('frame', new Color3(1, 0.85, 0.1), scene);
-    frame.parent = court;
-    this.shadows.addShadowCaster(frame);
-
-    const legMat = flatMaterial('leg', new Color3(0.15, 0.15, 0.15), scene);
-    for (let i = 0; i < 5; i++) {
-      const angle = (i / 5) * Math.PI * 2;
-      const leg = MeshBuilder.CreateCylinder('leg', { diameter: 0.035, height }, scene);
-      leg.position.set(Math.cos(angle) * (radius + frameWidth / 2), height / 2, Math.sin(angle) * (radius + frameWidth / 2));
-      leg.material = legMat;
-      leg.parent = court;
-      this.shadows.addShadowCaster(leg);
-    }
+    const set = buildRoundnetSet(scene, radius, frameWidth, height, this.shadows);
+    set.root.parent = court;
+    this.netSurface = set.net;
 
     // Painted lines, measured out from the net's edge: the serve line and
     // the no-spike zone line close to the net.
