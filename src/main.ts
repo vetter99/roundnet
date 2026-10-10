@@ -77,27 +77,23 @@ renderer.engine.runRenderLoop(() => {
 window.addEventListener('resize', () => renderer.resize());
 
 // Latest details for the dev stats panel.
-let lastHitHtml = 'none yet';
-let lastNetHtml = 'none yet';
-let lastMissHtml = '';
+type HitEvent = Extract<SimEvent, { type: 'hit' }>;
+type NetEvent = Extract<SimEvent, { type: 'net' }>;
+let lastHit: HitEvent | null = null;
+let lastNet: NetEvent | null = null;
+let lastMiss: { team: Team; reason: MissReason } | null = null;
 
 function onEvent(e: SimEvent): void {
   if (e.type === 'swing') {
     renderer.playSwing(e.playerId, e.kind);
   } else if (e.type === 'whiff') {
-    lastMissHtml = `${teamSpan(world.players[e.playerId].team)} missed: ${MISS_MESSAGES[e.reason]}`;
+    lastMiss = { team: world.players[e.playerId].team, reason: e.reason };
   } else if (e.type === 'hit') {
-    const pct = Math.round(e.quality * 100);
-    const label = e.quality >= 1 ? 'PERFECT' : e.quality >= 0.6 ? 'Good' : 'Weak';
-    const cm = Math.round(e.heightError * 100);
-    const contact = cm === 0 ? 'right at ideal height' : `${Math.abs(cm)} cm ${cm > 0 ? 'high' : 'low'}`;
-    lastHitHtml =
-      `${teamSpan(world.players[e.playerId].team)} ${e.kind} · <b>${label}</b> timing ${pct}% (${contact})<br>` +
-      `power ${Math.round(e.power * 100)}% · launch ${e.launchSpeed.toFixed(1)} m/s`;
-    lastMissHtml = '';
+    lastHit = e;
+    lastMiss = null;
     if (e.quality >= 1) showFlash('PERFECT');
   } else if (e.type === 'net') {
-    lastNetHtml = `hit at ${e.speed.toFixed(1)} m/s ↓ · bounced up ${e.upSpeed.toFixed(1)} m/s ↑`;
+    lastNet = e;
   }
 }
 
@@ -122,31 +118,66 @@ function showFlash(text: string, color = '#fff', seconds = 0.9): void {
   flashTimer = seconds;
 }
 
+const row = (label: string, value: string) => `<div class="row"><span class="k">${label}</span><span class="v">${value}</span></div>`;
+const section = (title: string, body: string) => `<div class="section"><h4>${title}</h4>${body}</div>`;
+const percentBar = (fraction: number, color: string) =>
+  `<span class="bar"><span style="width:${Math.round(fraction * 100)}%;background:${color}"></span></span>`;
+
+function timingHtml(quality: number): string {
+  const [label, color] = quality >= 1 ? ['PERFECT', '#5ee07a'] : quality >= 0.6 ? ['Good', '#ffd84a'] : ['Weak', '#ff7a6b'];
+  return `<span style="color:${color}">${label}</span> ${Math.round(quality * 100)}%`;
+}
+
+function hitSection(): string {
+  if (!lastHit) return section('Last hit', '<div class="empty">none yet</div>');
+  const h = lastHit;
+  const cm = Math.round(h.heightError * 100);
+  const contact = cm === 0 ? 'ideal height' : `${Math.abs(cm)} cm ${cm > 0 ? 'high' : 'low'}`;
+  return section(
+    'Last hit',
+    row('Player', `${teamSpan(world.players[h.playerId].team)} ${h.kind}`) +
+      row('Timing', timingHtml(h.quality)) +
+      row('Contact', contact) +
+      row('Power', `${percentBar(h.power, '#ff9a3d')} ${Math.round(h.power * 100)}%`) +
+      row('Launch speed', `${h.launchSpeed.toFixed(1)} m/s`),
+  );
+}
+
+function netSection(): string {
+  if (!lastNet) return section('Last net bounce', '<div class="empty">none yet</div>');
+  return section(
+    'Last net bounce',
+    row('Hit the net', `${lastNet.speed.toFixed(1)} m/s ↓`) + row('Bounced up', `${lastNet.upSpeed.toFixed(1)} m/s ↑`),
+  );
+}
+
+function liveSection(devices: [Device, Device]): string {
+  const b = world.ball;
+  const ballSpeed = Math.hypot(b.vel.x, b.vel.y, b.vel.z);
+  let body = row('Ball', `${ballSpeed.toFixed(1)} m/s · ${b.pos.y.toFixed(2)} m up`);
+  world.players.forEach((p, i) => {
+    const speed = Math.hypot(p.vel.x, p.vel.z);
+    const air = p.grounded ? '' : ` · air ${p.pos.y.toFixed(2)} m`;
+    body += row(`${teamSpan(p.team)} <small>${deviceName(devices[i])}</small>`, `${speed.toFixed(1)} m/s${air}`);
+    if (p.charge) {
+      const power = chargePower(p.charge.ticks, tuning);
+      body += row(`&nbsp;&nbsp;charging ${p.charge.kind}`, `${percentBar(power, '#ff9a3d')} ${Math.round(power * 100)}%`);
+    }
+  });
+  return section('Live', body);
+}
+
 function updateHud(frameSeconds: number, devices: [Device, Device]): void {
   const team: Team = world.possession;
-  const turn =
+  stats.innerHTML =
     world.ball.lastTouch === 'feed'
       ? `${teamSpan(team)} serves to ${teamSpan(team === 0 ? 1 : 0)}`
       : world.ball.alive
         ? `${teamSpan(team)}'s ball`
         : 'Ball down, next serve coming';
-  const b = world.ball;
-  const ballSpeed = Math.hypot(b.vel.x, b.vel.y, b.vel.z);
-  const players = world.players
-    .map((p, i) => {
-      const speed = Math.hypot(p.vel.x, p.vel.z);
-      const charge = p.charge ? ` · charging ${p.charge.kind} ${Math.round(chargePower(p.charge.ticks, tuning) * 100)}%` : '';
-      const air = p.grounded ? '' : ` · in air ${p.pos.y.toFixed(2)} m`;
-      return `${teamSpan(p.team)} (${deviceName(devices[i])}) ${speed.toFixed(1)} m/s${air}${charge}`;
-    })
-    .join('<br>');
 
-  stats.innerHTML = turn;
-  last.innerHTML =
-    `<div class="label">Last hit</div>${lastHitHtml}` +
-    (lastMissHtml ? `<br>${lastMissHtml}` : '') +
-    `<div class="label">Last net bounce</div>${lastNetHtml}` +
-    `<div class="label">Live</div>ball ${ballSpeed.toFixed(1)} m/s · ${b.pos.y.toFixed(2)} m high<br>${players}`;
+  const miss = lastMiss ? `<div class="miss">${teamSpan(lastMiss.team)} missed: ${MISS_MESSAGES[lastMiss.reason]}</div>` : '';
+  last.innerHTML = hitSection() + miss + netSection() + liveSection(devices);
   if (flashTimer > 0 && (flashTimer -= frameSeconds) <= 0) flash.style.opacity = '0';
 
   const join = devices[1] === 'cpu' ? ' (press a key or connect a 2nd controller to play Red)' : '';
