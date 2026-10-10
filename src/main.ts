@@ -1,4 +1,5 @@
 import { botIntent } from './ai/bot';
+import { Sfx } from './audio/sfx';
 import { tuning } from './config/tuning';
 import { createTuningPane } from './debug/tuningPane';
 import { LocalInput, type InputFrame } from './input/localInput';
@@ -18,6 +19,12 @@ const TEAM_NAMES = ['Blue', 'Red'];
 const TEAM_CSS = ['#5b8cff', '#ff6b5b'];
 
 const renderer = new Renderer(canvas);
+const sfx = new Sfx();
+window.addEventListener('keydown', (e) => {
+  if (e.code === 'KeyM' && !e.repeat) sfx.muted = !sfx.muted;
+});
+// Per player: whether their charge was already full, to ding once on reaching it.
+const chargeWasFull = [false, false];
 const input = new LocalInput(window);
 const world = createWorld(tuning);
 createTuningPane(tuning);
@@ -67,9 +74,15 @@ renderer.engine.runRenderLoop(() => {
     }
     stepWorld(world, frames, tuning);
     for (const e of world.events) onEvent(e);
+    world.players.forEach((p, i) => {
+      const full = p.charge !== null && chargePower(p.charge.ticks, tuning) >= 1;
+      if (full && !chargeWasFull[i]) sfx.chargeFull();
+      chargeWasFull[i] = full;
+    });
     accumulator -= DT;
   }
 
+  sfx.setVolume(tuning.audio.volume);
   renderer.sync(world, prev, accumulator / DT, tuning, frameSeconds);
   updateHud(frameSeconds, devices);
 });
@@ -86,14 +99,23 @@ let lastMiss: { team: Team; reason: MissReason } | null = null;
 function onEvent(e: SimEvent): void {
   if (e.type === 'swing') {
     renderer.playSwing(e.playerId, e.kind);
+    sfx.swing(e.power);
   } else if (e.type === 'whiff') {
     lastMiss = { team: world.players[e.playerId].team, reason: e.reason };
   } else if (e.type === 'hit') {
     lastHit = e;
     lastMiss = null;
-    if (e.quality >= 1) showFlash('PERFECT');
+    sfx.hit(e.kind, e.power, e.quality);
+    if (e.quality >= 1) {
+      showFlash('PERFECT');
+      sfx.perfect();
+    }
   } else if (e.type === 'net') {
     lastNet = e;
+    renderer.netImpact(e.speed);
+    sfx.net(e.speed);
+  } else if (e.type === 'ground') {
+    sfx.ground();
   }
 }
 
@@ -181,8 +203,9 @@ function updateHud(frameSeconds: number, devices: [Device, Device]): void {
   if (flashTimer > 0 && (flashTimer -= frameSeconds) <= 0) flash.style.opacity = '0';
 
   const join = devices[1] === 'cpu' ? ' (press a key or connect a 2nd controller to play Red)' : '';
+  const sound = sfx.locked ? 'Click the page to turn on sound' : sfx.muted ? 'Sound muted (M)' : 'M mute';
   help.textContent =
-    `Blue: ${deviceName(devices[0])} · Red: ${deviceName(devices[1])}${join}   |   ` +
+    `${sound}   |   Blue: ${deviceName(devices[0])} · Red: ${deviceName(devices[1])}${join}   |   ` +
     `Controller: stick move/aim · hold A pass · hold B spike · Y jump · X new serve   |   ` +
     `Keyboard: WASD · hold J pass · hold K spike · Space jump · R new serve · \` tuning`;
 }

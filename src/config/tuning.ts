@@ -9,7 +9,7 @@ export type MarkerMode = 'always' | 'hideUntilNet';
 
 export const DEFAULT_TUNING = {
   // Real gravity is 9.81. Higher feels snappier and more arcade-like.
-  gravity: 14,
+  gravity: 12,
 
   sim: {
     // Ball physics substeps per 60Hz tick, so fast spikes can't skip through the net.
@@ -31,9 +31,10 @@ export const DEFAULT_TUNING = {
     // Vertical speed kept after a net bounce (1 = perfect trampoline).
     bounce: 0.8,
     // Horizontal speed kept after a net bounce.
-    horizontalKeep: 0.85,
-    // Even a soft touch pops up at least this fast.
-    minUpSpeed: 3,
+    horizontalKeep: 0.5,
+    // Even a soft or flat hit pops up at least this fast. This is what gives
+    // the defender time to react; flat spikes otherwise skim off low and fast.
+    minUpSpeed: 5,
   },
 
   player: {
@@ -51,7 +52,7 @@ export const DEFAULT_TUNING = {
     // (chest height; jump to meet higher balls).
     contactHeight: 1.3,
     // Horizontal distance from the player within which the ball can be hit.
-    reach: 0.95,
+    reach: 1.05,
     // How far below / above the contact height the ball can still be hit.
     lowReach: 1.2,
     highReach: 0.8,
@@ -59,8 +60,8 @@ export const DEFAULT_TUNING = {
 
   hit: {
     // Horizontal speed of a perfectly timed spike: a quick tap vs. full charge.
-    spikeSpeedMin: 9,
-    spikeSpeedMax: 16,
+    spikeSpeedMin: 8,
+    spikeSpeedMax: 14,
     // Power of a worst-quality hit, as a fraction of a perfect one.
     minQualityPower: 0.6,
     // How far from net center the stick can aim, as a fraction of net radius.
@@ -82,7 +83,7 @@ export const DEFAULT_TUNING = {
     // Movement speed multiplier while charging.
     chargeMoveFactor: 0.55,
     // A hit released this many ticks early still fires when the ball arrives.
-    inputBufferTicks: 6,
+    inputBufferTicks: 8,
     cooldownTicks: 15,
   },
 
@@ -116,6 +117,11 @@ export const DEFAULT_TUNING = {
     distance: 10.5,
     fov: 0.75,
     lookAtZ: 0.8,
+  },
+
+  audio: {
+    // Master volume, 0..1. M mutes.
+    volume: 0.6,
   },
 
   debug: {

@@ -5,20 +5,33 @@ import type { Vec3 } from '../sim/vec';
 import type { World } from '../sim/world';
 
 // A simple computer player. It's deterministic (no randomness) like the sim,
-// and deliberately imperfect: it reacts late and doesn't move at full speed.
+// and deliberately imperfect: it reacts late, doesn't move at full speed,
+// and mistimes its swings by a varying amount each possession.
+// Reacts this many ticks after the ball comes off the net, plus up to
+// REACTION_SLOP_TICKS more on some possessions (so it sometimes can't get there).
 const REACTION_TICKS = 12;
+const REACTION_SLOP_TICKS = 24;
 const MOVE_EFFORT = 0.85;
 // Start charging a spike this many ticks before contact (~half power).
 const CHARGE_LEAD_TICKS = 18;
 const WAIT_DISTANCE = 2.3;
+// Timing mistakes: release up to this far (m) above or below the ideal height.
+const TIMING_ERROR = 0.5;
+
+/** A repeatable pseudo-random timing error in [-1, 1] for this possession. */
+function timingSlop(world: World): number {
+  return (((world.possessionTick * 7919 + world.possession * 31) % 9) - 4) / 4;
+}
 
 export function botIntent(world: World, index: number, t: Tuning): Intent {
   const me = world.players[index];
   const opponent = world.players.find((p) => p.team !== me.team);
   const intent: Intent = { ...NEUTRAL_INTENT };
-  const myBall = world.possession === me.team && world.ball.alive;
+  // Once we've hit it, wait for it to reach the net instead of swinging again.
+  const myBall = world.possession === me.team && world.ball.alive && world.ball.lastTouch !== 'player';
+  const reaction = REACTION_TICKS + Math.round(Math.abs(timingSlop(world)) * REACTION_SLOP_TICKS);
 
-  if (!myBall || world.tick - world.possessionTick < REACTION_TICKS) {
+  if (!myBall || world.tick - world.possessionTick < reaction) {
     // Wait across the net from the opponent, where their shots tend to go.
     if (opponent) {
       const d = Math.hypot(opponent.pos.x, opponent.pos.z) || 1;
@@ -33,8 +46,9 @@ export function botIntent(world: World, index: number, t: Tuning): Intent {
 
   const inReach = Math.hypot(plan.point.x - me.pos.x, plan.point.z - me.pos.z) < t.player.reach;
   if (me.charge) {
-    // Keep holding until the ball reaches contact height, then release.
-    intent.spike = plan.ticks > 0;
+    // Keep holding until the ball falls to (roughly) contact height, then release.
+    const releaseHeight = t.player.contactHeight + timingSlop(world) * TIMING_ERROR;
+    intent.spike = !(world.ball.vel.y < 0 && world.ball.pos.y <= releaseHeight);
     if (!intent.spike && opponent) {
       // Aim to the side of the net away from the opponent.
       const d = Math.hypot(opponent.pos.x, opponent.pos.z) || 1;

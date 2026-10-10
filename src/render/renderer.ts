@@ -69,6 +69,11 @@ export class Renderer {
   private readonly targetMat: StandardMaterial;
   private readonly players: PlayerView[] = [];
   private court: TransformNode | null = null;
+  private netSurface: Mesh | null = null;
+  // Trampoline wobble after the ball hits the net: a decaying spring.
+  private netWobble = { amplitude: 0, time: 0 };
+  private readonly ballShadow: Mesh;
+  private readonly ballShadowMat: StandardMaterial;
   private courtKey = '';
   private time = 0;
 
@@ -88,6 +93,14 @@ export class Renderer {
 
     const grass = MeshBuilder.CreateGround('grass', { width: 60, height: 60 }, scene);
     grass.material = flatMaterial('grass', new Color3(0.3, 0.55, 0.28), scene);
+
+    // A soft dark disc under the ball; it shrinks and fades as the ball rises.
+    this.ballShadow = MeshBuilder.CreateDisc('ballShadow', { radius: 1, tessellation: 32 }, scene);
+    this.ballShadow.rotation.x = Math.PI / 2;
+    this.ballShadow.isPickable = false;
+    this.ballShadowMat = flatMaterial('ballShadow', new Color3(0, 0, 0), scene);
+    this.ballShadowMat.disableLighting = true;
+    this.ballShadow.material = this.ballShadowMat;
 
     this.ball = MeshBuilder.CreateSphere('ball', { diameter: 1, segments: 20 }, scene);
     const ballMat = flatMaterial('ball', new Color3(1, 0.88, 0.1), scene);
@@ -124,6 +137,8 @@ export class Renderer {
     const b = world.ball.pos;
     this.ball.position.set(lerp(prev.ball.x, b.x, alpha), lerp(prev.ball.y, b.y, alpha), lerp(prev.ball.z, b.z, alpha));
     this.ball.scaling.setAll(t.ball.radius * 2);
+    this.updateBallShadow(this.ball.position, world.ball.alive, t);
+    this.updateNetWobble(frameSeconds, t);
 
     world.players.forEach((p, i) => {
       const view = this.players[i] ?? (this.players[i] = this.createPlayerView(p.team));
@@ -143,6 +158,33 @@ export class Renderer {
 
     this.updateMarker(world, t);
     this.scene.render();
+  }
+
+  /** Make the net surface sag and spring back; call when the ball hits the net. */
+  netImpact(impactSpeed: number): void {
+    this.netWobble = { amplitude: clamp(impactSpeed * 0.012, 0.02, 0.1), time: 0 };
+  }
+
+  private updateNetWobble(dt: number, t: Tuning): void {
+    if (!this.netSurface) return;
+    const w = this.netWobble;
+    w.time += dt;
+    // Sags first, then bounces back with a few quick wobbles.
+    const offset = -w.amplitude * Math.exp(-7 * w.time) * Math.cos(26 * w.time);
+    this.netSurface.position.y = t.net.height + offset;
+  }
+
+  private updateBallShadow(ballPos: Vector3, alive: boolean, t: Tuning): void {
+    this.ballShadow.isVisible = alive;
+    if (!alive) return;
+    // Land on the net surface when the ball is over the net, else on the grass.
+    const overNet = Math.hypot(ballPos.x, ballPos.z) < t.net.radius + t.net.frameWidth;
+    const floor = overNet ? t.net.height + 0.012 : 0.015;
+    const height = Math.max(0, ballPos.y - floor);
+    const radius = t.ball.radius * (0.9 + height * 0.12);
+    this.ballShadow.position.set(ballPos.x, floor, ballPos.z);
+    this.ballShadow.scaling.setAll(radius);
+    this.ballShadowMat.alpha = 0.45 / (1 + height * 0.5);
   }
 
   /** Show a power bar above a charging player; hidden when power is null. */
@@ -254,7 +296,11 @@ export class Renderer {
     const court = (this.court = new TransformNode('court', scene));
     const { radius, frameWidth, height } = t.net;
 
-    const netSurface = MeshBuilder.CreateCylinder('netSurface', { diameter: radius * 2, height: 0.01, tessellation: 64 }, scene);
+    const netSurface = (this.netSurface = MeshBuilder.CreateCylinder(
+      'netSurface',
+      { diameter: radius * 2, height: 0.01, tessellation: 64 },
+      scene,
+    ));
     netSurface.position.y = height;
     const netMat = flatMaterial('netSurface', new Color3(0.08, 0.08, 0.08), scene);
     netMat.alpha = 0.9;
