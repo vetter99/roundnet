@@ -9,6 +9,7 @@ import {
   serverIntent,
   serveWobble,
   setUpServe,
+  steerServe,
   stepServeAim,
   type ServeState,
 } from './serve';
@@ -117,11 +118,14 @@ export function stepWorld(world: World, intents: readonly Intent[], t: Tuning): 
   world.players.forEach((p, i) => {
     const intent = intents[i] ?? NEUTRAL_INTENT;
     const serving = world.waitingForServe && p.team === serverTeam(world);
+    // After releasing, the server stays put and the stick puts spin on the serve.
+    const spinning = world.serve.inFlight && p.team === world.lastHitTeam;
     // Read the wobble before stepping, so a release this tick uses where the aim was.
     const wobble = serving ? serveWobble(world, p, t) : null;
     const wasDiving = p.dive !== null;
-    const swing = stepPlayer(p, serving ? serverIntent(intent) : intent, t);
+    const swing = stepPlayer(p, serving || spinning ? serverIntent(intent) : intent, t);
     if (serving) stepServeAim(world, p, intent, t);
+    if (spinning) steerServe(world, intent, t);
     if (p.dive && !wasDiving) world.events.push({ type: 'dive', playerId: p.id });
     if (p.dive?.ticks === diveTicks(t)) world.events.push({ type: 'diveLand', playerId: p.id });
     if (!swing) return;

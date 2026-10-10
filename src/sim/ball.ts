@@ -12,6 +12,9 @@ export interface Ball {
   lastTouch: Touch;
   // A soft drop shot: the net absorbs it, so it comes off short and low.
   soft?: boolean;
+  // Sideways acceleration from spin on a serve (m/s²). It bends the flight,
+  // and the net kicks the ball sideways in the same direction.
+  curve?: { x: number; z: number };
 }
 
 export type BallEvent =
@@ -24,7 +27,14 @@ export function createBall(): Ball {
 }
 
 export function cloneBall(b: Ball): Ball {
-  return { pos: copyVec3(b.pos), vel: copyVec3(b.vel), alive: b.alive, lastTouch: b.lastTouch, soft: b.soft };
+  return {
+    pos: copyVec3(b.pos),
+    vel: copyVec3(b.vel),
+    alive: b.alive,
+    lastTouch: b.lastTouch,
+    soft: b.soft,
+    curve: b.curve && { ...b.curve },
+  };
 }
 
 /** Radius of the whole net including its frame. */
@@ -55,6 +65,10 @@ function stepBallOnce(ball: Ball, dt: number, t: Tuning, events: BallEvent[]): v
   vel.y *= drag;
   vel.z *= drag;
   vel.y -= t.gravity * dt;
+  if (ball.curve) {
+    vel.x += ball.curve.x * dt;
+    vel.z += ball.curve.z * dt;
+  }
 
   pos.x += vel.x * dt;
   pos.y += vel.y * dt;
@@ -76,6 +90,7 @@ function stepBallOnce(ball: Ball, dt: number, t: Tuning, events: BallEvent[]): v
     pos.y = r;
     vel.x = vel.y = vel.z = 0;
     ball.alive = false;
+    ball.curve = undefined;
     events.push({ type: 'ground', at: copyVec3(pos) });
   }
 }
@@ -93,6 +108,12 @@ function netBounce(ball: Ball, t: Tuning, events: BallEvent[]): void {
     vel.y = Math.max(inSpeed * t.net.bounce, t.net.minUpSpeed);
     vel.x *= t.net.horizontalKeep;
     vel.z *= t.net.horizontalKeep;
+  }
+  if (ball.curve) {
+    // Spin kicks the ball sideways off the net.
+    vel.x += ball.curve.x * t.serve.spinKick;
+    vel.z += ball.curve.z * t.serve.spinKick;
+    ball.curve = undefined;
   }
   ball.lastTouch = 'net';
   events.push({ type: 'net', at: copyVec3(ball.pos), speed: inSpeed, upSpeed: vel.y });

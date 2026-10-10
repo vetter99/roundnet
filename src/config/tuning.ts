@@ -157,6 +157,11 @@ export const DEFAULT_TUNING = {
     handHeight: 1.1,
     // Attempts per serve before it's lost.
     tries: 2,
+    // Spin: pushing the stick sideways after release curves the serve this
+    // hard (m/s² at full stick; a slow serve bends ~0.6 m, a fast one ~0.15 m),
+    // and the net kicks it sideways by the curve times spinKick (s).
+    spinCurve: 3,
+    spinKick: 0.22,
   },
 
   // Rally timing, and a ball fed off the net (a practice/test helper).

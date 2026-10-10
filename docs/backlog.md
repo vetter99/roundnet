@@ -78,7 +78,7 @@ and UX cards.
 | SHOT-04 | Spin shots → merged into SHOT-06 | – | – | |
 | SHOT-05 | Power sweet spot / overcharge risk (playtest) | P1 | M | |
 | SHOT-06 | Right-stick shot control, starting with placement (playtest) | P2 | L | |
-| RULE-01 | Real serving ✅ serve duel (spin next) | P0 | M | |
+| RULE-01 | Real serving ✅ serve duel with spin | P0 | M | |
 | RULE-02 | Match mode: scoring + 3-touch limit (playtest: wanted) | P0 | S | RULE-01 |
 | RULE-03 | 2v2 teams | P1 | L | RULE-02, INPUT-01 |
 | RULE-04 | Serve rotation and side switching | P2 | S | RULE-03 |
@@ -299,8 +299,11 @@ button to charge and releases to serve; the target wobbles more with charge,
 so power costs accuracy. Two tries: a serve that misses the net is a fault,
 two faults pass the serve. The duel camera stays through the return. Stick
 input follows the camera. Code: `src/sim/serve.ts`; tests in
-`src/sim/world.test.ts`. **Next:** spin on the serve (asked for), see
-questions in progress.
+`src/sim/world.test.ts`. **Spin (added):** after release, pushing the stick
+sideways curves the serve in flight (slow serves bend more), and the net
+kicks it sideways the same way (`serve.spinCurve`, `serve.spinKick`). The CPU
+spins about half its serves; in CPU vs CPU about a third of serves go
+unreturned, so spin may need toning down after playtesting.
 
 ### RULE-02 · Match mode: scoring + 3-touch limit
 **P0 · S** · Files: `src/sim/world.ts`, `src/main.ts`

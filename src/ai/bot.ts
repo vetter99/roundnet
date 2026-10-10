@@ -90,6 +90,20 @@ export function botIntent(world: World, index: number, t: Tuning): Intent {
     return intent;
   }
 
+  // Our serve is in the air: on about half of serves, push the stick
+  // sideways to curve it (left or right), otherwise leave it straight.
+  if (world.serve.inFlight && world.lastHitTeam === me.team) {
+    const spin = (world.serveReadyTick * 48271) % 4;
+    if (spin < 2) {
+      const v = world.ball.vel;
+      const speed = Math.hypot(v.x, v.z) || 1;
+      const dir = spin === 0 ? 1 : -1;
+      intent.moveX = (v.z / speed) * dir;
+      intent.moveZ = (-v.x / speed) * dir;
+    }
+    return intent;
+  }
+
   const myLastHit = ball.lastTouch === 'player' && world.lastHitTeam === me.team;
   // A ball we passed to ourselves is ours to spike; one we spiked is on its way to the net.
   const secondTouch = myLastHit && world.lastHitKind === 'pass';

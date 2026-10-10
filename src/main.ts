@@ -284,7 +284,7 @@ function updateHud(frameSeconds: number, devices: [Device, Device]): void {
     prompt.innerHTML =
       serverDevice === 'cpu'
         ? `${teamSpan(server)} is serving…${second}`
-        : `${teamSpan(server)}: stick aims · hold <b>${key}</b> to charge · release to serve${second}`;
+        : `${teamSpan(server)}: stick aims · hold <b>${key}</b> to charge · release, then stick ←→ for spin${second}`;
   }
   stats.innerHTML = world.waitingForServe
     ? `${teamSpan(server)} serves to ${teamSpan(world.nextReceiver)}`

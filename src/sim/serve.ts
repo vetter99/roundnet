@@ -95,6 +95,7 @@ export function launchServe(world: World, server: Player, power: number, wobble:
   ball.pos = { x: spot.x, y: t.serve.handHeight, z: spot.z + toNet * 0.35 };
   ball.alive = true;
   ball.soft = false;
+  ball.curve = undefined;
   // Like the old feed: unplayable until it comes off the net.
   ball.lastTouch = 'feed';
   const target = { x: world.serve.aim.x + wobble.x, y: netContactHeight(t), z: world.serve.aim.z + wobble.z };
@@ -109,6 +110,21 @@ export function launchServe(world: World, server: Player, power: number, wobble:
   world.waitingForServe = false;
   world.serve.inFlight = true;
   world.serve.returnPending = true;
+}
+
+/**
+ * Spin: while the serve flies to the net, the server's stick pushes it
+ * sideways (perpendicular to its flight), curving it like a pitch. The
+ * curve is stored on the ball, which also kicks sideways off the net.
+ */
+export function steerServe(world: World, intent: Intent, t: Tuning): void {
+  const v = world.ball.vel;
+  const speed = Math.hypot(v.x, v.z);
+  if (speed < 1e-3) return;
+  const side = { x: v.z / speed, z: -v.x / speed };
+  const stick = stickOf(intent);
+  const amount = stick.x * side.x + stick.z * side.z;
+  world.ball.curve = { x: side.x * amount * t.serve.spinCurve, z: side.z * amount * t.serve.spinCurve };
 }
 
 /**

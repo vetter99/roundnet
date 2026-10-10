@@ -535,3 +535,32 @@ describe('serve duel', () => {
     expect(world.nextReceiver).toBe(1); // the serve passed to Blue
   });
 });
+
+describe('serve spin', () => {
+  /** Serve straight at the net center; `stick` is held sideways while it flies. Returns where it hits the net and its sideways speed after. */
+  function serveWithSpin(stickX: number) {
+    const world = createMatch(t);
+    const red = (intent: Partial<Intent>): Intent[] => [NEUTRAL_INTENT, { ...NEUTRAL_INTENT, ...intent }];
+    stepWorld(world, red({ spike: true }), t);
+    stepWorld(world, red({}), t); // release: the serve is in the air
+    let net: SimEvent | undefined;
+    for (let i = 0; i < 120 && !net; i++) {
+      stepWorld(world, red({ moveX: stickX }), t);
+      net = world.events.find((e) => e.type === 'net');
+    }
+    return { at: net?.type === 'net' ? net.at : undefined, sideways: world.ball.vel.x };
+  }
+
+  it('curves the serve in the direction the stick is pushed', () => {
+    const straight = serveWithSpin(0);
+    const right = serveWithSpin(1);
+    const left = serveWithSpin(-1);
+    expect(Math.abs(straight.at!.x)).toBeLessThan(0.02);
+    expect(right.at!.x).toBeGreaterThan(0.05);
+    expect(left.at!.x).toBeLessThan(-0.05);
+  });
+
+  it('kicks the ball sideways off the net in the spin direction', () => {
+    expect(serveWithSpin(1).sideways).toBeGreaterThan(serveWithSpin(0).sideways + 0.3);
+  });
+});
