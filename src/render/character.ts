@@ -1,22 +1,29 @@
 import { StandardMaterial } from '@babylonjs/core/Materials/standardMaterial';
 import { Color3 } from '@babylonjs/core/Maths/math.color';
+import type { Mesh } from '@babylonjs/core/Meshes/mesh';
 import { MeshBuilder } from '@babylonjs/core/Meshes/meshBuilder';
 import { TransformNode } from '@babylonjs/core/Meshes/transformNode';
 import type { Scene } from '@babylonjs/core/scene';
 import type { HitKind, Player } from '../sim/player';
 import { clamp, lerp } from '../sim/vec';
 
-// Blocky athlete, about 1.25m tall at size 1. All heights are from the feet.
-const HIP_Y = 0.46;
-const SHOULDER_Y = 0.88;
-const SHOULDER_X = 0.235;
-const HEAD_SIZE = 0.26;
-const HEAD_Y = 1.06;
-const LAND_SQUASH_TIME = 0.15;
+// Cartoon squirrel, about 1.2m tall at size 1 (plus tail). Heights are from
+// the feet; the face points +z and the tail -z.
+const HIP_Y = 0.24;
+const SHOULDER_Y = 0.6;
+const SHOULDER_X = 0.21;
+const HEAD_Y = 0.93;
+const HEAD_DIAMETER = 0.48;
+const LAND_SQUASH_TIME = 0.18;
 
-const SKIN = new Color3(0.96, 0.78, 0.62);
-const HAIR = new Color3(0.3, 0.19, 0.11);
-const SHOE = new Color3(0.15, 0.15, 0.17);
+const CREAM = new Color3(0.99, 0.9, 0.74);
+const DARK = new Color3(0.08, 0.06, 0.06);
+
+/** Fur colors, so the two players are easy to tell apart. */
+export const FUR = {
+  red: new Color3(0.78, 0.43, 0.17),
+  gray: new Color3(0.56, 0.53, 0.5),
+};
 
 // Swing animations as keyframes over normalized time 0..1.
 // Arm keys are [t, swing, spread]: swing rotates the arm forward/up from
@@ -37,10 +44,10 @@ const SWING_ANIMS: Record<HitKind, SwingAnim> = {
   // Volleyball-style bump: both arms come forward together and lift.
   pass: {
     duration: 0.36,
-    right: [[0, 0, 0], [0.25, -1.0, 0.3], [0.6, -1.45, 0.3], [1, 0, 0]],
-    left: [[0, 0, 0], [0.25, -1.0, 0.3], [0.6, -1.45, 0.3], [1, 0, 0]],
+    right: [[0, 0, 0], [0.25, -1.1, 0.35], [0.6, -1.6, 0.35], [1, 0, 0]],
+    left: [[0, 0, 0], [0.25, -1.1, 0.35], [0.6, -1.6, 0.35], [1, 0, 0]],
     lean: [[0, 0], [0.25, 0.2], [0.6, 0.05], [1, 0]],
-    dip: [[0, 0], [0.25, -0.06], [0.6, 0.03], [1, 0]],
+    dip: [[0, 0], [0.25, -0.08], [0.6, 0.04], [1, 0]],
   },
   // Wind the hitting arm up and back overhead, then slam it down.
   spike: {
@@ -48,7 +55,7 @@ const SWING_ANIMS: Record<HitKind, SwingAnim> = {
     right: [[0, 0, 0], [0.3, -3.4, 0.1], [0.55, -0.9, 0.15], [1, 0, 0]],
     left: [[0, 0, 0], [0.3, -1.6, 0], [0.55, -0.5, 0], [1, 0, 0]],
     lean: [[0, 0], [0.3, -0.15], [0.55, 0.3], [1, 0]],
-    dip: [[0, 0], [0.3, 0.04], [0.55, -0.03], [1, 0]],
+    dip: [[0, 0], [0.3, 0.05], [0.55, -0.04], [1, 0]],
   },
 };
 
@@ -56,19 +63,33 @@ const SWING_ANIMS: Record<HitKind, SwingAnim> = {
 // holds there; releasing plays the rest of the swing from that point.
 const WINDUP_PHASE: Record<HitKind, number> = { pass: 0.25, spike: 0.3 };
 
+// The tail's shape: control points curling up behind the back, base to tip,
+// as [y, z, diameter] relative to the tail's base pivot. Many overlapping
+// spheres are blended between them so it reads as one bushy tail.
+const TAIL_SHAPE: [number, number, number][] = [
+  [0, 0, 0.17],
+  [0.13, -0.15, 0.25],
+  [0.34, -0.25, 0.31],
+  [0.58, -0.25, 0.33],
+  [0.78, -0.14, 0.29],
+  [0.86, 0.01, 0.21],
+];
+const TAIL_STEPS_PER_SEGMENT = 8;
+
 export interface ChargeView {
   kind: HitKind;
   power: number;
 }
 
 /**
- * A blocky athlete made from boxes, with arm/leg swings and squash-and-stretch
- * driven by the player's sim state. Purely visual: reach and hit timing are
- * set by tuning, not by this model. Faces +z.
+ * A rounded cartoon squirrel in a team-color shirt, with arm/leg/tail swings
+ * and bouncy squash-and-stretch driven by the player's sim state. Purely
+ * visual: reach and hit timing are set by tuning, not by this model.
  */
 export class Character {
   readonly root: TransformNode;
   private readonly bounce: TransformNode;
+  private readonly tail: TransformNode;
   // Index 0 is the left side (-x), 1 the right (+x).
   private readonly arms: TransformNode[];
   private readonly legs: TransformNode[];
@@ -80,53 +101,111 @@ export class Character {
   private landTimer = 0;
   private wasGrounded = true;
 
-  constructor(scene: Scene, teamColor: Color3) {
+  constructor(scene: Scene, teamColor: Color3, furColor: Color3) {
     this.root = new TransformNode('player', scene);
     // Everything that squashes, leans and dips hangs off `bounce`.
     this.bounce = new TransformNode('bounce', scene);
     this.bounce.parent = this.root;
 
-    const jersey = material(scene, 'jersey', teamColor);
-    const shorts = material(scene, 'shorts', teamColor.scale(0.45));
-    const skin = material(scene, 'skin', SKIN);
-    const hair = material(scene, 'hair', HAIR);
-    const shoe = material(scene, 'shoe', SHOE);
+    const shirt = material(scene, 'shirt', teamColor);
+    const fur = material(scene, 'fur', furColor);
+    const darkFur = material(scene, 'darkFur', furColor.scale(0.7));
+    const cream = material(scene, 'cream', CREAM);
+    const dark = material(scene, 'dark', DARK);
+    dark.specularColor = new Color3(0.6, 0.6, 0.6);
+    dark.specularPower = 40;
+    const shine = material(scene, 'shine', new Color3(1, 1, 1));
+    shine.disableLighting = true;
+    shine.emissiveColor = new Color3(1, 1, 1);
 
-    const box = (name: string, w: number, h: number, d: number, mat: StandardMaterial, parent: TransformNode) => {
-      const mesh = MeshBuilder.CreateBox(name, { width: w, height: h, depth: d }, scene);
+    const ball = (name: string, d: number, mat: StandardMaterial, parent: TransformNode, segments = 20): Mesh => {
+      const mesh = MeshBuilder.CreateSphere(name, { diameter: d, segments }, scene);
       mesh.material = mat;
       mesh.parent = parent;
       return mesh;
     };
 
-    box('torso', 0.36, 0.4, 0.2, jersey, this.bounce).position.y = 0.72;
-    box('shorts', 0.35, 0.16, 0.21, shorts, this.bounce).position.y = 0.48;
+    // Body: furry hips with a round team shirt on top.
+    const hips = ball('hips', 0.36, fur, this.bounce);
+    hips.position.y = 0.3;
+    hips.scaling.set(1, 0.75, 0.95);
+    const torso = ball('torso', 0.44, shirt, this.bounce);
+    torso.position.y = 0.5;
+    torso.scaling.set(1, 0.95, 0.85);
 
-    box('head', HEAD_SIZE, HEAD_SIZE, HEAD_SIZE, skin, this.bounce).position.y = HEAD_Y;
-    // Hair on top and down the back, so you can tell which way they face.
-    box('hairTop', HEAD_SIZE + 0.02, 0.07, HEAD_SIZE + 0.02, hair, this.bounce).position.y = HEAD_Y + HEAD_SIZE / 2;
-    box('hairBack', HEAD_SIZE + 0.02, HEAD_SIZE * 0.75, 0.05, hair, this.bounce).position.set(
-      0,
-      HEAD_Y + HEAD_SIZE * 0.1,
-      -HEAD_SIZE / 2,
-    );
+    // Head with muzzle, nose, eyes and ears.
+    const head = ball('head', HEAD_DIAMETER, fur, this.bounce, 28);
+    head.position.y = HEAD_Y;
+    const muzzle = ball('muzzle', 0.24, cream, this.bounce);
+    muzzle.position.set(0, HEAD_Y - 0.08, 0.16);
+    muzzle.scaling.set(1.1, 0.75, 0.75);
+    const nose = ball('nose', 0.075, dark, this.bounce, 12);
+    nose.position.set(0, HEAD_Y - 0.04, 0.25);
+    nose.scaling.set(1.2, 0.85, 0.9);
+
+    for (const side of [-1, 1]) {
+      // Tall glossy oval eyes with a white shine, cartoon style.
+      const eye = ball('eye', 0.075, dark, this.bounce, 14);
+      eye.position.set(side * 0.085, HEAD_Y + 0.05, 0.205);
+      eye.scaling.set(0.85, 1.45, 0.6);
+      const glint = ball('glint', 0.025, shine, this.bounce, 8);
+      glint.position.set(side * 0.085 + 0.012, HEAD_Y + 0.08, 0.23);
+
+      const ear = MeshBuilder.CreateCylinder('ear', { height: 0.17, diameterTop: 0, diameterBottom: 0.12, tessellation: 16 }, scene);
+      ear.material = fur;
+      ear.parent = this.bounce;
+      ear.position.set(side * 0.14, HEAD_Y + 0.23, -0.02);
+      ear.rotation.z = -side * 0.35;
+      const innerEar = MeshBuilder.CreateCylinder('innerEar', { height: 0.11, diameterTop: 0, diameterBottom: 0.07, tessellation: 12 }, scene);
+      innerEar.material = cream;
+      innerEar.parent = ear;
+      innerEar.position.set(0, -0.02, 0.025);
+    }
+
+    // Big bushy tail curling up behind; its pivot sways while running.
+    this.tail = new TransformNode('tail', scene);
+    this.tail.parent = this.bounce;
+    this.tail.position.set(0, 0.26, -0.2);
+    for (let i = 0; i < TAIL_SHAPE.length - 1; i++) {
+      const [y0, z0, d0] = TAIL_SHAPE[i];
+      const [y1, z1, d1] = TAIL_SHAPE[i + 1];
+      const last = i === TAIL_SHAPE.length - 2;
+      for (let s = 0; s <= (last ? TAIL_STEPS_PER_SEGMENT : TAIL_STEPS_PER_SEGMENT - 1); s++) {
+        const u = s / TAIL_STEPS_PER_SEGMENT;
+        // The last few puffs at the tip are cream.
+        const tip = last && u > 0.5;
+        const puff = ball('tail', lerp(d0, d1, u), tip ? cream : fur, this.tail, 14);
+        puff.position.set(0, lerp(y0, y1, u), lerp(z0, z1, u));
+      }
+    }
 
     // Limbs pivot at the shoulder / hip, so rotating the pivot swings the limb.
     this.arms = [-1, 1].map((side) => {
       const pivot = new TransformNode('shoulder', scene);
       pivot.parent = this.bounce;
       pivot.position.set(side * SHOULDER_X, SHOULDER_Y, 0);
-      box('sleeve', 0.12, 0.12, 0.14, jersey, pivot).position.y = -0.04;
-      box('arm', 0.1, 0.36, 0.11, skin, pivot).position.y = -0.2;
+      ball('sleeve', 0.13, shirt, pivot);
+      const arm = MeshBuilder.CreateCapsule('arm', { height: 0.26, radius: 0.05 }, scene);
+      arm.material = fur;
+      arm.parent = pivot;
+      arm.position.y = -0.12;
+      const paw = ball('paw', 0.1, cream, pivot, 12);
+      paw.position.y = -0.25;
       return pivot;
     });
 
     this.legs = [-1, 1].map((side) => {
       const pivot = new TransformNode('hip', scene);
       pivot.parent = this.bounce;
-      pivot.position.set(side * 0.09, HIP_Y, 0);
-      box('leg', 0.13, 0.38, 0.14, skin, pivot).position.y = -0.21;
-      box('shoe', 0.14, 0.08, 0.2, shoe, pivot).position.set(0, -HIP_Y + 0.04, 0.03);
+      pivot.position.set(side * 0.1, HIP_Y, 0);
+      const leg = MeshBuilder.CreateCapsule('leg', { height: 0.2, radius: 0.065 }, scene);
+      leg.material = fur;
+      leg.parent = pivot;
+      leg.position.y = -0.1;
+      // Oversized cartoon feet.
+      const foot = ball('foot', 0.15, darkFur, pivot, 14);
+      foot.scaling.set(0.95, 0.55, 1.45);
+      foot.position.set(0, -HIP_Y + 0.04, 0.05);
       return pivot;
     });
   }
@@ -167,37 +246,43 @@ export class Character {
       this.heldPhase = null;
     }
 
-    // Stretch going up, squash on landing.
+    // Bouncy squash and stretch: stretch going up, squash on landing.
     let stretch = 0;
-    if (!p.grounded) stretch = clamp(p.vel.y * 0.03, -0.08, 0.12);
-    if (this.landTimer > 0) stretch = -0.15 * (this.landTimer / LAND_SQUASH_TIME);
+    if (!p.grounded) stretch = clamp(p.vel.y * 0.045, -0.12, 0.2);
+    if (this.landTimer > 0) stretch = -0.28 * Math.sin((this.landTimer / LAND_SQUASH_TIME) * Math.PI);
 
     const run = p.grounded ? clamp(speed / 6, 0, 1) : 0;
-    this.walkPhase += dt * (4 + speed * 2.2);
+    this.walkPhase += dt * (5 + speed * 2.4);
     const stride = Math.sin(this.walkPhase);
-    const hop = Math.abs(Math.cos(this.walkPhase)) * run * 0.04;
+    // A springy hop on every step.
+    const hop = Math.abs(Math.cos(this.walkPhase)) * run * 0.08;
+    const breathe = Math.sin(this.walkPhase * 0.4) * 0.015;
 
     this.bounce.position.y = hop + (anim ? sampleValue(anim.dip, phase) : 0);
-    this.bounce.rotation.x = (anim ? sampleValue(anim.lean, phase) : 0) + run * 0.12;
-    this.bounce.scaling.set(1 - stretch * 0.5, 1 + stretch, 1 - stretch * 0.5);
+    this.bounce.rotation.x = (anim ? sampleValue(anim.lean, phase) : 0) + run * 0.15;
+    this.bounce.scaling.set(1 - stretch * 0.5, 1 + stretch + breathe, 1 - stretch * 0.5);
+
+    // Tail swishes side to side while running, lifts when airborne.
+    this.tail.rotation.y = Math.sin(this.walkPhase * 0.5) * (0.15 + run * 0.35);
+    this.tail.rotation.x = p.grounded ? -run * 0.25 : clamp(-p.vel.y * 0.06, -0.3, 0.35);
 
     // Running: legs swing opposite each other and arms opposite the legs.
     // Airborne: one knee tucks and the arms lift out for balance.
     this.legs.forEach((leg, i) => {
       const opposite = i === 0 ? 1 : -1;
-      leg.rotation.x = p.grounded ? opposite * stride * run * 0.7 : i === 0 ? -0.5 : -0.15;
+      leg.rotation.x = p.grounded ? opposite * stride * run * 0.9 : i === 0 ? -0.6 : -0.2;
     });
     this.arms.forEach((arm, i) => {
       const side = i === 0 ? -1 : 1;
       if (anim) {
         const [swing, spread] = sampleArm(i === 0 ? anim.left : anim.right, phase);
         arm.rotation.x = swing;
-        // Positive spread brings the hand toward the center line.
+        // Positive spread brings the paw toward the center line.
         arm.rotation.z = side * spread;
         return;
       }
-      arm.rotation.x = -(i === 0 ? 1 : -1) * stride * run * 0.8;
-      arm.rotation.z = p.grounded ? 0 : -side * 0.5;
+      arm.rotation.x = -(i === 0 ? 1 : -1) * stride * run * 0.9;
+      arm.rotation.z = p.grounded ? side * 0.15 : -side * 0.7;
     });
   }
 }
@@ -229,6 +314,6 @@ function sampleValue(keys: ValueKey[], phase: number): number {
 function material(scene: Scene, name: string, color: Color3): StandardMaterial {
   const mat = new StandardMaterial(name, scene);
   mat.diffuseColor = color;
-  mat.specularColor = new Color3(0.06, 0.06, 0.06);
+  mat.specularColor = new Color3(0.08, 0.08, 0.08);
   return mat;
 }

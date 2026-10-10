@@ -14,15 +14,13 @@ export type SimEvent =
   // A swing's buffer ran out without touching the ball.
   | { type: 'whiff'; playerId: number; kind: HitKind; reason: MissReason }
   // The ball came off the net, so the other team must now play it.
-  | { type: 'possession'; team: Team }
-  | { type: 'point'; team: Team }
-  | { type: 'gameOver'; winner: Team };
+  | { type: 'possession'; team: Team };
 
 /**
- * The whole game state: a 1v1 rally game. The team in possession gets up to
- * MAX_TOUCHES to put the ball on the net, which hands possession to the other
- * team. A 4th touch is refused, so if the ball hits the ground the team in
- * possession loses the point. Rally scoring to `match.pointsToWin`, win by 2.
+ * The whole game state: 1v1 rallies for working on mechanics. When the ball
+ * comes off the net, the other team has possession and must put it back on
+ * the net. No scoring or touch limit yet: when the ball lands, the next serve
+ * goes to the other player.
  */
 export interface World {
   tick: number;
@@ -32,14 +30,10 @@ export interface World {
   events: SimEvent[];
   // The team that must play the ball now.
   possession: Team;
-  // Touches the team in possession has used.
-  touches: number;
   // Tick when the current possession started (bots use it to react).
   possessionTick: number;
   // The team that last sent the ball (by hitting or serving it).
   lastHitTeam: Team;
-  score: [number, number];
-  winner: Team | null;
   // Ticks since the ball died; the next serve comes after a short pause.
   deadTicks: number;
   // The team that receives the next serve.
@@ -54,11 +48,8 @@ export function createWorld(t: Tuning): World {
     players: [createPlayer(0, 0, -1.8, -1.8), createPlayer(1, 1, 1.8, 1.8)],
     events: [],
     possession: 0,
-    touches: 0,
     possessionTick: 0,
     lastHitTeam: 1,
-    score: [0, 0],
-    winner: null,
     deadTicks: 0,
     nextReceiver: 0,
   };
@@ -81,12 +72,11 @@ export function stepWorld(world: World, intents: readonly Intent[], t: Tuning): 
   });
   separatePlayers(world, t);
 
-  const turn = { possession: world.possession, touches: world.touches };
+  const turn = { possession: world.possession };
   world.players.forEach((p, i) => {
     const hit = tryHit(p, world.ball, intents[i] ?? NEUTRAL_INTENT, t, turn);
     if (hit) {
       world.events.push({ type: 'hit', ...hit });
-      world.touches++;
       world.lastHitTeam = p.team;
     } else if (p.hitBuffer && p.hitBuffer.ticksLeft <= 0) {
       const reason = missReason(p, world.ball, t, turn) ?? 'tooFar';
@@ -102,38 +92,18 @@ export function stepWorld(world: World, intents: readonly Intent[], t: Tuning): 
     if (e.type === 'net') {
       // Whoever sent it onto the net hands the ball to the other team.
       world.possession = otherTeam(world.lastHitTeam);
-      world.touches = 0;
       world.possessionTick = world.tick;
       world.events.push({ type: 'possession', team: world.possession });
     } else if (e.type === 'ground') {
-      scorePoint(world, otherTeam(world.possession), t);
+      world.nextReceiver = otherTeam(world.nextReceiver);
     }
   }
 
-  if (world.ball.alive || world.winner !== null) {
+  if (world.ball.alive) {
     world.deadTicks = 0;
   } else if (++world.deadTicks >= t.practice.resetDelayTicks) {
     serve(world, world.nextReceiver, t);
   }
-}
-
-function scorePoint(world: World, team: Team, t: Tuning): void {
-  world.score[team]++;
-  world.events.push({ type: 'point', team });
-  // In roundnet the team that wins the point serves, so the loser receives.
-  world.nextReceiver = otherTeam(team);
-  const [a, b] = world.score;
-  if (Math.max(a, b) >= t.match.pointsToWin && Math.abs(a - b) >= 2) {
-    world.winner = a > b ? 0 : 1;
-    world.events.push({ type: 'gameOver', winner: world.winner });
-  }
-}
-
-/** Start a new match, keeping players where they are. */
-export function restartMatch(world: World, t: Tuning): void {
-  world.score = [0, 0];
-  world.winner = null;
-  serve(world, 0, t);
 }
 
 /**
@@ -162,7 +132,6 @@ export function serve(world: World, receiver: Team, t: Tuning): void {
   // The serving team "sent" it, so the net hands possession to the receiver.
   world.lastHitTeam = otherTeam(receiver);
   world.possession = otherTeam(receiver);
-  world.touches = 0;
   world.possessionTick = world.tick;
   world.deadTicks = 0;
 }

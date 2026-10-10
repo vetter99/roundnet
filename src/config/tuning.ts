@@ -100,10 +100,6 @@ export const DEFAULT_TUNING = {
     serveLineDistance: 2.4,
   },
 
-  match: {
-    pointsToWin: 21,
-  },
-
   // The temporary serve: a ball fed off the net toward the receiving player.
   practice: {
     // Ticks after the ball dies before the next serve (60 = 1 second).

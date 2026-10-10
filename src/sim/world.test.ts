@@ -111,7 +111,6 @@ describe('rally rules', () => {
     const world = createWorld(t);
     const p = world.players[0];
     world.possession = 0;
-    world.touches = 0;
     world.ball.pos = { x: p.pos.x, y: t.player.contactHeight, z: p.pos.z + 0.2 };
     world.ball.vel = { x: 0, y: 0, z: 0 };
     world.ball.lastTouch = 'net';
@@ -135,21 +134,6 @@ describe('rally rules', () => {
     const world = blueHasBall();
     const e = tapAndRun(world, 0, 'spike', (ev) => ev.type === 'possession');
     expect(e).toEqual({ type: 'possession', team: 1 });
-    expect(world.touches).toBe(0);
-  });
-
-  it('a touch counts toward the 3-touch limit', () => {
-    const world = blueHasBall();
-    tapAndRun(world, 0, 'pass', (ev) => ev.type === 'hit');
-    expect(world.touches).toBe(1);
-    expect(world.possession).toBe(0);
-  });
-
-  it('a 4th touch is refused', () => {
-    const world = blueHasBall();
-    world.touches = 3;
-    const e = tapAndRun(world, 0, 'pass', (ev) => ev.type === 'whiff' || ev.type === 'hit');
-    expect(e).toMatchObject({ type: 'whiff', reason: 'noTouchesLeft' });
   });
 
   it("the other team can't play your ball", () => {
@@ -160,33 +144,12 @@ describe('rally rules', () => {
     expect(e).toMatchObject({ type: 'whiff', reason: 'notYourBall' });
   });
 
-  it('when the ball lands, the team in possession loses the point and receives next', () => {
+  it('when the ball lands, the next serve goes to the other player', () => {
     const world = blueHasBall();
-    const e = tapAndRun(world, 0, 'pass', (ev) => ev.type === 'point');
-    // Blue popped it up and never got it to the net.
-    expect(e).toEqual({ type: 'point', team: 1 });
-    expect(world.score).toEqual([0, 1]);
-    expect(world.nextReceiver).toBe(0);
-  });
-
-  it('first to 21, win by 2', () => {
-    const world = blueHasBall();
-    world.score = [20, 20];
-    tapAndRun(world, 0, 'pass', (ev) => ev.type === 'point');
-    expect(world.winner).toBeNull();
-    // Red has the ball and lets it drop: Blue goes up 22-20 and wins.
-    world.score = [21, 20];
-    world.possession = 1;
-    world.ball.alive = true;
-    world.ball.pos = { x: 3, y: 1, z: 3 };
-    world.ball.vel = { x: 0, y: 0, z: 0 };
-    let over: SimEvent | undefined;
-    for (let i = 0; i < 120 && !over; i++) {
-      stepWorld(world, [], t);
-      over = world.events.find((e) => e.type === 'gameOver');
-    }
-    expect(over).toEqual({ type: 'gameOver', winner: 0 });
-    expect(world.winner).toBe(0);
+    world.nextReceiver = 0;
+    const e = tapAndRun(world, 0, 'pass', (ev) => ev.type === 'ground');
+    expect(e?.type).toBe('ground');
+    expect(world.nextReceiver).toBe(1);
   });
 
   it("players can't overlap, and the team with the ball has right of way", () => {

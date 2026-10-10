@@ -3,9 +3,10 @@ import { tuning } from './config/tuning';
 import { createTuningPane } from './debug/tuningPane';
 import { LocalInput, type InputFrame } from './input/localInput';
 import { Renderer, snapshot } from './render/renderer';
-import { MAX_TOUCHES, type MissReason } from './sim/hit';
+import type { MissReason } from './sim/hit';
+import { chargePower } from './sim/player';
 import { DT } from './sim/time';
-import { createWorld, restartMatch, serve, stepWorld, type SimEvent, type Team } from './sim/world';
+import { createWorld, serve, stepWorld, type SimEvent, type Team } from './sim/world';
 
 const canvas = document.getElementById('game') as HTMLCanvasElement;
 const stats = document.querySelector('#hud .stats') as HTMLElement;
@@ -62,8 +63,7 @@ renderer.engine.runRenderLoop(() => {
       return input.pollGamepad(d);
     });
     if (frames.some((f) => f.feed) || (keyboard.feed && !devices.includes('keyboard'))) {
-      if (world.winner !== null) restartMatch(world, tuning);
-      else serve(world, world.nextReceiver, tuning);
+      serve(world, world.nextReceiver, tuning);
     }
     stepWorld(world, frames, tuning);
     for (const e of world.events) onEvent(e);
@@ -76,33 +76,40 @@ renderer.engine.runRenderLoop(() => {
 
 window.addEventListener('resize', () => renderer.resize());
 
+// Latest details for the dev stats panel.
+let lastHitHtml = 'none yet';
+let lastNetHtml = 'none yet';
+let lastMissHtml = '';
+
 function onEvent(e: SimEvent): void {
   if (e.type === 'swing') {
     renderer.playSwing(e.playerId, e.kind);
   } else if (e.type === 'whiff') {
-    last.textContent = `${playerLabel(e.playerId)} missed: ${MISS_MESSAGES[e.reason]}`;
+    lastMissHtml = `${teamSpan(world.players[e.playerId].team)} missed: ${MISS_MESSAGES[e.reason]}`;
   } else if (e.type === 'hit') {
     const pct = Math.round(e.quality * 100);
     const label = e.quality >= 1 ? 'PERFECT' : e.quality >= 0.6 ? 'Good' : 'Weak';
-    last.textContent = `${playerLabel(e.playerId)}: ${e.kind} · ${label} (${pct}%) · power ${Math.round(e.power * 100)}%`;
+    const cm = Math.round(e.heightError * 100);
+    const contact = cm === 0 ? 'right at ideal height' : `${Math.abs(cm)} cm ${cm > 0 ? 'high' : 'low'}`;
+    lastHitHtml =
+      `${teamSpan(world.players[e.playerId].team)} ${e.kind} · <b>${label}</b> timing ${pct}% (${contact})<br>` +
+      `power ${Math.round(e.power * 100)}% · launch ${e.launchSpeed.toFixed(1)} m/s`;
+    lastMissHtml = '';
     if (e.quality >= 1) showFlash('PERFECT');
-  } else if (e.type === 'point') {
-    showFlash(`Point ${TEAM_NAMES[e.team]}!`, TEAM_CSS[e.team]);
-  } else if (e.type === 'gameOver') {
-    showFlash(`${TEAM_NAMES[e.winner]} wins!`, TEAM_CSS[e.winner], Infinity);
+  } else if (e.type === 'net') {
+    lastNetHtml = `hit at ${e.speed.toFixed(1)} m/s ↓ · bounced up ${e.upSpeed.toFixed(1)} m/s ↑`;
   }
 }
 
-function playerLabel(playerId: number): string {
-  return TEAM_NAMES[world.players[playerId].team];
+function teamSpan(team: Team): string {
+  return `<span style="color:${TEAM_CSS[team]}">${TEAM_NAMES[team]}</span>`;
 }
 
 const MISS_MESSAGES: Record<MissReason, string> = {
   cooldown: 'too soon after the last hit',
   noBall: 'no ball in play',
   notYet: 'too early, wait for the ball to come off the net',
-  notYourBall: "not your ball, it's the other team's turn",
-  noTouchesLeft: `out of touches (${MAX_TOUCHES} max)`,
+  notYourBall: "not your ball, it's the other player's turn",
   tooFar: 'too far away, get closer to the ball',
   tooHigh: 'ball too high, jump to reach it',
   tooLow: 'ball too low, get under it sooner',
@@ -116,21 +123,33 @@ function showFlash(text: string, color = '#fff', seconds = 0.9): void {
 }
 
 function updateHud(frameSeconds: number, devices: [Device, Device]): void {
-  const [blue, red] = world.score;
   const team: Team = world.possession;
-  stats.innerHTML =
-    `<span style="color:${TEAM_CSS[0]}">Blue ${blue}</span> – <span style="color:${TEAM_CSS[1]}">${red} Red</span>` +
-    `<div style="font-size:14px;margin-top:4px">` +
-    (world.winner !== null
-      ? 'Press X / R for a rematch'
-      : world.ball.lastTouch === 'feed'
-        ? `<span style="color:${TEAM_CSS[team]}">${TEAM_NAMES[team]}</span> serves to ` +
-          `<span style="color:${TEAM_CSS[1 - team]}">${TEAM_NAMES[1 - team]}</span>`
-        : `<span style="color:${TEAM_CSS[team]}">${TEAM_NAMES[team]}'s ball</span> · touches ${world.touches} / ${MAX_TOUCHES}`) +
-    `</div>`;
+  const turn =
+    world.ball.lastTouch === 'feed'
+      ? `${teamSpan(team)} serves to ${teamSpan(team === 0 ? 1 : 0)}`
+      : world.ball.alive
+        ? `${teamSpan(team)}'s ball`
+        : 'Ball down, next serve coming';
+  const b = world.ball;
+  const ballSpeed = Math.hypot(b.vel.x, b.vel.y, b.vel.z);
+  const players = world.players
+    .map((p, i) => {
+      const speed = Math.hypot(p.vel.x, p.vel.z);
+      const charge = p.charge ? ` · charging ${p.charge.kind} ${Math.round(chargePower(p.charge.ticks, tuning) * 100)}%` : '';
+      const air = p.grounded ? '' : ` · in air ${p.pos.y.toFixed(2)} m`;
+      return `${teamSpan(p.team)} (${deviceName(devices[i])}) ${speed.toFixed(1)} m/s${air}${charge}`;
+    })
+    .join('<br>');
+
+  stats.innerHTML = turn;
+  last.innerHTML =
+    `<div class="label">Last hit</div>${lastHitHtml}` +
+    (lastMissHtml ? `<br>${lastMissHtml}` : '') +
+    `<div class="label">Last net bounce</div>${lastNetHtml}` +
+    `<div class="label">Live</div>ball ${ballSpeed.toFixed(1)} m/s · ${b.pos.y.toFixed(2)} m high<br>${players}`;
   if (flashTimer > 0 && (flashTimer -= frameSeconds) <= 0) flash.style.opacity = '0';
 
-  const join = devices[1] === 'cpu' ? ' (press a key or connect a 2nd controller to play)' : '';
+  const join = devices[1] === 'cpu' ? ' (press a key or connect a 2nd controller to play Red)' : '';
   help.textContent =
     `Blue: ${deviceName(devices[0])} · Red: ${deviceName(devices[1])}${join}   |   ` +
     `Controller: stick move/aim · hold A pass · hold B spike · Y jump · X new serve   |   ` +

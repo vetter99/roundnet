@@ -6,7 +6,7 @@ import { botIntent } from './bot';
 const t = createTuning();
 
 describe('bot', () => {
-  it('two bots play real rallies: returns onto the net and points scored', () => {
+  it('two bots play real rallies: returns onto the net between serves', () => {
     const world = createWorld(t);
     let possessionChanges = 0;
     let points = 0;
@@ -14,7 +14,7 @@ describe('bot', () => {
       stepWorld(world, [botIntent(world, 0, t), botIntent(world, 1, t)], t);
       for (const e of world.events) {
         if (e.type === 'possession') possessionChanges++;
-        if (e.type === 'point') points++;
+        if (e.type === 'ground') points++;
       }
     }
     expect(points).toBeGreaterThan(0);

@@ -1,6 +1,5 @@
 import type { Tuning } from '../config/tuning';
 import { cloneBall, stepBall, type BallEvent } from '../sim/ball';
-import { MAX_TOUCHES } from '../sim/hit';
 import { NEUTRAL_INTENT, type Intent, type Player } from '../sim/player';
 import type { Vec3 } from '../sim/vec';
 import type { World } from '../sim/world';
@@ -36,7 +35,7 @@ export function botIntent(world: World, index: number, t: Tuning): Intent {
   const me = world.players[index];
   const opponent = world.players.find((p) => p.team !== me.team);
   const intent: Intent = { ...NEUTRAL_INTENT };
-  const myBall = world.possession === me.team && world.ball.alive && world.touches < MAX_TOUCHES;
+  const myBall = world.possession === me.team && world.ball.alive;
 
   if (!myBall || world.tick - world.possessionTick < REACTION_TICKS) {
     // Wait across the net from the opponent, where their shots tend to go.

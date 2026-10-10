@@ -10,6 +10,10 @@ export interface HitResult {
   quality: number;
   // How charged the hit was, 0..1.
   power: number;
+  // Ball height minus the ideal contact height at contact (m): + high, - low.
+  heightError: number;
+  // Ball speed right after the hit (m/s).
+  launchSpeed: number;
 }
 
 /**
@@ -34,18 +38,14 @@ export type MissReason =
   | 'noBall'
   | 'notYet'
   | 'notYourBall'
-  | 'noTouchesLeft'
   | 'tooFar'
   | 'tooHigh'
   | 'tooLow';
 
-/** Whose ball it is and how many touches they've used. Omitted = anyone may play. */
+/** Whose ball it is. Omitted = anyone may play. */
 export interface Turn {
   possession: 0 | 1;
-  touches: number;
 }
-
-export const MAX_TOUCHES = 3;
 
 /** Why a swing right now would not connect, or null if it would. */
 export function missReason(p: Player, ball: Ball, t: Tuning, turn?: Turn): MissReason | null {
@@ -53,7 +53,6 @@ export function missReason(p: Player, ball: Ball, t: Tuning, turn?: Turn): MissR
   if (!ball.alive) return 'noBall';
   if (!isPlayable(ball)) return 'notYet';
   if (turn && turn.possession !== p.team) return 'notYourBall';
-  if (turn && turn.touches >= MAX_TOUCHES) return 'noTouchesLeft';
   if (Math.hypot(ball.pos.x - p.pos.x, ball.pos.z - p.pos.z) > t.player.reach) return 'tooFar';
   const heightError = ball.pos.y - (p.pos.y + t.player.contactHeight);
   if (heightError > t.player.highReach) return 'tooHigh';
@@ -79,7 +78,8 @@ export function tryHit(p: Player, ball: Ball, intent: Intent, t: Tuning, turn?: 
   p.hitBuffer = null;
   p.cooldown = t.hit.cooldownTicks;
   ball.lastTouch = 'player';
-  return { playerId: p.id, kind, quality, power };
+  const launchSpeed = Math.hypot(ball.vel.x, ball.vel.y, ball.vel.z);
+  return { playerId: p.id, kind, quality, power, heightError, launchSpeed };
 }
 
 function spike(ball: Ball, aim: { x: number; z: number }, quality: number, power: number, t: Tuning): void {

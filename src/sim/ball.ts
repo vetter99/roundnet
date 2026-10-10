@@ -13,7 +13,8 @@ export interface Ball {
 }
 
 export type BallEvent =
-  | { type: 'net'; at: Vec3; speed: number }
+  // speed: downward speed hitting the net; upSpeed: upward speed leaving it.
+  | { type: 'net'; at: Vec3; speed: number; upSpeed: number }
   | { type: 'ground'; at: Vec3 };
 
 export function createBall(): Ball {
@@ -84,7 +85,7 @@ function netBounce(ball: Ball, t: Tuning, events: BallEvent[]): void {
   vel.x *= t.net.horizontalKeep;
   vel.z *= t.net.horizontalKeep;
   ball.lastTouch = 'net';
-  events.push({ type: 'net', at: copyVec3(ball.pos), speed: inSpeed });
+  events.push({ type: 'net', at: copyVec3(ball.pos), speed: inSpeed, upSpeed: vel.y });
 }
 
 /**

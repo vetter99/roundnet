@@ -14,7 +14,7 @@ import type { Tuning } from '../config/tuning';
 import { predictLanding } from '../sim/ball';
 import type { HitKind } from '../sim/player';
 import { DT } from '../sim/time';
-import { Character } from './character';
+import { Character, FUR } from './character';
 import { chargePower } from '../sim/player';
 import { clamp, lerp, type Vec3 } from '../sim/vec';
 import type { World } from '../sim/world';
@@ -176,7 +176,7 @@ export class Renderer {
 
   private createPlayerView(team: 0 | 1): PlayerView {
     const scene = this.scene;
-    const character = new Character(scene, TEAM_COLORS[team]);
+    const character = new Character(scene, TEAM_COLORS[team], team === 0 ? FUR.red : FUR.gray);
 
     const reachRing = MeshBuilder.CreateTorus('reach', { diameter: 2, thickness: 0.04, tessellation: 48 }, scene);
     const reachMat = flatMaterial('reach', TEAM_COLORS[team], scene);
