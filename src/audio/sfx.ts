@@ -28,9 +28,13 @@ export class Sfx {
     const data = this.noise.getChannelData(0);
     for (let i = 0; i < data.length; i++) data[i] = Math.random() * 2 - 1;
 
-    const unlock = () => void this.ctx?.resume();
-    window.addEventListener('keydown', unlock);
-    window.addEventListener('pointerdown', unlock);
+    window.addEventListener('keydown', () => this.unlock());
+    window.addEventListener('pointerdown', () => this.unlock());
+  }
+
+  /** Try to start audio. Works after a click or key press (controller buttons may not count). */
+  unlock(): void {
+    if (this.locked) void this.ctx?.resume();
   }
 
   /** True until the player has clicked or pressed a key (browser autoplay rule). */
@@ -77,7 +81,7 @@ export class Sfx {
 
   /** A swing through the air (plays whether or not it connects). */
   swing(power: number): void {
-    this.noiseBurst({ freq: 700, freqTo: 2400, q: 1.5, gain: 0.07 + 0.08 * power, attack: 0.03, decay: 0.12 });
+    this.noiseBurst({ freq: 700, freqTo: 2400, q: 1.2, gain: 0.25 + 0.2 * power, attack: 0.03, decay: 0.12 });
   }
 
   /** A charge has reached full power. */

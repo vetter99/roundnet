@@ -14,12 +14,17 @@ const stats = document.querySelector('#hud .stats') as HTMLElement;
 const last = document.querySelector('#hud .last') as HTMLElement;
 const flash = document.getElementById('flash') as HTMLElement;
 const help = document.getElementById('help') as HTMLElement;
+const soundButton = document.getElementById('sound') as HTMLButtonElement;
 
 const TEAM_NAMES = ['Blue', 'Red'];
 const TEAM_CSS = ['#5b8cff', '#ff6b5b'];
 
 const renderer = new Renderer(canvas);
 const sfx = new Sfx();
+soundButton.addEventListener('click', () => {
+  sfx.unlock();
+  canvas.focus();
+});
 window.addEventListener('keydown', (e) => {
   if (e.code === 'KeyM' && !e.repeat) sfx.muted = !sfx.muted;
 });
@@ -61,6 +66,8 @@ renderer.engine.runRenderLoop(() => {
   accumulator += frameSeconds;
 
   const devices = assignDevices();
+  // Some browsers count a controller button as permission to play sound.
+  if (sfx.locked && input.gamepads().some((pad) => pad.buttons.some((b) => b.pressed))) sfx.unlock();
   while (accumulator >= DT) {
     prev = snapshot(world);
     const keyboard = input.pollKeyboard();
@@ -203,7 +210,8 @@ function updateHud(frameSeconds: number, devices: [Device, Device]): void {
   if (flashTimer > 0 && (flashTimer -= frameSeconds) <= 0) flash.style.opacity = '0';
 
   const join = devices[1] === 'cpu' ? ' (press a key or connect a 2nd controller to play Red)' : '';
-  const sound = sfx.locked ? 'Click the page to turn on sound' : sfx.muted ? 'Sound muted (M)' : 'M mute';
+  soundButton.style.display = sfx.locked ? 'block' : 'none';
+  const sound = sfx.muted ? 'Sound muted (M)' : 'M mute';
   help.textContent =
     `${sound}   |   Blue: ${deviceName(devices[0])} · Red: ${deviceName(devices[1])}${join}   |   ` +
     `Controller: stick move/aim · hold A pass · hold B spike · Y jump · X new serve   |   ` +
