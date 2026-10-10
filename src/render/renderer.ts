@@ -59,6 +59,12 @@ interface ChargeMeter {
 const TRAIL_MIN_SPEED = 9;
 const TRAIL_FULL_SPEED = 14;
 const TRAIL_MAX_ALPHA = 0.45;
+// Spin you can read: the ball turns about its vertical axis at this many
+// rad/s per m/s² of curve (full serve spin ≈ 4 turns a second), and a tinted
+// trail shows behind any spun ball.
+const SPIN_VISUAL = 8;
+const TRAIL_PLAIN = new Color3(1, 0.95, 0.7);
+const TRAIL_SPIN = new Color3(0.55, 0.85, 1);
 
 const METER_WIDTH = 0.5;
 const METER_HEIGHT = 0.07;
@@ -74,6 +80,9 @@ export class Renderer {
   private readonly camera: UniversalCamera;
   private readonly ball: Mesh;
   private readonly trailMat: StandardMaterial;
+  // The ball's visible sidespin (rad/s about the vertical axis). It keeps
+  // turning after the net bounce, so the returner can read the kick.
+  private ballSpin = 0;
   // Landing spot + timing guide: a fixed target ring and an approach ring
   // that shrinks onto it as the ball nears the PERFECT moment.
   private readonly marker: TransformNode;
@@ -192,7 +201,9 @@ export class Renderer {
     this.ball.isVisible = !world.waitingForServe;
     const v = world.ball.vel;
     const fast = clamp((Math.hypot(v.x, v.y, v.z) - TRAIL_MIN_SPEED) / (TRAIL_FULL_SPEED - TRAIL_MIN_SPEED), 0, 1);
-    this.trailMat.alpha = world.ball.alive ? fast * TRAIL_MAX_ALPHA : 0;
+    const spin = this.updateBallSpin(world, frameSeconds);
+    this.trailMat.alpha = world.ball.alive ? Math.max(fast * TRAIL_MAX_ALPHA, spin * 0.4) : 0;
+    this.trailMat.emissiveColor = Color3.Lerp(TRAIL_PLAIN, TRAIL_SPIN, spin);
     this.updateBallShadow(this.ball.position, world.ball.alive, t);
     this.updateNetWobble(frameSeconds, t);
 
@@ -221,6 +232,27 @@ export class Renderer {
     this.updateAimReticle(world, t);
     this.stadium.update(this.time);
     this.scene.render();
+  }
+
+  /**
+   * Turn the ball to show its sidespin. While a spun serve curves, the spin
+   * matches the curve's direction (the side of the ball moving backward is
+   * the side it curves toward); afterwards it keeps spinning, slowly fading,
+   * until someone hits it. Returns how much spin is showing, 0..1.
+   */
+  private updateBallSpin(world: World, dt: number): number {
+    const ball = world.ball;
+    const c = ball.curve;
+    if (c && Math.hypot(c.x, c.z) > 0.01) {
+      const side = Math.sign(ball.vel.x * c.z - ball.vel.z * c.x);
+      this.ballSpin = -side * Math.hypot(c.x, c.z) * SPIN_VISUAL;
+    } else if (!ball.alive || ball.lastTouch === 'player' || world.waitingForServe) {
+      this.ballSpin *= Math.exp(-6 * dt);
+    } else {
+      this.ballSpin *= Math.exp(-0.4 * dt);
+    }
+    this.ball.rotation.y += this.ballSpin * dt;
+    return clamp(Math.abs(this.ballSpin) / 12, 0, 1);
   }
 
   /** Make the net surface sag and spring back; call when the ball hits the net. */
