@@ -50,6 +50,7 @@ export function setUpServe(world: World, t: Tuning): void {
   world.serve.aim = { x: 0, z: 0 };
   world.serve.inFlight = false;
   world.serve.returnPending = false;
+  world.touches = 0;
   for (const p of world.players) {
     const spot = p.team === server ? serverSpot(server, t) : receiverSpot(p.team, t);
     p.pos = { x: spot.x, y: 0, z: spot.z };

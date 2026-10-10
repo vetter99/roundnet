@@ -47,11 +47,13 @@ src/main.ts           wires it together; fixed 60Hz loop with render interpolati
 - No rim faults for now: the frame bounces like the net.
 - The ball is only playable after it comes off the net or a player
   (`isPlayable` in `src/sim/hit.ts`).
-- 1v1 mechanics sandbox (`src/sim/world.ts`): when the ball comes off the
-  net, the other team has possession and must put it back on the net. No
-  scoring or touch limit right now (both existed in commit `3359c7b`; see
-  RULE-02 in docs/backlog.md). The team without the ball can't hit it and gets
-  pushed aside if it runs into the team with the ball.
+- 1v1 rallies (`src/sim/world.ts`): when the ball comes off the net, the
+  other team has possession and must put it back on the net. The team without
+  the ball can't hit it and gets pushed aside if it runs into the team with
+  the ball. Two modes (on-screen toggle): practice (no score, serve
+  alternates) and match (to `match.pointsToWin`, win by 2; the side that lets
+  the ball land loses the point; the winner serves; `match.maxTouches`; a
+  double fault gives the receiver the point).
 - Serving is a duel (`src/sim/serve.ts`): the server aims a target on the net
   with the stick, holds a hit button to charge and releases; more charge =
   more aim wobble. Two tries per serve. The renderer shows a camera behind the

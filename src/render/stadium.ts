@@ -47,8 +47,8 @@ const faceCenterYaw = (a: number) => Math.PI / 2 - a;
 export interface Stadium {
   /** Animate the crowd; call every frame. */
   update(time: number): void;
-  /** Show the current and best rally length on the jumbotron. */
-  setRally(rally: number, best: number): void;
+  /** Show two lines on the jumbotron under the logo (e.g. the score, or the rally count). */
+  setJumbotron(main: string, sub: string): void;
 }
 
 export function createStadium(scene: Scene): Stadium {
@@ -58,7 +58,7 @@ export function createStadium(scene: Scene): Stadium {
   const jumbotron = buildJumbotron(scene);
   return {
     update: (time) => crowd.update(time),
-    setRally: jumbotron,
+    setJumbotron: jumbotron,
   };
 }
 
@@ -238,8 +238,8 @@ function buildCanopiesAndTowers(scene: Scene): void {
   }
 }
 
-/** The jumbotron on the far side: a placeholder logo and the rally counter. */
-function buildJumbotron(scene: Scene): (rally: number, best: number) => void {
+/** The jumbotron on the far side: a placeholder logo and two lines of info. */
+function buildJumbotron(scene: Scene): (main: string, sub: string) => void {
   const angle = Math.PI / 2; // far side (+z), facing the camera
   const r = STAND_OUTER_RADIUS + 1.5;
   const x = Math.cos(angle) * r;
@@ -265,8 +265,8 @@ function buildJumbotron(scene: Scene): (rally: number, best: number) => void {
   screen.position.set(x, y, z);
 
   let shown = '';
-  const draw = (rally: number, best: number) => {
-    const key = `${rally}/${best}`;
+  const draw = (main: string, sub: string) => {
+    const key = `${main}/${sub}`;
     if (key === shown) return;
     shown = key;
     const ctx = tex.getContext() as CanvasRenderingContext2D;
@@ -281,12 +281,12 @@ function buildJumbotron(scene: Scene): (rally: number, best: number) => void {
     ctx.fillText('ROUNDNET', 512, 220);
     ctx.fillStyle = '#ffffff';
     ctx.font = '900 96px "Arial Black", Impact, sans-serif';
-    ctx.fillText(`RALLY ${rally}`, 512, 370);
+    ctx.fillText(main, 512, 370);
     ctx.fillStyle = '#9fc2ff';
     ctx.font = '800 56px "Arial Black", Impact, sans-serif';
-    ctx.fillText(`BEST ${best}`, 512, 470);
+    ctx.fillText(sub, 512, 470);
     tex.update();
   };
-  draw(0, 0);
+  draw('RALLY 0', 'BEST 0');
   return draw;
 }

@@ -263,9 +263,9 @@ export class Renderer {
     meter.fillMat.emissiveColor = power >= 1 && Math.sin(this.time * 30) > 0 ? new Color3(1, 1, 1) : color;
   }
 
-  /** Show the rally length and best rally on the jumbotron. */
-  setRally(rally: number, best: number): void {
-    this.stadium.setRally(rally, best);
+  /** Show two lines on the jumbotron (the score in a match, the rally count in practice). */
+  setJumbotron(main: string, sub: string): void {
+    this.stadium.setJumbotron(main, sub);
   }
 
   /** Play the pass or spike animation for a player. */

@@ -566,3 +566,74 @@ describe('serve spin', () => {
     expect(serveWithSpin(1).sideways).toBeGreaterThan(serveWithSpin(0).sideways + 0.3);
   });
 });
+
+describe('match mode', () => {
+  /** A match world where Blue has the ball off the net, ready to play it. */
+  function blueHasBallInMatch() {
+    const world = createMatch(t, 'match');
+    feedBall(world, 0, t);
+    const p = world.players[0];
+    world.possession = 0;
+    world.ball.pos = { x: p.pos.x, y: t.player.contactHeight, z: p.pos.z + 0.2 };
+    world.ball.vel = { x: 0, y: 0, z: 0 };
+    world.ball.lastTouch = 'net';
+    return world;
+  }
+  const runUntil = (world: World, type: string, maxTicks = 300) => {
+    for (let i = 0; i < maxTicks; i++) {
+      stepWorld(world, [], t);
+      const e = world.events.find((ev) => ev.type === type);
+      if (e) return e;
+    }
+    return undefined;
+  };
+
+  it('the side that lets the ball land gives up the point, and the winner serves', () => {
+    const world = blueHasBallInMatch();
+    expect(runUntil(world, 'point')).toEqual({ type: 'point', team: 1 });
+    expect(world.score).toEqual([0, 1]);
+    expect(world.nextReceiver).toBe(0); // Red won it, so Red serves to Blue
+  });
+
+  it('refuses a touch beyond the limit', () => {
+    const world = blueHasBallInMatch();
+    world.touches = t.match.maxTouches;
+    stepWorld(world, [{ ...NEUTRAL_INTENT, pass: true }], t);
+    expect(runUntil(world, 'whiff', 20)).toMatchObject({ type: 'whiff', reason: 'noTouchesLeft' });
+  });
+
+  it('a double fault gives the receiver the point', () => {
+    const loose = createTuning();
+    loose.serve.aimLimit = 10;
+    const world = createMatch(loose, 'match');
+    const red = (intent: Partial<Intent>): Intent[] => [NEUTRAL_INTENT, { ...NEUTRAL_INTENT, ...intent }];
+    for (let attempt = 0; attempt < 2; attempt++) {
+      world.serve.aim = { x: 3, z: 0 };
+      stepWorld(world, red({ spike: true }), loose);
+      stepWorld(world, [], loose);
+      for (let i = 0; i < 240 && !world.waitingForServe; i++) stepWorld(world, [], loose);
+    }
+    expect(world.score).toEqual([1, 0]);
+  });
+
+  it('a game ends at the target score, win by 2', () => {
+    const world = blueHasBallInMatch();
+    world.score = [t.match.pointsToWin - 1, t.match.pointsToWin - 2];
+    // Blue lets it drop: Red scores, the game goes on (no 2-point lead).
+    runUntil(world, 'point');
+    expect(world.winner).toBeNull();
+    // Now Red has the ball and lets it drop: Blue goes 2 up and wins.
+    world.score = [t.match.pointsToWin - 1, t.match.pointsToWin - 3];
+    feedBall(world, 1, t);
+    world.possession = 1;
+    world.ball.lastTouch = 'net';
+    expect(runUntil(world, 'gameOver')).toEqual({ type: 'gameOver', winner: 0 });
+  });
+
+  it('practice mode keeps no score', () => {
+    const world = createMatch(t);
+    feedBall(world, 0, t);
+    runUntil(world, 'ground');
+    expect(world.score).toEqual([0, 0]);
+  });
+});

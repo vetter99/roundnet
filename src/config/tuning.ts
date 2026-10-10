@@ -139,6 +139,14 @@ export const DEFAULT_TUNING = {
     lineWidth: 0.045,
   },
 
+  // Match mode (the on-screen Practice/Match toggle).
+  match: {
+    // Games go to this many points, win by 2.
+    pointsToWin: 11,
+    // Touches allowed to get the ball back on the net.
+    maxTouches: 3,
+  },
+
   // The serve duel (see src/sim/serve.ts).
   serve: {
     // The server stands this far behind the serve line.

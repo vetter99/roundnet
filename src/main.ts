@@ -7,7 +7,7 @@ import { Renderer, snapshot } from './render/renderer';
 import type { MissReason } from './sim/hit';
 import { chargePower, isDiving } from './sim/player';
 import { DT } from './sim/time';
-import { createMatch, resetRally, serverTeam, stepWorld, type SimEvent, type Team } from './sim/world';
+import { createMatch, resetRally, restartGame, serverTeam, stepWorld, type SimEvent, type Team } from './sim/world';
 
 const canvas = document.getElementById('game') as HTMLCanvasElement;
 const stats = document.querySelector('#hud .stats') as HTMLElement;
@@ -17,6 +17,7 @@ const help = document.getElementById('help') as HTMLElement;
 const soundButton = document.getElementById('sound') as HTMLButtonElement;
 const prompt = document.getElementById('prompt') as HTMLElement;
 const seatButtons = [document.getElementById('blueSeat'), document.getElementById('redSeat')] as HTMLButtonElement[];
+const modeButton = document.getElementById('mode') as HTMLButtonElement;
 
 const TEAM_NAMES = ['Blue', 'Red'];
 const TEAM_CSS = ['#5b8cff', '#ff6b5b'];
@@ -46,6 +47,17 @@ let lastTime = performance.now();
 let flashTimer = 0;
 // A device is a keyboard scheme, the CPU, or a gamepad.
 type Device = KeyboardScheme | 'cpu' | Gamepad;
+
+// Practice (endless rallies) or Match (scored games), toggled on screen.
+modeButton.addEventListener('click', () => {
+  restartGame(world, tuning, world.mode === 'match' ? 'practice' : 'match');
+  modeButton.textContent = world.mode === 'match' ? '🏆 Match (to 11)' : '🎯 Practice';
+  rally = 0;
+  modeButton.blur();
+  canvas.focus();
+});
+// Ticks since the game ended; with no humans playing, the CPUs rematch on their own.
+let gameOverTicks = 0;
 
 // Who plays each side: a human or the CPU, toggled with the on-screen buttons.
 // Default: you play Blue against a CPU Red. Both CPU = watch AI vs AI.
@@ -128,6 +140,16 @@ renderer.engine.runRenderLoop(() => {
       return followCamera(typeof d === 'string' ? keyboard[d] : input.pollGamepad(d));
     });
     if (world.ball.alive && (frames.some((f) => f.feed) || keyboard.all.feed)) resetRally(world, tuning);
+    // After a game: any human pressing pass (or reset) starts a rematch.
+    if (world.winner !== null) {
+      gameOverTicks++;
+      const humanWantsRematch = frames.some((f, i) => devices[i] !== 'cpu' && (f.pass || f.feed));
+      const cpusOnly = devices.every((d) => d === 'cpu');
+      if (humanWantsRematch || (cpusOnly && gameOverTicks > 240)) {
+        restartGame(world, tuning);
+        gameOverTicks = 0;
+      }
+    }
     stepWorld(world, frames, tuning);
     for (const e of world.events) onEvent(e);
     world.players.forEach((p, i) => {
@@ -182,13 +204,17 @@ function onEvent(e: SimEvent): void {
     if (world.lastHitKind !== null) {
       rally++;
       bestRally = Math.max(bestRally, rally);
-      renderer.setRally(rally, bestRally);
     }
     renderer.netImpact(e.speed);
     sfx.net(e.speed);
   } else if (e.type === 'ground') {
     sfx.ground();
     rally = 0;
+  } else if (e.type === 'point') {
+    showFlash(`Point ${TEAM_NAMES[e.team]}`, TEAM_CSS[e.team], 1);
+  } else if (e.type === 'gameOver') {
+    showFlash(`${TEAM_NAMES[e.winner]} wins ${Math.max(...world.score)}–${Math.min(...world.score)}!`, TEAM_CSS[e.winner], 3);
+    sfx.perfect(true, 4);
   } else if (e.type === 'serve') {
     sfx.hit('spike', e.power, 1, world.players[e.playerId].team === 0);
   } else if (e.type === 'fault') {
@@ -211,6 +237,7 @@ const MISS_MESSAGES: Record<MissReason, string> = {
   noBall: 'no ball in play',
   notYet: 'too early, wait for the ball to come off the net',
   notYourBall: "not your ball, it's the other player's turn",
+  noTouchesLeft: 'out of touches, it had to go on the net',
   tooFar: 'too far away, get closer to the ball',
   tooHigh: 'ball too high, jump to reach it',
   tooLow: 'ball too low, get under it sooner',
@@ -277,8 +304,9 @@ function updateHud(frameSeconds: number, devices: [Device, Device]): void {
   const team: Team = world.possession;
   const server = serverTeam(world);
   const serverDevice = devices[world.players.findIndex((p) => p.team === server)];
-  prompt.style.display = world.waitingForServe ? 'block' : 'none';
-  if (world.waitingForServe) {
+  const showServePrompt = world.waitingForServe && world.winner === null;
+  prompt.style.display = showServePrompt ? 'block' : 'none';
+  if (showServePrompt) {
     const key = serverDevice === 'cpu' ? '' : typeof serverDevice === 'string' ? PASS_KEY_LABEL[serverDevice] : 'A';
     const second = world.serve.faults > 0 ? ' <small>(2nd serve)</small>' : '';
     prompt.innerHTML =
@@ -286,13 +314,24 @@ function updateHud(frameSeconds: number, devices: [Device, Device]): void {
         ? `${teamSpan(server)} is serving…${second}`
         : `${teamSpan(server)}: stick aims · hold <b>${key}</b> to charge · release, then stick ←→ for spin${second}`;
   }
-  stats.innerHTML = world.waitingForServe
-    ? `${teamSpan(server)} serves to ${teamSpan(world.nextReceiver)}`
-    : world.ball.lastTouch === 'feed'
-      ? `${teamSpan(team)} serves to ${teamSpan(team === 0 ? 1 : 0)}`
-      : world.ball.alive
-        ? `${teamSpan(team)}'s ball`
-        : 'Ball down, next serve coming';
+  const match = world.mode === 'match';
+  const touches = match && world.ball.alive && world.ball.lastTouch !== 'feed' ? ` · touch ${world.touches} of ${tuning.match.maxTouches}` : '';
+  const status =
+    world.winner !== null
+      ? `${teamSpan(world.winner)} wins! Press A / J for a rematch`
+      : world.waitingForServe
+        ? `${teamSpan(server)} serves to ${teamSpan(world.nextReceiver)}`
+        : world.ball.lastTouch === 'feed'
+          ? `${teamSpan(team)} serves to ${teamSpan(team === 0 ? 1 : 0)}`
+          : world.ball.alive
+            ? `${teamSpan(team)}'s ball${touches}`
+            : 'Ball down, next serve coming';
+  const scoreLine = match ? `${teamSpan(0)} ${world.score[0]} – ${world.score[1]} ${teamSpan(1)}<br>` : '';
+  stats.innerHTML = scoreLine + status;
+  renderer.setJumbotron(
+    match ? `${world.score[0]} – ${world.score[1]}` : `RALLY ${rally}`,
+    match ? (world.winner !== null ? `${TEAM_NAMES[world.winner].toUpperCase()} WINS` : `FIRST TO ${tuning.match.pointsToWin}`) : `BEST ${bestRally}`,
+  );
 
   const miss = lastMiss ? `<div class="miss">${teamSpan(lastMiss.team)} missed: ${MISS_MESSAGES[lastMiss.reason]}</div>` : '';
   last.innerHTML = hitSection() + miss + netSection() + liveSection(devices);

@@ -78,7 +78,7 @@ export function botIntent(world: World, index: number, t: Tuning): Intent {
   const ball = world.ball;
   const intent: Intent = { ...NEUTRAL_INTENT };
 
-  if (world.waitingForServe && serverTeam(world) === me.team) {
+  if (world.waitingForServe && world.winner === null && serverTeam(world) === me.team) {
     // Steer the aim to one side (alternating serve to serve), then charge and release.
     const side = world.serveReadyTick % 2 === 0 ? 1 : -1;
     const dx = side * SERVE_AIM_SIDE * t.net.radius - world.serve.aim.x;

@@ -29,15 +29,23 @@ export type SimEvent =
   // A serve was hit; a serve that missed the net (lost = out of tries).
   | { type: 'serve'; playerId: number; power: number }
   | { type: 'fault'; team: Team; lost: boolean }
+  // Match mode: a point scored, and the end of a game.
+  | { type: 'point'; team: Team }
+  | { type: 'gameOver'; winner: Team }
   // A player started a dive, and later hit the ground at the end of the lunge.
   | { type: 'dive'; playerId: number }
   | { type: 'diveLand'; playerId: number };
 
+/** Practice: endless rallies, serve alternates. Match: scored games (see `match` in tuning). */
+export type Mode = 'practice' | 'match';
+
 /**
- * The whole game state: 1v1 rallies for working on mechanics. When the ball
- * comes off the net, the other team has possession and must put it back on
- * the net. No scoring or touch limit yet: when the ball lands, the serve
- * switches sides and the next serve duel starts (see serve.ts).
+ * The whole game state: 1v1 rallies. When the ball comes off the net, the
+ * other team has possession and must put it back on the net. Each rally
+ * starts with a serve duel (serve.ts). In practice mode there's no score and
+ * the serve alternates; in match mode the side that lets the ball land (or
+ * double faults) gives up the point, the point winner serves, there's a
+ * touch limit, and games go to `match.pointsToWin`, win by 2.
  */
 export interface World {
   tick: number;
@@ -65,6 +73,11 @@ export interface World {
   serveReadyTick: number;
   // The team that receives the next serve; the other team serves it.
   nextReceiver: Team;
+  mode: Mode;
+  score: [number, number];
+  winner: Team | null;
+  // Touches the team in possession has used (the limit applies in matches).
+  touches: number;
 }
 
 export function createWorld(): World {
@@ -84,15 +97,41 @@ export function createWorld(): World {
     serve: createServeState(),
     serveReadyTick: 0,
     nextReceiver: 0,
+    mode: 'practice',
+    score: [0, 0],
+    winner: null,
+    touches: 0,
   };
   return world;
 }
 
 /** A new world, set up for the first serve (Red serves to Blue). */
-export function createMatch(t: Tuning): World {
+export function createMatch(t: Tuning, mode: Mode = 'practice'): World {
   const world = createWorld();
+  world.mode = mode;
   setUpServe(world, t);
   return world;
+}
+
+/** Start over: zero the score and set up the first serve (Red to Blue). */
+export function restartGame(world: World, t: Tuning, mode: Mode = world.mode): void {
+  world.mode = mode;
+  world.score = [0, 0];
+  world.winner = null;
+  world.nextReceiver = 0;
+  world.ball.alive = false;
+  world.serve.faults = 0;
+  setUpServe(world, t);
+}
+
+function scorePoint(world: World, team: Team, t: Tuning): void {
+  world.score[team]++;
+  world.events.push({ type: 'point', team });
+  const [a, b] = world.score;
+  if (Math.max(a, b) >= t.match.pointsToWin && Math.abs(a - b) >= 2) {
+    world.winner = a > b ? 0 : 1;
+    world.events.push({ type: 'gameOver', winner: world.winner });
+  }
 }
 
 /** The team that serves next. */
@@ -117,7 +156,8 @@ export function stepWorld(world: World, intents: readonly Intent[], t: Tuning): 
 
   world.players.forEach((p, i) => {
     const intent = intents[i] ?? NEUTRAL_INTENT;
-    const serving = world.waitingForServe && p.team === serverTeam(world);
+    // No serving once the game is over (waiting for a rematch).
+    const serving = world.waitingForServe && world.winner === null && p.team === serverTeam(world);
     // After releasing, the server stays put and the stick puts spin on the serve.
     const spinning = world.serve.inFlight && p.team === world.lastHitTeam;
     // Read the wobble before stepping, so a release this tick uses where the aim was.
@@ -139,7 +179,11 @@ export function stepWorld(world: World, intents: readonly Intent[], t: Tuning): 
   });
   separatePlayers(world, t);
 
-  const turn = { possession: world.possession };
+  const turn = {
+    possession: world.possession,
+    touches: world.touches,
+    maxTouches: world.mode === 'match' ? t.match.maxTouches : undefined,
+  };
   world.players.forEach((p, i) => {
     // A swing at a ball just out of reach turns into a dive automatically.
     const diveTo = autoDiveTarget(p, world.ball, t, turn);
@@ -150,6 +194,7 @@ export function stepWorld(world: World, intents: readonly Intent[], t: Tuning): 
     const hit = tryHit(p, world.ball, intents[i] ?? NEUTRAL_INTENT, t, turn);
     if (hit) {
       world.events.push({ type: 'hit', ...hit });
+      if (p.team === world.possession) world.touches++;
       // The duel ends once the receiving side plays the ball.
       if (p.team !== world.lastHitTeam) world.serve.returnPending = false;
       world.lastHitTeam = p.team;
@@ -170,18 +215,30 @@ export function stepWorld(world: World, intents: readonly Intent[], t: Tuning): 
       // Whoever sent it onto the net hands the ball to the other team.
       world.possession = otherTeam(world.lastHitTeam);
       world.possessionTick = world.tick;
+      world.touches = 0;
       world.serve.inFlight = false;
       world.serve.faults = 0;
       world.events.push({ type: 'possession', team: world.possession });
     } else if (e.type === 'ground') {
       if (world.serve.inFlight) {
-        // A serve that never reached the net: a fault.
+        // A serve that never reached the net: a fault. Two in a row lose the
+        // serve, and in a match give the receiver the point.
         const server = otherTeam(world.nextReceiver);
-        world.events.push({ type: 'fault', team: server, lost: faultServe(world, t) });
+        const receiver = world.nextReceiver;
+        const lost = faultServe(world, t);
+        world.events.push({ type: 'fault', team: server, lost });
+        if (lost && world.mode === 'match') scorePoint(world, receiver, t);
       } else {
-        // The rally is over: the serve alternates sides.
         world.serve.returnPending = false;
-        world.nextReceiver = otherTeam(world.nextReceiver);
+        if (world.mode === 'match') {
+          // The side that should have played it loses the rally; the winner serves.
+          const loser = world.possession;
+          scorePoint(world, otherTeam(loser), t);
+          world.nextReceiver = loser;
+        } else {
+          // Practice: the serve alternates sides.
+          world.nextReceiver = otherTeam(world.nextReceiver);
+        }
       }
     }
   }

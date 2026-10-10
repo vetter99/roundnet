@@ -79,7 +79,7 @@ and UX cards.
 | SHOT-05 | Power sweet spot / overcharge risk (playtest) | P1 | M | |
 | SHOT-06 | Right-stick shot control, starting with placement (playtest) | P2 | L | |
 | RULE-01 | Real serving ✅ serve duel with spin | P0 | M | |
-| RULE-02 | Match mode: scoring + 3-touch limit (playtest: wanted) | P0 | S | RULE-01 |
+| RULE-02 | Match mode ✅ to 11, winner serves, 3 touches | P0 | S | |
 | RULE-03 | 2v2 teams | P1 | L | RULE-02, INPUT-01 |
 | RULE-04 | Serve rotation and side switching | P2 | S | RULE-03 |
 | AI-01 | CPU difficulty levels | P1 | M | |
@@ -305,7 +305,7 @@ kicks it sideways the same way (`serve.spinCurve`, `serve.spinKick`). The CPU
 spins about half its serves; in CPU vs CPU about a third of serves go
 unreturned, so spin may need toning down after playtesting.
 
-### RULE-02 · Match mode: scoring + 3-touch limit
+### RULE-02 · Match mode: scoring + 3-touch limit ✅ done (2026-10-10)
 **P0 · S** · Files: `src/sim/world.ts`, `src/main.ts`
 
 **Playtest 1:** "Playing 1v1 and keeping a score would immediately give us
@@ -318,6 +318,13 @@ commit `3359c7b` and can be restored from there.
 
 **Done when:** a mode setting switches between Practice (today) and Match
 (scoring, touch limit, win screen, rematch).
+
+**Shipped (decided in Q&A):** an on-screen Practice / Match toggle. Match:
+games to 11, win by 2; the side that lets the ball land gives up the point;
+the point winner serves; 3-touch limit; a double fault gives the receiver
+the point. Score on the HUD and jumbotron; press A / J for a rematch (CPU vs
+CPU rematches on its own). The no-spike zone is drawn but not enforced.
+CPU vs CPU games run ~2-3.5 minutes with close scores.
 
 ### RULE-03 · 2v2 teams
 **P1 · L** · Depends on RULE-02, INPUT-01
