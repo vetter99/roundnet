@@ -65,12 +65,13 @@ export const DEFAULT_TUNING = {
     // Power of a worst-quality hit, as a fraction of a perfect one.
     minQualityPower: 0.6,
     // A spike's drift past the net center at the worst timing, in net radii.
-    // Above ~1.2 the worst-timed spikes miss the net entirely.
-    mishitDrift: 1.6,
+    // Above ~1.2 the worst-timed spikes miss the net entirely; at 1.3 only
+    // spikes timed below ~10% miss.
+    mishitDrift: 1.3,
     // Contact within this height of the ideal counts as perfect.
     perfectWindow: 0.15,
     // Quality falls from 1 to 0 over this much extra height error.
-    qualityFalloff: 0.6,
+    qualityFalloff: 0.8,
     // Upward speed of a pass: a quick tap vs. full charge.
     passUpSpeedMin: 5.5,
     passUpSpeedMax: 10.5,
