@@ -100,7 +100,7 @@ and UX cards.
 | UX-06 | Character select | P2 | M | ART-03 |
 | UX-07 | Timing guide ✅ kept as is; player circle removed | P0 | S | |
 | UX-08 | Teach the jump (dive is automatic now) | P1 | S | |
-| ART-01 | Court environment ✅ stadium pitch + bowl (baseline) | P1 | M | |
+| ART-01 | Court environment ✅ pitch, HD stands, 3D crowd | P1 | M | |
 | ART-02 | Ball and net ✅ yellow volleyball, webbed net | P2 | S | |
 | ART-03 | Character variety (squirrel + raccoon done) | P2 | M | |
 | ART-04 | Celebrations and reactions | P2 | M | |

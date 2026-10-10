@@ -1,15 +1,17 @@
-// The stadium bowl around the park lawn: a bright modern arena with
-// nature-shaped touches (tree-trunk light towers, leaf canopies), a
-// cardboard-cutout crowd of all kinds of wildlife, and a jumbotron.
-// Everything is low-poly and instanced; textures are drawn on canvases.
+// The stadium bowl around the pitch: smooth tiered stands with real seat
+// rows, aisles with steps and a front railing; nature-shaped touches
+// (tree-trunk light towers, leaf canopies); a 3D crowd of all kinds of
+// wildlife (crowd.ts); and a jumbotron. Seats and fans are thin instances.
 
 import { StandardMaterial } from '@babylonjs/core/Materials/standardMaterial';
 import { DynamicTexture } from '@babylonjs/core/Materials/Textures/dynamicTexture';
 import { Color3 } from '@babylonjs/core/Maths/math.color';
 import { Vector3 } from '@babylonjs/core/Maths/math.vector';
-import type { InstancedMesh } from '@babylonjs/core/Meshes/instancedMesh';
-import '@babylonjs/core/Meshes/instancedMesh';
+import { createCrowd, type Seat } from './crowd';
+import { Matrix, Quaternion } from '@babylonjs/core/Maths/math.vector';
 import { Mesh } from '@babylonjs/core/Meshes/mesh';
+import { VertexData } from '@babylonjs/core/Meshes/mesh.vertexData';
+import '@babylonjs/core/Meshes/thinInstanceMesh';
 import { MeshBuilder } from '@babylonjs/core/Meshes/meshBuilder';
 import type { Scene } from '@babylonjs/core/scene';
 
@@ -24,7 +26,11 @@ const TOP_HEIGHT = FRONT_WALL_HEIGHT + ROWS * ROW_RISE;
 
 // One muted color for all the seating, for a grown-up pro-arena look.
 const SEATS = new Color3(0.24, 0.32, 0.44);
-const FAN_SHIRTS = ['#ff4d4d', '#2f7bff', '#ffcc1f', '#2fc46b', '#ff8a1f', '#ffffff'];
+const CONCRETE = new Color3(0.8, 0.8, 0.78);
+// Seat spacing along a row, and the aisles (with steps) that break up the rows.
+const SEAT_SPACING = 0.55;
+const AISLES = 16;
+const AISLE_WIDTH = 0.9;
 const BARK = new Color3(0.47, 0.31, 0.18);
 const LEAF = new Color3(0.3, 0.66, 0.27);
 
@@ -46,56 +52,140 @@ export interface Stadium {
 }
 
 export function createStadium(scene: Scene): Stadium {
-  buildStands(scene);
+  const seats = buildStands(scene);
   buildCanopiesAndTowers(scene);
-  const crowd = buildCrowd(scene);
+  const crowd = createCrowd(scene, seats);
   const jumbotron = buildJumbotron(scene);
   return {
-    update(time) {
-      // Fans bob in their seats, each on its own rhythm; a few wave higher.
-      for (const fan of crowd) {
-        const bob = Math.max(0, Math.sin(time * fan.speed + fan.phase));
-        fan.mesh.position.y = fan.baseY + bob * fan.height;
-      }
-    },
+    update: (time) => crowd.update(time),
     setRally: jumbotron,
   };
 }
 
-/** Continuous tiered seating all the way around, behind a white wall. */
-function buildStands(scene: Scene): void {
-  const wall = MeshBuilder.CreateCylinder(
-    'standWall',
-    { diameter: STAND_INNER_RADIUS * 2, height: FRONT_WALL_HEIGHT, tessellation: 96, cap: Mesh.NO_CAP, sideOrientation: Mesh.DOUBLESIDE },
-    scene,
-  );
-  wall.position.y = FRONT_WALL_HEIGHT / 2;
-  wall.material = material(scene, 'standWall', new Color3(0.96, 0.96, 0.94));
-  const trim = MeshBuilder.CreateTorus('wallTrim', { diameter: STAND_INNER_RADIUS * 2, thickness: 0.18, tessellation: 96 }, scene);
-  trim.position.y = FRONT_WALL_HEIGHT;
-  trim.material = material(scene, 'wallTrim', SEATS.scale(0.8));
-
-  // The stepped profile of the stands (radius, height), spun around the field.
-  const profile: Vector3[] = [new Vector3(STAND_INNER_RADIUS, FRONT_WALL_HEIGHT, 0)];
-  for (let row = 0; row < ROWS; row++) {
-    const r = STAND_INNER_RADIUS + row * ROW_DEPTH;
-    const h = FRONT_WALL_HEIGHT + row * ROW_RISE;
-    profile.push(new Vector3(r, h, 0), new Vector3(r + ROW_DEPTH, h, 0), new Vector3(r + ROW_DEPTH, h + ROW_RISE, 0));
+/** A flat ring (annulus) at height y, normals up. */
+function flatRing(name: string, inner: number, outer: number, y: number, scene: Scene): Mesh {
+  const segments = 160;
+  const positions: number[] = [];
+  const normals: number[] = [];
+  const indices: number[] = [];
+  for (let i = 0; i <= segments; i++) {
+    const a = (i / segments) * Math.PI * 2;
+    const c = Math.cos(a);
+    const sn = Math.sin(a);
+    positions.push(c * inner, y, sn * inner, c * outer, y, sn * outer);
+    normals.push(0, 1, 0, 0, 1, 0);
+    if (i < segments) {
+      const k = i * 2;
+      indices.push(k, k + 1, k + 2, k + 1, k + 3, k + 2);
+    }
   }
-  profile.push(new Vector3(STAND_OUTER_RADIUS, 0, 0));
-  const stands = MeshBuilder.CreateLathe('stands', { shape: profile, tessellation: 120, sideOrientation: Mesh.DOUBLESIDE }, scene);
-  // Flat shading gives each step a crisp edge (treads lit, risers darker).
-  stands.convertToFlatShadedMesh();
-  stands.material = material(scene, 'seats', SEATS);
+  const mesh = new Mesh(name, scene);
+  const data = new VertexData();
+  data.positions = positions;
+  data.normals = normals;
+  data.indices = indices;
+  data.applyToMesh(mesh);
+  return mesh;
+}
 
-  // The concourse wall closing off the back of the stands.
-  const back = MeshBuilder.CreateCylinder(
-    'standBack',
-    { diameter: STAND_OUTER_RADIUS * 2 + 0.4, height: TOP_HEIGHT + 1.2, tessellation: 96, cap: Mesh.NO_CAP, sideOrientation: Mesh.DOUBLESIDE },
+/** An open vertical cylinder wall (no caps), smooth shaded. */
+function wall(name: string, radius: number, bottom: number, top: number, mat: StandardMaterial, scene: Scene): Mesh {
+  const mesh = MeshBuilder.CreateCylinder(
+    name,
+    { diameter: radius * 2, height: top - bottom, tessellation: 160, cap: Mesh.NO_CAP, sideOrientation: Mesh.DOUBLESIDE },
     scene,
   );
-  back.position.y = (TOP_HEIGHT + 1.2) / 2;
-  back.material = material(scene, 'standBack', new Color3(0.92, 0.92, 0.9));
+  mesh.position.y = (top + bottom) / 2;
+  mesh.material = mat;
+  return mesh;
+}
+
+/** Whether an angle (radians) falls inside an aisle at radius r. */
+function inAisle(angle: number, r: number): boolean {
+  const step = (Math.PI * 2) / AISLES;
+  const fromAisle = Math.abs(((angle % step) + step) % step - step / 2);
+  return fromAisle < AISLE_WIDTH / 2 / r;
+}
+
+/**
+ * Smooth tiered stands (curved risers and flat treads) behind a white wall
+ * with a railing, individual seats with backs on every row, and aisles with
+ * steps. Returns the seats so the crowd can sit in them.
+ */
+function buildStands(scene: Scene): Seat[] {
+  const concrete = material(scene, 'concrete', CONCRETE);
+  const white = material(scene, 'standWall', new Color3(0.96, 0.96, 0.94));
+  wall('standWall', STAND_INNER_RADIUS, 0, FRONT_WALL_HEIGHT, white, scene);
+
+  // Railing along the top of the front wall: a rail on posts.
+  const metal = material(scene, 'railing', new Color3(0.55, 0.58, 0.62));
+  metal.specularColor = new Color3(0.4, 0.4, 0.4);
+  const rail = MeshBuilder.CreateTorus('rail', { diameter: STAND_INNER_RADIUS * 2 - 0.1, thickness: 0.05, tessellation: 160 }, scene);
+  rail.position.y = FRONT_WALL_HEIGHT + 0.55;
+  rail.material = metal;
+  const post = MeshBuilder.CreateCylinder('railPost', { height: 0.55, diameter: 0.04, tessellation: 6 }, scene);
+  post.material = metal;
+  const postCount = 96;
+  const postMatrices = new Float32Array(postCount * 16);
+  for (let i = 0; i < postCount; i++) {
+    const a = (i / postCount) * Math.PI * 2;
+    const r = STAND_INNER_RADIUS - 0.05;
+    Matrix.Translation(Math.cos(a) * r, FRONT_WALL_HEIGHT + 0.275, Math.sin(a) * r).copyToArray(postMatrices, i * 16);
+  }
+  post.thinInstanceSetBuffer('matrix', postMatrices, 16, true);
+
+  // Tiers: a flat tread for each row and a curved riser up to the next.
+  for (let row = 0; row < ROWS; row++) {
+    const inner = STAND_INNER_RADIUS + row * ROW_DEPTH;
+    const h = FRONT_WALL_HEIGHT + row * ROW_RISE;
+    flatRing(`tread${row}`, inner, inner + ROW_DEPTH, h, scene).material = concrete;
+    wall(`riser${row}`, inner + ROW_DEPTH, h, h + ROW_RISE, concrete, scene);
+  }
+  wall('standBack', STAND_OUTER_RADIUS + 0.2, 0, TOP_HEIGHT + 1.2, white, scene);
+
+  // A seat: a pan and a backrest, merged into one mesh, drawn once per seat.
+  const seatMat = material(scene, 'seats', SEATS);
+  const pan = MeshBuilder.CreateBox('seatPan', { width: 0.44, height: 0.07, depth: 0.38 }, scene);
+  pan.position.set(0, 0.2, 0);
+  const back = MeshBuilder.CreateBox('seatBack', { width: 0.44, height: 0.38, depth: 0.06 }, scene);
+  back.position.set(0, 0.4, 0.18);
+  const seatMesh = Mesh.MergeMeshes([pan, back], true)!;
+  seatMesh.material = seatMat;
+
+  const seats: Seat[] = [];
+  const seatMatrices: number[] = [];
+  const steps: number[] = [];
+  for (let row = 0; row < ROWS; row++) {
+    const r = STAND_INNER_RADIUS + (row + 0.55) * ROW_DEPTH;
+    const h = FRONT_WALL_HEIGHT + row * ROW_RISE;
+    const count = Math.floor((Math.PI * 2 * r) / SEAT_SPACING);
+    for (let k = 0; k < count; k++) {
+      const a = ((k + 0.5) / count) * Math.PI * 2;
+      if (inAisle(a, r)) continue;
+      const yaw = faceCenterYaw(a);
+      const seat = { x: Math.cos(a) * r, y: h, z: Math.sin(a) * r, yaw };
+      seats.push(seat);
+      Matrix.Compose(new Vector3(1, 1, 1), Quaternion.FromEulerAngles(0, yaw, 0), new Vector3(seat.x, seat.y, seat.z)).copyToArray(
+        seatMatrices,
+        seatMatrices.length,
+      );
+    }
+    // A half-height step in each aisle, between this row and the next.
+    for (let i = 0; i < AISLES; i++) {
+      const a = ((i + 0.5) / AISLES) * Math.PI * 2;
+      const sr = STAND_INNER_RADIUS + (row + 0.75) * ROW_DEPTH;
+      Matrix.Compose(
+        new Vector3(AISLE_WIDTH, ROW_RISE / 2, ROW_DEPTH / 2),
+        Quaternion.FromEulerAngles(0, faceCenterYaw(a), 0),
+        new Vector3(Math.cos(a) * sr, h + ROW_RISE / 4, Math.sin(a) * sr),
+      ).copyToArray(steps, steps.length);
+    }
+  }
+  seatMesh.thinInstanceSetBuffer('matrix', new Float32Array(seatMatrices), 16, true);
+  const stepMesh = MeshBuilder.CreateBox('aisleStep', { size: 1 }, scene);
+  stepMesh.material = material(scene, 'aisleStep', CONCRETE.scale(1.1));
+  stepMesh.thinInstanceSetBuffer('matrix', new Float32Array(steps), 16, true);
+  return seats;
 }
 
 /** Leaf-shaped canopies over the top of the stands, and tree-trunk light towers. */
@@ -146,235 +236,6 @@ function buildCanopiesAndTowers(scene: Scene): void {
     lamp.position.set(x * 0.94, 20, z * 0.94);
     lamp.rotation.y = faceCenterYaw(a);
   }
-}
-
-interface Fan {
-  mesh: InstancedMesh;
-  baseY: number;
-  height: number;
-  speed: number;
-  phase: number;
-}
-
-type DrawSpecies = (ctx: CanvasRenderingContext2D) => void;
-
-/** Cardboard-cutout fans: one canvas drawing per species and shirt color, instanced around the stands. */
-function buildCrowd(scene: Scene): Fan[] {
-  const species: DrawSpecies[] = [bear, fox, rabbit, deer, owl, frog, raccoon, hedgehog, beaver, turtle];
-  const cutouts: Mesh[] = [];
-  species.forEach((draw, si) => {
-    FAN_SHIRTS.forEach((shirt, ci) => {
-      if ((si + ci) % 2) return; // half the combinations is plenty of variety
-      const tex = new DynamicTexture(`fan-${si}-${ci}`, { width: 128, height: 160 }, scene, true);
-      tex.hasAlpha = true;
-      const ctx = tex.getContext() as CanvasRenderingContext2D;
-      ctx.clearRect(0, 0, 128, 160);
-      drawBody(ctx, shirt);
-      draw(ctx);
-      tex.update();
-      const mat = new StandardMaterial(`fan-${si}-${ci}`, scene);
-      mat.diffuseTexture = tex;
-      mat.useAlphaFromDiffuseTexture = true;
-      mat.transparencyMode = StandardMaterial.MATERIAL_ALPHATEST;
-      mat.backFaceCulling = false;
-      mat.specularColor = new Color3(0, 0, 0);
-      mat.emissiveColor = new Color3(0.25, 0.25, 0.25);
-      const plane = MeshBuilder.CreatePlane(`fan-${si}-${ci}`, { width: 0.8, height: 1 }, scene);
-      plane.material = mat;
-      plane.isVisible = false;
-      cutouts.push(plane);
-    });
-  });
-
-  // Repeatable pseudo-random seating.
-  let seed = 99;
-  const rand = () => ((seed = (seed * 1103515245 + 12345) % 2147483648) / 2147483648);
-  const fans: Fan[] = [];
-  for (let row = 0; row < ROWS; row++) {
-    const r = STAND_INNER_RADIUS + (row + 0.35) * ROW_DEPTH;
-    const top = FRONT_WALL_HEIGHT + row * ROW_RISE;
-    const seats = Math.floor((Math.PI * 2 * r) / 0.75);
-    for (let k = 0; k < seats; k++) {
-      if (rand() > 0.72) continue; // some empty seats
-      const angle = ((k + 0.5) / seats) * Math.PI * 2;
-      const fan = cutouts[Math.floor(rand() * cutouts.length)].createInstance(`fan-${row}-${k}`);
-      const baseY = top + 0.48;
-      fan.position.set(Math.cos(angle) * r, baseY, Math.sin(angle) * r);
-      fan.rotation.y = faceCenterYaw(angle);
-      fans.push({ mesh: fan, baseY, height: rand() > 0.85 ? 0.35 : 0.1, speed: 3 + rand() * 4, phase: rand() * 10 });
-    }
-  }
-  return fans;
-}
-
-/** Shirt and arms shared by every fan; the species drawing adds the head. */
-function drawBody(ctx: CanvasRenderingContext2D, shirt: string): void {
-  ctx.fillStyle = shirt;
-  ctx.beginPath();
-  ctx.roundRect(30, 88, 68, 72, 22);
-  ctx.fill();
-  ctx.strokeStyle = 'rgba(0,0,0,0.25)';
-  ctx.lineWidth = 3;
-  ctx.stroke();
-}
-
-function head(ctx: CanvasRenderingContext2D, color: string, r = 30, y = 62): void {
-  ctx.fillStyle = color;
-  ctx.beginPath();
-  ctx.arc(64, y, r, 0, Math.PI * 2);
-  ctx.fill();
-}
-
-function eyes(ctx: CanvasRenderingContext2D, y = 58, spread = 11, size = 4.5, color = '#1a1a1a'): void {
-  ctx.fillStyle = color;
-  for (const dx of [-spread, spread]) {
-    ctx.beginPath();
-    ctx.arc(64 + dx, y, size, 0, Math.PI * 2);
-    ctx.fill();
-  }
-}
-
-function ellipse(ctx: CanvasRenderingContext2D, color: string, x: number, y: number, rx: number, ry: number, rot = 0): void {
-  ctx.fillStyle = color;
-  ctx.beginPath();
-  ctx.ellipse(x, y, rx, ry, rot, 0, Math.PI * 2);
-  ctx.fill();
-}
-
-function bear(ctx: CanvasRenderingContext2D): void {
-  ellipse(ctx, '#7a4a28', 40, 36, 12, 12);
-  ellipse(ctx, '#7a4a28', 88, 36, 12, 12);
-  head(ctx, '#8b5a2f');
-  ellipse(ctx, '#d9b38c', 64, 72, 13, 10);
-  eyes(ctx);
-  ellipse(ctx, '#1a1a1a', 64, 68, 5, 4);
-}
-
-function fox(ctx: CanvasRenderingContext2D): void {
-  ctx.fillStyle = '#e8741f';
-  ctx.beginPath();
-  ctx.moveTo(38, 52);
-  ctx.lineTo(42, 18);
-  ctx.lineTo(58, 40);
-  ctx.moveTo(90, 52);
-  ctx.lineTo(86, 18);
-  ctx.lineTo(70, 40);
-  ctx.fill();
-  head(ctx, '#ef7f2a');
-  ellipse(ctx, '#ffffff', 64, 76, 16, 12);
-  eyes(ctx);
-  ellipse(ctx, '#1a1a1a', 64, 72, 4, 3.5);
-}
-
-function rabbit(ctx: CanvasRenderingContext2D): void {
-  ellipse(ctx, '#e9e2da', 50, 22, 8, 26, -0.15);
-  ellipse(ctx, '#e9e2da', 78, 22, 8, 26, 0.15);
-  ellipse(ctx, '#f4b6c2', 50, 24, 3.5, 18, -0.15);
-  ellipse(ctx, '#f4b6c2', 78, 24, 3.5, 18, 0.15);
-  head(ctx, '#efe9e2');
-  eyes(ctx);
-  ellipse(ctx, '#f08aa0', 64, 70, 4, 3);
-}
-
-function deer(ctx: CanvasRenderingContext2D): void {
-  ctx.strokeStyle = '#6b4a2b';
-  ctx.lineWidth = 5;
-  ctx.lineCap = 'round';
-  ctx.beginPath();
-  for (const side of [-1, 1]) {
-    ctx.moveTo(64 + side * 16, 40);
-    ctx.lineTo(64 + side * 30, 10);
-    ctx.moveTo(64 + side * 24, 24);
-    ctx.lineTo(64 + side * 40, 18);
-  }
-  ctx.stroke();
-  head(ctx, '#b07a45', 28, 64);
-  ellipse(ctx, '#f0dcc2', 64, 76, 12, 10);
-  eyes(ctx, 60);
-  ellipse(ctx, '#1a1a1a', 64, 74, 4.5, 3.5);
-}
-
-function owl(ctx: CanvasRenderingContext2D): void {
-  ctx.fillStyle = '#8a6a4a';
-  ctx.beginPath();
-  ctx.moveTo(40, 44);
-  ctx.lineTo(44, 24);
-  ctx.lineTo(56, 38);
-  ctx.moveTo(88, 44);
-  ctx.lineTo(84, 24);
-  ctx.lineTo(72, 38);
-  ctx.fill();
-  head(ctx, '#9a7652', 31);
-  ellipse(ctx, '#ffffff', 52, 60, 11, 11);
-  ellipse(ctx, '#ffffff', 76, 60, 11, 11);
-  eyes(ctx, 60, 12, 5);
-  ctx.fillStyle = '#f2a516';
-  ctx.beginPath();
-  ctx.moveTo(58, 70);
-  ctx.lineTo(70, 70);
-  ctx.lineTo(64, 80);
-  ctx.fill();
-}
-
-function frog(ctx: CanvasRenderingContext2D): void {
-  head(ctx, '#56b84a', 30, 66);
-  ellipse(ctx, '#56b84a', 48, 40, 12, 12);
-  ellipse(ctx, '#56b84a', 80, 40, 12, 12);
-  ellipse(ctx, '#ffffff', 48, 40, 8, 8);
-  ellipse(ctx, '#ffffff', 80, 40, 8, 8);
-  eyes(ctx, 40, 16, 4);
-  ctx.strokeStyle = '#1f5a1a';
-  ctx.lineWidth = 3;
-  ctx.beginPath();
-  ctx.arc(64, 70, 14, 0.2, Math.PI - 0.2);
-  ctx.stroke();
-}
-
-function raccoon(ctx: CanvasRenderingContext2D): void {
-  ellipse(ctx, '#6e6e74', 42, 38, 10, 12);
-  ellipse(ctx, '#6e6e74', 86, 38, 10, 12);
-  head(ctx, '#8d8d93');
-  ellipse(ctx, '#2b2b30', 64, 58, 26, 9);
-  ellipse(ctx, '#e8e8ea', 64, 76, 12, 9);
-  eyes(ctx, 58, 11, 4, '#ffffff');
-  ellipse(ctx, '#1a1a1a', 64, 72, 4, 3);
-}
-
-function hedgehog(ctx: CanvasRenderingContext2D): void {
-  ctx.fillStyle = '#5a3f2a';
-  for (let i = 0; i < 9; i++) {
-    const a = Math.PI + (i / 8) * Math.PI;
-    ctx.beginPath();
-    ctx.moveTo(64 + Math.cos(a) * 26, 62 + Math.sin(a) * 26);
-    ctx.lineTo(64 + Math.cos(a) * 44, 62 + Math.sin(a) * 44);
-    ctx.lineTo(64 + Math.cos(a + 0.25) * 26, 62 + Math.sin(a + 0.25) * 26);
-    ctx.fill();
-  }
-  head(ctx, '#d9b48a', 28, 64);
-  eyes(ctx, 60);
-  ellipse(ctx, '#1a1a1a', 64, 74, 4.5, 4);
-}
-
-function beaver(ctx: CanvasRenderingContext2D): void {
-  ellipse(ctx, '#6b4426', 40, 42, 8, 8);
-  ellipse(ctx, '#6b4426', 88, 42, 8, 8);
-  head(ctx, '#7f5230');
-  ellipse(ctx, '#c79a6e', 64, 72, 14, 10);
-  eyes(ctx);
-  ellipse(ctx, '#1a1a1a', 64, 67, 4.5, 3.5);
-  ctx.fillStyle = '#ffffff';
-  ctx.fillRect(58, 76, 5, 9);
-  ctx.fillRect(65, 76, 5, 9);
-}
-
-function turtle(ctx: CanvasRenderingContext2D): void {
-  head(ctx, '#7ab65a', 26, 66);
-  eyes(ctx, 62, 10);
-  ctx.strokeStyle = '#3d6b2a';
-  ctx.lineWidth = 3;
-  ctx.beginPath();
-  ctx.arc(64, 70, 10, 0.3, Math.PI - 0.3);
-  ctx.stroke();
 }
 
 /** The jumbotron on the far side: a placeholder logo and the rally counter. */
