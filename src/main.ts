@@ -111,7 +111,7 @@ function onEvent(e: SimEvent): void {
     lastMiss = null;
     sfx.hit(e.kind, e.power, e.quality);
     if (e.quality >= 1) {
-      showFlash('PERFECT');
+      showFlash('Perfect', '#5ee07a', 0.45);
       sfx.perfect();
     }
   } else if (e.type === 'net') {

@@ -47,11 +47,12 @@ src/main.ts           wires it together; fixed 60Hz loop with render interpolati
 - No rim faults for now: the frame bounces like the net.
 - The ball is only playable after it comes off the net or a player
   (`isPlayable` in `src/sim/hit.ts`).
-- 1v1 rallies (`src/sim/world.ts`): the team in possession gets up to 3
-  touches to put the ball on the net, which flips possession. A 4th touch is
-  refused; the ball landing loses the point for the team in possession. Rally
-  scoring to 21, win by 2. The team without the ball can't hit it and gets
+- 1v1 mechanics sandbox (`src/sim/world.ts`): when the ball comes off the
+  net, the other team has possession and must put it back on the net. No
+  scoring or touch limit right now (both existed in commit `3359c7b`; see
+  RULE-02 in docs/backlog.md). The team without the ball can't hit it and gets
   pushed aside if it runs into the team with the ball.
+- After the ball lands, the game waits for the server to press pass (A) to serve.
 - Serving is a stand-in: the ball is fed off the net to the receiver.
 - Hits charge while the button is held and swing on release (`chargePower`).
 - `src/ai/bot.ts` is a deterministic CPU player. Red is always the CPU for now.
@@ -59,6 +60,12 @@ src/main.ts           wires it together; fixed 60Hz loop with render interpolati
   contact height at contact. Bad hits are weaker and drift off target.
 - Spikes always target the net center; the stick only aims passes. The worst-
   timed spikes drift far enough past center to miss (`hit.mishitDrift`).
+
+## Backlog
+
+`docs/backlog.md` has the work items as self-contained cards (ID, priority,
+size, files, "done when"). When asked to work on an item, read its card, keep
+to its scope, and add tests for sim/AI changes.
 
 ## Roadmap
 
