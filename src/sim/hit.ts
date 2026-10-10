@@ -92,7 +92,7 @@ export function tryHit(p: Player, ball: Ball, intent: Intent, t: Tuning, turn?: 
   const aim = stickOf(intent);
 
   if (kind === 'spike') {
-    spike(ball, aim, quality, power, t);
+    spike(ball, quality, power, t);
   } else {
     pass(ball, aim, quality, power, t);
   }
@@ -104,13 +104,10 @@ export function tryHit(p: Player, ball: Ball, intent: Intent, t: Tuning, turn?: 
   return { playerId: p.id, kind, quality, power, heightError, launchSpeed };
 }
 
-function spike(ball: Ball, aim: { x: number; z: number }, quality: number, power: number, t: Tuning): void {
-  // The stick picks a point on the net; a bad hit drifts past it and can miss.
-  const target = {
-    x: aim.x * t.net.radius * t.hit.aimSpread,
-    y: netContactHeight(t),
-    z: aim.z * t.net.radius * t.hit.aimSpread,
-  };
+function spike(ball: Ball, quality: number, power: number, t: Tuning): void {
+  // Spikes always go at the center of the net (the stick only aims passes).
+  // A badly timed spike drifts past the center along its path and can miss.
+  const target = { x: 0, y: netContactHeight(t), z: 0 };
   const dx = target.x - ball.pos.x;
   const dz = target.z - ball.pos.z;
   const dist = Math.hypot(dx, dz);

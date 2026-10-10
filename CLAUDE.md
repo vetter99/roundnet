@@ -57,6 +57,8 @@ src/main.ts           wires it together; fixed 60Hz loop with render interpolati
 - `src/ai/bot.ts` is a deterministic CPU player. Red is always the CPU for now.
 - Hit quality comes from timing: how close the ball is to the player's
   contact height at contact. Bad hits are weaker and drift off target.
+- Spikes always target the net center; the stick only aims passes. The worst-
+  timed spikes drift far enough past center to miss (`hit.mishitDrift`).
 
 ## Roadmap
 

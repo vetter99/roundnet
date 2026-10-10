@@ -101,26 +101,18 @@ export function botIntent(world: World, index: number, t: Tuning): Intent {
     const error = (me.charge.kind === 'pass' ? PASS_TIMING_ERROR : SPIKE_TIMING_ERROR) * slop(world, secondTouch ? 2 : 1);
     const release = ball.vel.y < 0 && ball.pos.y <= t.player.contactHeight + error;
     intent[me.charge.kind] = !release;
-    if (release) aim(intent, me, me.charge.kind, opponent);
+    if (release && me.charge.kind === 'pass') aimPass(intent, me);
   } else if (inReach && plan.ticks <= lead && plan.ticks > 0) {
     intent[kind] = true;
   }
   return intent;
 }
 
-/** Point the stick for the hit being released. */
-function aim(intent: Intent, me: Player, kind: HitKind, opponent: Player | undefined): void {
-  if (kind === 'pass') {
-    // Pop it up, drifting slightly toward the net.
-    const d = Math.hypot(me.pos.x, me.pos.z) || 1;
-    intent.moveX = (-me.pos.x / d) * PASS_TOWARD_NET;
-    intent.moveZ = (-me.pos.z / d) * PASS_TOWARD_NET;
-  } else if (opponent) {
-    // Spike to the side of the net away from the opponent.
-    const d = Math.hypot(opponent.pos.x, opponent.pos.z) || 1;
-    intent.moveX = -opponent.pos.x / d;
-    intent.moveZ = -opponent.pos.z / d;
-  }
+/** Pop a released pass up, drifting slightly toward the net (spikes aren't aimed). */
+function aimPass(intent: Intent, me: Player): void {
+  const d = Math.hypot(me.pos.x, me.pos.z) || 1;
+  intent.moveX = (-me.pos.x / d) * PASS_TOWARD_NET;
+  intent.moveZ = (-me.pos.z / d) * PASS_TOWARD_NET;
 }
 
 function moveToward(intent: Intent, me: Player, target: Vec3): void {

@@ -64,10 +64,9 @@ export const DEFAULT_TUNING = {
     spikeSpeedMax: 14,
     // Power of a worst-quality hit, as a fraction of a perfect one.
     minQualityPower: 0.6,
-    // How far from net center the stick can aim, as a fraction of net radius.
-    aimSpread: 0.6,
-    // A bad hit drifts this far (in net radii) past the aim point, and can miss the net.
-    mishitDrift: 1.1,
+    // A spike's drift past the net center at the worst timing, in net radii.
+    // Above ~1.2 the worst-timed spikes miss the net entirely.
+    mishitDrift: 1.6,
     // Contact within this height of the ideal counts as perfect.
     perfectWindow: 0.15,
     // Quality falls from 1 to 0 over this much extra height error.

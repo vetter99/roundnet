@@ -16,7 +16,7 @@ const RANGES: Record<string, Ranges> = {
     contactHeight: [0.5, 2.5], reach: [0.3, 2], lowReach: [0, 2.5], highReach: [0, 1.5],
   },
   hit: {
-    spikeSpeedMin: [4, 25], spikeSpeedMax: [4, 30], chargeTime: [0.1, 2], chargeMoveFactor: [0, 1], minQualityPower: [0, 1], aimSpread: [0, 1], mishitDrift: [0, 3],
+    spikeSpeedMin: [4, 25], spikeSpeedMax: [4, 30], chargeTime: [0.1, 2], chargeMoveFactor: [0, 1], minQualityPower: [0, 1], mishitDrift: [0, 3],
     perfectWindow: [0, 0.6], qualityFalloff: [0.1, 2], passUpSpeedMin: [2, 15], passUpSpeedMax: [2, 18], passHorizontalSpeed: [0, 6],
     inputBufferTicks: [0, 20, 1], cooldownTicks: [0, 40, 1],
   },

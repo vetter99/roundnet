@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { createTuning } from '../config/tuning';
+import { stepBall, type BallEvent } from './ball';
 import { hitQuality, tryHit } from './hit';
 import { createPlayer, NEUTRAL_INTENT, stepPlayer, type Intent } from './player';
 import { createWorld, serve, stepWorld, type SimEvent, type World } from './world';
@@ -270,5 +271,38 @@ describe('charging', () => {
       stepPlayer(charging, { ...NEUTRAL_INTENT, moveX: 1, spike: true }, t);
     }
     expect(charging.vel.x).toBeCloseTo(free.vel.x * t.hit.chargeMoveFactor);
+  });
+});
+
+describe('spike targeting', () => {
+  /** Spike a ball at `height` with the stick pushed (`aimX`, `aimZ`); return where it lands first. */
+  function spikeAt(height: number, aimX: number, aimZ: number) {
+    const p = createPlayer(0, 0, 0, -2.4);
+    p.hitBuffer = { kind: 'spike', ticksLeft: 5, power: 0.5 };
+    const ball = { pos: { x: 0, y: height, z: -2.2 }, vel: { x: 0, y: -2, z: 0 }, alive: true, lastTouch: 'net' as const };
+    const hit = tryHit(p, ball, { ...NEUTRAL_INTENT, moveX: aimX, moveZ: aimZ }, t)!;
+    const events: BallEvent[] = [];
+    for (let i = 0; i < 300 && events.length === 0; i++) stepBall(ball, t, events);
+    return { quality: hit.quality, first: events[0] };
+  }
+
+  it('ignores the stick: spikes always go at the net center', () => {
+    const plain = spikeAt(t.player.contactHeight, 0, 0).first;
+    const aimed = spikeAt(t.player.contactHeight, 1, 1).first;
+    expect(plain?.type).toBe('net');
+    expect(aimed).toEqual(plain);
+    expect(Math.hypot(plain!.at.x, plain!.at.z)).toBeLessThan(0.1);
+  });
+
+  it('a decently timed spike lands on the net', () => {
+    const { quality, first } = spikeAt(t.player.contactHeight - 0.45, 0, 0);
+    expect(quality).toBeGreaterThan(0.3);
+    expect(first?.type).toBe('net');
+  });
+
+  it('a terribly timed spike flies past the net', () => {
+    const { quality, first } = spikeAt(t.player.contactHeight - 0.9, 0, 0);
+    expect(quality).toBeLessThan(0.1);
+    expect(first?.type).toBe('ground');
   });
 });
