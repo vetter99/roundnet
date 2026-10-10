@@ -88,10 +88,12 @@ export const DEFAULT_TUNING = {
 
   marker: {
     mode: 'always' as MarkerMode,
-    // The marker shrinks from maxRadius to minRadius over the last shrinkTime seconds.
-    maxRadius: 0.9,
-    minRadius: 0.22,
-    shrinkTime: 1.0,
+    // Timing guide at the landing spot: an outer ring shrinks from maxRadius
+    // onto the target ring (targetRadius) over the last approachTime seconds,
+    // meeting it when the ball enters the PERFECT window at contact height.
+    maxRadius: 1.1,
+    targetRadius: 0.3,
+    approachTime: 0.9,
   },
 
   court: {

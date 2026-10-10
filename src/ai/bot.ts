@@ -1,5 +1,5 @@
 import type { Tuning } from '../config/tuning';
-import { cloneBall, stepBall, type BallEvent } from '../sim/ball';
+import { predictDescentTo } from '../sim/hit';
 import { NEUTRAL_INTENT, type Intent, type Player } from '../sim/player';
 import type { Vec3 } from '../sim/vec';
 import type { World } from '../sim/world';
@@ -11,25 +11,6 @@ const MOVE_EFFORT = 0.85;
 // Start charging a spike this many ticks before contact (~half power).
 const CHARGE_LEAD_TICKS = 18;
 const WAIT_DISTANCE = 2.3;
-
-interface ContactPlan {
-  point: Vec3;
-  ticks: number;
-}
-
-/** Where (and in how many ticks) the ball will drop to this player's contact height. */
-function planContact(world: World, t: Tuning): ContactPlan | null {
-  const ball = cloneBall(world.ball);
-  const events: BallEvent[] = [];
-  const contactY = t.player.contactHeight;
-  for (let tick = 0; tick < 180 && ball.alive; tick++) {
-    const playable = ball.lastTouch === 'net' || ball.lastTouch === 'player';
-    if (playable && ball.vel.y < 0 && ball.pos.y <= contactY) return { point: ball.pos, ticks: tick };
-    events.length = 0;
-    stepBall(ball, t, events);
-  }
-  return null;
-}
 
 export function botIntent(world: World, index: number, t: Tuning): Intent {
   const me = world.players[index];
@@ -46,7 +27,7 @@ export function botIntent(world: World, index: number, t: Tuning): Intent {
     return intent;
   }
 
-  const plan = planContact(world, t);
+  const plan = predictDescentTo(world.ball, t.player.contactHeight, t);
   if (!plan) return intent;
   moveToward(intent, me, plan.point);
 

@@ -21,7 +21,7 @@ const RANGES: Record<string, Ranges> = {
     inputBufferTicks: [0, 20, 1], cooldownTicks: [0, 40, 1],
   },
   court: { serveLineDistance: [1, 5] },
-  marker: { maxRadius: [0.1, 2], minRadius: [0.05, 1], shrinkTime: [0.1, 3] },
+  marker: { maxRadius: [0.2, 2.5], targetRadius: [0.05, 1], approachTime: [0.2, 3] },
   practice: { resetDelayTicks: [0, 180, 1], feedDistance: [0.8, 4], feedHeight: [0.5, 4], feedSpeed: [2, 15] },
   camera: { height: [2, 20], distance: [3, 25], fov: [0.3, 1.4], lookAtZ: [-3, 5] },
 };

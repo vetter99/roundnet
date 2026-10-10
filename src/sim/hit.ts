@@ -1,7 +1,7 @@
 import type { Tuning } from '../config/tuning';
-import { launchBallAt, netContactHeight, type Ball } from './ball';
+import { cloneBall, launchBallAt, netContactHeight, stepBall, type Ball, type BallEvent } from './ball';
 import { stickOf, type HitKind, type Intent, type Player } from './player';
-import { clamp, lerp } from './vec';
+import { clamp, lerp, type Vec3 } from './vec';
 
 export interface HitResult {
   playerId: number;
@@ -31,6 +31,28 @@ export function hitQuality(heightError: number, t: Tuning): number {
  */
 export function isPlayable(ball: Ball): boolean {
   return ball.alive && (ball.lastTouch === 'net' || ball.lastTouch === 'player');
+}
+
+export interface DescentPrediction {
+  // Where the ball will be, and how many ticks from now (0 = already there).
+  point: Vec3;
+  ticks: number;
+}
+
+/**
+ * When and where a playable ball will next be falling at or below `height`
+ * (e.g. a player's contact height). Looks through net bounces. Null if it
+ * lands first or never becomes playable.
+ */
+export function predictDescentTo(current: Ball, height: number, t: Tuning, maxTicks = 180): DescentPrediction | null {
+  const ball = cloneBall(current);
+  const events: BallEvent[] = [];
+  for (let tick = 0; tick < maxTicks && ball.alive; tick++) {
+    if (isPlayable(ball) && ball.vel.y < 0 && ball.pos.y <= height) return { point: ball.pos, ticks: tick };
+    events.length = 0;
+    stepBall(ball, t, events);
+  }
+  return null;
 }
 
 export type MissReason =

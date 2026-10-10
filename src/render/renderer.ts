@@ -12,6 +12,7 @@ import { TransformNode } from '@babylonjs/core/Meshes/transformNode';
 import { Scene } from '@babylonjs/core/scene';
 import type { Tuning } from '../config/tuning';
 import { predictLanding } from '../sim/ball';
+import { isPlayable, predictDescentTo } from '../sim/hit';
 import type { HitKind } from '../sim/player';
 import { DT } from '../sim/time';
 import { Character, FUR } from './character';
@@ -59,8 +60,13 @@ export class Renderer {
   readonly scene: Scene;
   private readonly camera: UniversalCamera;
   private readonly ball: Mesh;
+  // Landing spot + timing guide: a fixed target ring and an approach ring
+  // that shrinks onto it as the ball nears the PERFECT moment.
   private readonly marker: TransformNode;
-  private readonly markerMat: StandardMaterial;
+  private readonly approachRing: Mesh;
+  private readonly approachMat: StandardMaterial;
+  private readonly targetRing: Mesh;
+  private readonly targetMat: StandardMaterial;
   private readonly players: PlayerView[] = [];
   private court: TransformNode | null = null;
   private courtKey = '';
@@ -89,14 +95,17 @@ export class Renderer {
     this.ball.material = ballMat;
 
     this.marker = new TransformNode('marker', scene);
-    this.markerMat = flatMaterial('marker', new Color3(1, 0.45, 0.1), scene);
-    this.markerMat.emissiveColor = new Color3(1, 0.45, 0.1);
-    this.markerMat.disableLighting = true;
-    const ring = MeshBuilder.CreateTorus('markerRing', { diameter: 2, thickness: 0.08, tessellation: 48 }, scene);
-    const dot = MeshBuilder.CreateDisc('markerDot', { radius: 0.12, tessellation: 24 }, scene);
+    this.approachMat = glowMaterial('approach', scene);
+    this.targetMat = glowMaterial('target', scene);
+    // Unit-radius rings scaled per frame (their thickness scales along with them).
+    this.approachRing = MeshBuilder.CreateTorus('approachRing', { diameter: 2, thickness: 0.11, tessellation: 64 }, scene);
+    this.approachRing.material = this.approachMat;
+    this.targetRing = MeshBuilder.CreateTorus('targetRing', { diameter: 2, thickness: 0.2, tessellation: 48 }, scene);
+    this.targetRing.material = this.targetMat;
+    const dot = MeshBuilder.CreateDisc('markerDot', { radius: 0.06, tessellation: 24 }, scene);
     dot.rotation.x = Math.PI / 2;
-    for (const m of [ring, dot]) {
-      m.material = this.markerMat;
+    dot.material = this.targetMat;
+    for (const m of [this.approachRing, this.targetRing, dot]) {
       m.parent = this.marker;
       m.isPickable = false;
     }
@@ -161,17 +170,39 @@ export class Renderer {
   }
 
   private updateMarker(world: World, t: Tuning): void {
-    const landing = predictLanding(world.ball, t);
+    const ball = world.ball;
+    const landing = predictLanding(ball, t);
     const show = landing !== null && (t.marker.mode === 'always' || !landing.viaNet);
     this.marker.setEnabled(show);
     if (!landing || !show) return;
-
-    const secondsLeft = landing.ticks * DT;
-    const shrink = clamp(secondsLeft / t.marker.shrinkTime, 0, 1);
-    const radius = lerp(t.marker.minRadius, t.marker.maxRadius, shrink);
     this.marker.position.set(landing.point.x, 0.03, landing.point.z);
-    this.marker.scaling.set(radius, 1, radius);
-    this.markerMat.alpha = 0.85 + 0.15 * Math.sin(this.time * 12);
+    this.targetRing.scaling.setAll(t.marker.targetRadius);
+
+    // The PERFECT window for a player standing on the ground: the ball falling
+    // through contact height, within perfectWindow above or below it.
+    const window = t.hit.perfectWindow;
+    const heightError = ball.pos.y - t.player.contactHeight;
+    const inWindow = isPlayable(ball) && ball.vel.y < 0 && Math.abs(heightError) <= window;
+    const upcoming = inWindow ? null : predictDescentTo(ball, t.player.contactHeight + window, t);
+
+    if (inWindow) {
+      // Swing now: both rings flash green.
+      this.approachRing.isVisible = true;
+      this.approachRing.scaling.setAll(t.marker.targetRadius);
+      setGlow(this.approachMat, PERFECT_GREEN, 1);
+      setGlow(this.targetMat, PERFECT_GREEN, 1);
+    } else if (upcoming && upcoming.ticks > 0) {
+      // Closing in: the approach ring meets the target as the window opens.
+      const closing = clamp((upcoming.ticks * DT) / t.marker.approachTime, 0, 1);
+      this.approachRing.isVisible = true;
+      this.approachRing.scaling.setAll(lerp(t.marker.targetRadius, t.marker.maxRadius, closing));
+      setGlow(this.approachMat, APPROACH_ORANGE, 0.95);
+      setGlow(this.targetMat, TARGET_WHITE, 0.9);
+    } else {
+      // The window has passed (or the ball won't reach contact height).
+      this.approachRing.isVisible = false;
+      setGlow(this.targetMat, TARGET_WHITE, 0.35);
+    }
   }
 
   private createPlayerView(team: 0 | 1): PlayerView {
@@ -253,6 +284,22 @@ export class Renderer {
     serveLine.material = lineMat;
     serveLine.parent = court;
   }
+}
+
+const PERFECT_GREEN = new Color3(0.35, 1, 0.45);
+const APPROACH_ORANGE = new Color3(1, 0.5, 0.1);
+const TARGET_WHITE = new Color3(1, 1, 1);
+
+/** An unlit material whose color and opacity are set per frame. */
+function glowMaterial(name: string, scene: Scene): StandardMaterial {
+  const mat = flatMaterial(name, TARGET_WHITE, scene);
+  mat.disableLighting = true;
+  return mat;
+}
+
+function setGlow(mat: StandardMaterial, color: Color3, alpha: number): void {
+  mat.emissiveColor = color;
+  mat.alpha = alpha;
 }
 
 function flatMaterial(name: string, color: Color3, scene: Scene): StandardMaterial {
