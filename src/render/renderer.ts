@@ -108,9 +108,6 @@ export class Renderer {
   private duelBlend = 0;
   // The camera's yaw (0 = looking along +z), so input can follow the view.
   private yaw = 0;
-  // Where the server is aiming on the net during a serve.
-  private readonly aimReticle: TransformNode;
-  private readonly aimMat: StandardMaterial;
 
   constructor(canvas: HTMLCanvasElement) {
     this.engine = new Engine(canvas, true, { stencil: true });
@@ -155,17 +152,6 @@ export class Renderer {
     this.trailMat.alpha = 0;
     trail.material = this.trailMat;
     trail.isPickable = false;
-
-    this.aimReticle = new TransformNode('aimReticle', scene);
-    this.aimMat = glowMaterial('aimReticle', scene);
-    const aimRing = MeshBuilder.CreateTorus('aimRing', { diameter: 0.26, thickness: 0.035, tessellation: 32 }, scene);
-    const aimDot = MeshBuilder.CreateDisc('aimDot', { radius: 0.035, tessellation: 16 }, scene);
-    aimDot.rotation.x = Math.PI / 2;
-    for (const m of [aimRing, aimDot]) {
-      m.material = this.aimMat;
-      m.parent = this.aimReticle;
-      m.isPickable = false;
-    }
 
     this.marker = new TransformNode('marker', scene);
     this.approachMat = glowMaterial('approach', scene);
@@ -221,7 +207,12 @@ export class Renderer {
           ? { lunging: true, progress: p.dive.ticks / lunge }
           : { lunging: false, progress: (p.dive.ticks - lunge) / diveRecoveryTicks(t) }
         : null;
-      view.character.update(p, x, y, z, t.player.size, frameSeconds, charge, dive, world.waitingForServe);
+      // The server shows their aim only through their body (no marker): they
+      // face and lean toward it, swaying with the charge wobble.
+      const aiming = world.waitingForServe && world.winner === null && p.team === serverTeam(world);
+      const wobble = aiming ? serveWobble(world, p, t) : null;
+      const aim = wobble ? { x: world.serve.aim.x + wobble.x, z: world.serve.aim.z + wobble.z } : undefined;
+      view.character.update(p, x, y, z, t.player.size, frameSeconds, charge, dive, world.waitingForServe, aim);
       this.updateMeter(view.meter, charge?.power ?? null, x, y + 1.55 * t.player.size, z);
       // Reach rings are a debug aid only (they were confused with the timing rings).
       view.reachRing.isVisible = t.debug.showReach;
@@ -230,7 +221,6 @@ export class Renderer {
     });
 
     this.updateMarker(world, landing, t);
-    this.updateAimReticle(world, t);
     this.stadium.update(this.time);
     this.scene.render();
   }
@@ -355,7 +345,8 @@ export class Renderer {
       y: c.duelHeight,
       z: receiver.pos.z + (receiver.pos.z / away) * c.duelBack,
     };
-    const duelTarget = { x: server.pos.x * 0.35, y: 0.7, z: server.pos.z * 0.35 };
+    // Look across the net toward the server, about where the serve will come from.
+    const duelTarget = { x: server.pos.x * 0.6, y: 0.75, z: server.pos.z * 0.6 };
 
     const b = this.duelBlend;
     const pos = { x: lerp(broadcastPos.x, duelPos.x, b), y: lerp(broadcastPos.y, duelPos.y, b), z: lerp(broadcastPos.z, duelPos.z, b) };
@@ -367,25 +358,17 @@ export class Renderer {
     this.camera.position.set(pos.x, pos.y, pos.z);
     this.camera.setTarget(new Vector3(target.x, target.y, target.z));
     this.camera.fov = lerp(c.fov, c.duelFov, b);
+    // The camera is almost inside the receiver, so make them see-through.
+    world.players.forEach((p, i) => {
+      const receiving = p.team === world.nextReceiver;
+      this.players[i]?.character.setOpacity(receiving ? lerp(1, c.duelReceiverOpacity, b) : 1);
+    });
     this.yaw = Math.atan2(target.x - pos.x, target.z - pos.z);
   }
 
   /** The camera's yaw: 0 when looking along +z (the broadcast view), PI when looking back along -z. */
   viewYaw(): number {
     return this.yaw;
-  }
-
-  /** The server's aim on the net (plus their charge wobble), shown while waiting to serve. */
-  private updateAimReticle(world: World, t: Tuning): void {
-    const server = world.players.find((p) => p.team === serverTeam(world));
-    const show = world.waitingForServe && server !== undefined;
-    this.aimReticle.setEnabled(show);
-    if (!show || !server) return;
-    const wobble = serveWobble(world, server, t);
-    this.aimReticle.position.set(world.serve.aim.x + wobble.x, t.net.height + 0.02, world.serve.aim.z + wobble.z);
-    const color = TEAM_COLORS[server.team];
-    this.aimMat.emissiveColor = Color3.Lerp(color, new Color3(1, 1, 1), 0.35);
-    this.aimMat.alpha = 0.95;
   }
 
   private updateMarker(world: World, landing: LandingPrediction | null, t: Tuning): void {

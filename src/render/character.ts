@@ -132,6 +132,11 @@ export interface DiveView {
   progress: number;
 }
 
+// Serving: the server turns this many times further than their real aim
+// angle (so a small aim change is visible) and leans sideways into it.
+const SERVE_AIM_EXAGGERATION = 3;
+const SERVE_AIM_LEAN = 0.35;
+
 // Dive pose: how far the body pitches forward (radians) at full stretch.
 const DIVE_PITCH = 1.3;
 
@@ -304,6 +309,15 @@ export class Character {
     });
   }
 
+  private opacity = 1;
+
+  /** Fade the whole critter (1 = solid), e.g. when the camera is right behind it. */
+  setOpacity(alpha: number): void {
+    if (Math.abs(alpha - this.opacity) < 0.005) return;
+    this.opacity = alpha;
+    for (const mesh of this.root.getChildMeshes()) mesh.visibility = alpha;
+  }
+
   /** Play the pass or spike animation; call whenever this player swings. */
   playSwing(kind: ShotKind): void {
     const anim = SWING_ANIMS[kind];
@@ -322,6 +336,7 @@ export class Character {
     charge: ChargeView | null,
     dive: DiveView | null,
     faceNet = false,
+    serveAim?: { x: number; z: number },
   ): void {
     this.root.position.set(x, y, z);
     this.root.scaling.setAll(size);
@@ -330,6 +345,16 @@ export class Character {
     if (speed > 0.5) this.facing = Math.atan2(p.vel.x, p.vel.z);
     // Standing still while getting ready to serve: face the net.
     else if (faceNet) this.facing = Math.atan2(-x, -z);
+    // Serving: turn toward the aim, exaggerated so it's readable, and lean into it.
+    let aimTurn = 0;
+    if (serveAim) {
+      const toNet = Math.atan2(-x, -z);
+      const toAim = Math.atan2(serveAim.x - x, serveAim.z - z);
+      let delta = toAim - toNet;
+      delta = Math.atan2(Math.sin(delta), Math.cos(delta));
+      aimTurn = clamp(delta * SERVE_AIM_EXAGGERATION, -0.7, 0.7);
+      this.facing = toNet + aimTurn;
+    }
     this.root.rotation.y = this.facing;
 
     if (p.grounded && !this.wasGrounded) this.landTimer = LAND_SQUASH_TIME;
@@ -366,6 +391,7 @@ export class Character {
 
     this.bounce.position.y = hop + (anim ? sampleValue(anim.dip, phase) : 0);
     this.bounce.rotation.x = (anim ? sampleValue(anim.lean, phase) : 0) + run * 0.15;
+    this.bounce.rotation.z = -aimTurn * SERVE_AIM_LEAN;
     this.bounce.scaling.set(1 - stretch * 0.5, 1 + stretch + breathe, 1 - stretch * 0.5);
 
     // Tail swishes side to side while running, lifts when airborne.

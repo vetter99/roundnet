@@ -299,7 +299,11 @@ button to charge and releases to serve; the target wobbles more with charge,
 so power costs accuracy. Two tries: a serve that misses the net is a fault,
 two faults pass the serve. The duel camera stays through the return. Stick
 input follows the camera. Code: `src/sim/serve.ts`; tests in
-`src/sim/world.test.ts`. **Spin (added):** after release, pushing the stick
+`src/sim/world.test.ts`. **Since changed:** there's no aim marker; the
+server's body shows the aim (they turn and lean toward it, swaying with
+the charge wobble), so the receiver reads the server instead of a target.
+The receiver view is now near first person, with the receiver see-through.
+**Spin (added):** after release, pushing the stick
 sideways curves the serve in flight (slow serves bend more), and the net
 kicks it sideways the same way (`serve.spinCurve`, `serve.spinKick`). The CPU
 spins about half its serves; in CPU vs CPU about a third of serves go

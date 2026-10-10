@@ -32,7 +32,7 @@ const RANGES: Record<string, Ranges> = {
   camera: {
     pitchDeg: [10, 85], fov: [0.4, 1.3], minDistance: [4, 30], maxDistance: [8, 45], margin: [0.4, 1],
     zoomOutSpeed: [0.2, 15], zoomInSpeed: [0.2, 15], panSpeed: [0.2, 15], lookAhead: [0, 1.5],
-    duelBack: [0.5, 8], duelHeight: [0.5, 6], duelFov: [0.4, 1.4], duelBlendSpeed: [0.5, 10],
+    duelBack: [0, 8], duelHeight: [0.5, 6], duelFov: [0.4, 1.4], duelBlendSpeed: [0.5, 10], duelReceiverOpacity: [0, 1],
   },
 };
 

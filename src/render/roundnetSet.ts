@@ -1,6 +1,6 @@
 // The roundnet set: a woven net that sags slightly like a trampoline, a
 // glossy segmented frame with joints at each leg, elastic bands where the net
-// is attached, and legs that splay outward onto rubber feet. Visual only; the
+// is attached, and straight legs on rubber feet. Visual only; the
 // physics uses the radius/height from tuning.
 
 import type { ShadowGenerator } from '@babylonjs/core/Lights/Shadows/shadowGenerator';
@@ -17,9 +17,8 @@ import { TransformNode } from '@babylonjs/core/Meshes/transformNode';
 import type { Scene } from '@babylonjs/core/scene';
 
 const LEGS = 5;
-// How far the net dips at its center, and how far out the feet splay.
+// How far the net dips at its center.
 const SAG = 0.03;
-const LEG_SPLAY = 0.14;
 const BANDS = 40;
 
 const FRAME_YELLOW = new Color3(1, 0.82, 0.08);
@@ -166,7 +165,7 @@ export function buildRoundnetSet(scene: Scene, radius: number, frameWidth: numbe
     const sin = Math.sin(a);
     const tangent = new Vector3(-sin, 0, cos);
     const top = new Vector3(cos * rimRadius, height, sin * rimRadius);
-    const foot = new Vector3(cos * (rimRadius + LEG_SPLAY), 0.02, sin * (rimRadius + LEG_SPLAY));
+    const foot = new Vector3(cos * rimRadius, 0.02, sin * rimRadius);
 
     // A black joint coupling the frame segments at each leg.
     const joint = MeshBuilder.CreateCylinder('joint', { height: 0.1, diameter: frameWidth * 1.45, tessellation: 20 }, scene);
@@ -175,7 +174,7 @@ export function buildRoundnetSet(scene: Scene, radius: number, frameWidth: numbe
     joint.rotationQuaternion = alignY(tangent);
     caster(joint);
 
-    // The leg, angled outward from the joint down to a rubber foot.
+    // The leg, straight down from the joint to a rubber foot.
     const along = foot.subtract(top);
     const leg = MeshBuilder.CreateCylinder('leg', { height: along.length(), diameterTop: 0.034, diameterBottom: 0.028, tessellation: 16 }, scene);
     leg.material = black;

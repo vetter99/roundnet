@@ -17,7 +17,7 @@ export const DEFAULT_TUNING = {
   },
 
   ball: {
-    radius: 0.13,
+    radius: 0.11,
     // Fraction of velocity lost per second to air resistance.
     airDrag: 0.02,
   },
@@ -198,11 +198,14 @@ export const DEFAULT_TUNING = {
     // Seconds of player movement to look ahead, so running toward the camera
     // shows where you're going before you get there.
     lookAhead: 0.5,
-    // Serve duel camera: this far behind and this high above the receiver,
-    // with this field of view, easing in/out at duelBlendSpeed.
-    duelBack: 3.2,
-    duelHeight: 2.3,
-    duelFov: 0.85,
+    // Serve duel camera: nearly the receiver's point of view, this far behind
+    // and this high above their feet (about eye level), with this field of
+    // view, easing in/out at duelBlendSpeed. The receiver turns see-through.
+    duelBack: 0.9,
+    duelHeight: 1.35,
+    duelFov: 0.95,
+    // How see-through the receiver is in the duel view (1 = solid).
+    duelReceiverOpacity: 0.3,
     duelBlendSpeed: 3,
   },
 

@@ -56,8 +56,10 @@ src/main.ts           wires it together; fixed 60Hz loop with render interpolati
   double fault gives the receiver the point).
 - Serving is a duel (`src/sim/serve.ts`): the server aims a target on the net
   with the stick, holds a hit button to charge and releases; more charge =
-  more aim wobble. Two tries per serve. The renderer shows a camera behind the
-  receiver until the return, and human stick input follows the camera.
+  more aim wobble. Two tries per serve. No aim marker: the server turns and
+  leans toward the aim. The renderer shows a near first-person camera behind
+  the (see-through) receiver until the return; human stick input follows the
+  camera.
   `feedBall` (feeding the ball off the net) is only a test/practice helper.
 - Hits charge while the button is held and swing on release (`chargePower`).
 - Dives are automatic: swinging at a ball just out of reach dives for it
