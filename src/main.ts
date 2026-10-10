@@ -93,6 +93,12 @@ renderer.engine.runRenderLoop(() => {
 
 window.addEventListener('resize', () => renderer.resize());
 
+// Net hits by players in the current rally, and the best rally so far (jumbotron).
+let rally = 0;
+let bestRally = 0;
+// Consecutive perfect hits by you (Blue); the perfect ding rises with it.
+let playerPerfectStreak = 0;
+
 // Latest details for the dev stats panel.
 type HitEvent = Extract<SimEvent, { type: 'hit' }>;
 type NetEvent = Extract<SimEvent, { type: 'net' }>;
@@ -109,17 +115,26 @@ function onEvent(e: SimEvent): void {
   } else if (e.type === 'hit') {
     lastHit = e;
     lastMiss = null;
-    sfx.hit(e.kind, e.power, e.quality);
+    const mine = world.players[e.playerId].team === 0;
+    sfx.hit(e.kind, e.power, e.quality, mine);
+    if (mine) playerPerfectStreak = e.quality >= 1 ? playerPerfectStreak + 1 : 0;
     if (e.quality >= 1) {
-      showFlash('Perfect', '#5ee07a', 0.45);
-      sfx.perfect();
+      if (mine) showFlash('Perfect', '#5ee07a', 0.45);
+      sfx.perfect(mine, mine ? playerPerfectStreak - 1 : 0);
     }
   } else if (e.type === 'net') {
     lastNet = e;
+    // The serve's bounce doesn't count; every player hit that reaches the net does.
+    if (world.lastHitKind !== null) {
+      rally++;
+      bestRally = Math.max(bestRally, rally);
+      renderer.setRally(rally, bestRally);
+    }
     renderer.netImpact(e.speed);
     sfx.net(e.speed);
   } else if (e.type === 'ground') {
     sfx.ground();
+    rally = 0;
   } else if (e.type === 'dive') {
     sfx.swing(1);
   } else if (e.type === 'diveLand') {
@@ -225,6 +240,6 @@ function updateHud(frameSeconds: number, devices: [Device, Device]): void {
   const sound = sfx.muted ? 'Sound muted (M)' : 'M mute';
   help.textContent =
     `${sound}   |   Blue: ${deviceName(devices[0])} · Red: ${deviceName(devices[1])}   |   ` +
-    `Controller: stick move · hold A pass/serve · hold B spike · X dive · Y jump · View reset ball   |   ` +
-    `Keyboard: WASD · hold J pass/serve · hold K spike · L dive · Space jump · R reset ball · \` tuning`;
+    `Controller: stick move · hold A pass/serve · hold B spike (out of reach = auto dive) · Y jump · View reset ball   |   ` +
+    `Keyboard: WASD · hold J pass/serve · hold K spike · Space jump · R reset ball · \` tuning`;
 }

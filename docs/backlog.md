@@ -16,6 +16,33 @@ and shouldn't need a manual. (Playtest 1: "Mechanics are simple and
 straightforward. Need to think more on how to improve them without ruining
 the arcadey vibe.")
 
+## Style direction (decided 2026-10-10)
+
+Agreed in a Q&A with the project lead; use these when working on ART, AUDIO
+and UX cards.
+
+- **Art style:** bright Nintendo cartoon: saturated colors, chunky rounded
+  shapes, sunny midday lighting.
+- **Setting:** a park lawn inside a **full stadium bowl**: bright modern arena
+  with **nature-shaped structures** (tree-trunk light towers, leaf canopies),
+  stands at medium distance (~18 m), park details (flowers, bushes, a few
+  trees) on the field, trees visible beyond the stands, a jumbotron.
+- **Crowd:** cardboard cutouts of **all kinds of wildlife**, bobbing and
+  waving. **No crowd audio.**
+- **Critters:** squirrel, chipmunk, raccoon, fox, rabbit, hedgehog, frog,
+  otter, beaver, each with a **unique body shape**. **Looks only** (no stat
+  differences). Teams wear **full kits** (jersey, shorts, wristbands/headband).
+- **Animation:** snappy and exaggerated (big squash and stretch,
+  anticipation, follow-through). Reactions for now: **idle fidgets** only.
+- **Sound:** **cartoon pop/thwack** hits, a **coin-style "ding"** on perfects.
+  **Music:** upbeat cartoon sports (to be chosen from free-license options).
+- **UI:** **bold sporty** lettering.
+- **Ball:** dimpled yellow ball with a **subtle speed trail** on fast spikes.
+- **Ground markers:** keep the timing rings as they are; **remove the
+  team-colored circle under the player** (it was confused with the rings).
+- **Jumbotron:** placeholder game logo ("ROUNDNET") and a rally counter with
+  a best-rally record. No game name yet.
+
 ## Where things stand (2026-10-10)
 
 - 1v1 mechanics sandbox: you (Blue) vs. a CPU (Red). No scoring.

@@ -22,7 +22,6 @@ const KEYS = {
   left: ['KeyA', 'ArrowLeft'],
   right: ['KeyD', 'ArrowRight'],
   jump: ['Space'],
-  dive: ['KeyL'],
   pass: ['KeyJ'],
   spike: ['KeyK'],
   feed: ['KeyR'],
@@ -59,7 +58,6 @@ export class LocalInput {
       moveX: (isHeld(KEYS.right) ? 1 : 0) - (isHeld(KEYS.left) ? 1 : 0),
       moveZ: (isHeld(KEYS.up) ? 1 : 0) - (isHeld(KEYS.down) ? 1 : 0),
       jump: wasPressed(KEYS.jump),
-      dive: wasPressed(KEYS.dive),
       // Held, not pressed: holding charges the hit and releasing swings.
       pass: isHeld(KEYS.pass),
       spike: isHeld(KEYS.spike),
@@ -90,7 +88,6 @@ export class LocalInput {
       pass: down(PAD.A) || down(PAD.LB) || down(PAD.LT),
       spike: down(PAD.B) || down(PAD.RB) || down(PAD.RT),
       jump: edge(PAD.Y),
-      dive: edge(PAD.X),
       feed: edge(PAD.VIEW),
     };
     const sx = pad.axes[0] ?? 0;

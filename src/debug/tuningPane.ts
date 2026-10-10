@@ -21,14 +21,14 @@ const RANGES: Record<string, Ranges> = {
     perfectWindow: [0, 0.6], qualityFalloff: [0.1, 2], passUpSpeedMin: [2, 15], passUpSpeedMax: [2, 18], passHorizontalSpeed: [0, 6],
     inputBufferTicks: [0, 20, 1], cooldownTicks: [0, 40, 1],
   },
-  'player.dive': { speed: [2, 15], duration: [0.1, 0.8], recovery: [0, 1.5], reachOffset: [0, 1.5], reachBonus: [0, 1.5], highReach: [0, 2], contactHeight: [0.2, 1.5], powerScale: [0, 1] },
-  court: { serveLineDistance: [1, 5] },
+  'player.dive': { speed: [2, 15], duration: [0.1, 0.8], recovery: [0, 1.5], reachOffset: [0, 1.5], reachBonus: [0, 1.5], highReach: [0, 2], contactHeight: [0.2, 1.5], powerScale: [0, 1], autoRange: [0, 4] },
+  court: { serveLineDistance: [1, 5], noSpikeZoneDistance: [0, 1.5], lineWidth: [0.01, 0.2] },
   marker: { maxRadius: [0.2, 2.5], targetRadius: [0.05, 1], approachTime: [0.2, 3] },
   practice: { resetDelayTicks: [0, 180, 1], feedDistance: [0.8, 4], feedHeight: [0.5, 4], feedSpeed: [2, 15] },
   audio: { volume: [0, 1], music: [0, 1] },
   camera: {
     pitchDeg: [10, 85], fov: [0.4, 1.3], minDistance: [4, 30], maxDistance: [8, 45], margin: [0.4, 1],
-    zoomOutSpeed: [0.2, 15], zoomInSpeed: [0.2, 15], panSpeed: [0.2, 15],
+    zoomOutSpeed: [0.2, 15], zoomInSpeed: [0.2, 15], panSpeed: [0.2, 15], lookAhead: [0, 1.5],
   },
 };
 

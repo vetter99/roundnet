@@ -24,11 +24,10 @@ function setup() {
 describe('LocalInput gamepad', () => {
   afterEach(() => vi.unstubAllGlobals());
 
-  it('maps A to pass, B to spike, X to dive, Y to jump, View to reset', () => {
-    const cases: [number, 'pass' | 'spike' | 'jump' | 'dive' | 'feed'][] = [
+  it('maps A to pass, B to spike, Y to jump, View to reset', () => {
+    const cases: [number, 'pass' | 'spike' | 'jump' | 'feed'][] = [
       [0, 'pass'],
       [1, 'spike'],
-      [2, 'dive'],
       [3, 'jump'],
       [8, 'feed'],
     ];

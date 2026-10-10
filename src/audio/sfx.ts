@@ -71,24 +71,40 @@ export class Sfx {
     }
   }
 
-  /** The ball is struck: a punchy smack for spikes, a softer bump for passes. */
-  hit(kind: HitKind, power: number, quality: number): void {
-    const loud = 0.5 + 0.5 * power;
+  /**
+   * The ball is struck, cartoon style: a big thwack for spikes, a bouncy pop
+   * for passes. Every hit is clearly audible; power adds weight and
+   * brightness rather than deciding whether you hear it. The CPU's hits play
+   * quieter (`mine` = false) so your own stand out.
+   */
+  hit(kind: HitKind, power: number, quality: number, mine: boolean): void {
+    const loud = (0.8 + 0.2 * power) * (mine ? 1 : 0.6);
     if (kind === 'spike') {
-      this.noiseBurst({ freq: 1600 + power * 1800, q: 1.2, gain: 0.55 * loud, attack: 0.002, decay: 0.07 });
-      this.tone({ type: 'sine', from: 220 + power * 80, to: 90, gain: 0.5 * loud, decay: 0.12 });
+      // Sharp click, a slap of noise, and a falling "thwack" body.
+      this.noiseBurst({ freq: 2600 + power * 1400, q: 0.9, gain: 0.5 * loud, attack: 0.001, decay: 0.035 });
+      this.noiseBurst({ freq: 900, freqTo: 400, q: 0.7, gain: 0.45 * loud, attack: 0.002, decay: 0.09 });
+      this.tone({ type: 'triangle', from: 330 + power * 120, to: 85, gain: 0.55 * loud, decay: 0.14 });
     } else {
-      this.tone({ type: 'triangle', from: 480 + power * 160, to: 380, gain: 0.35 * loud, decay: 0.1 });
-      this.noiseBurst({ freq: 900, q: 0.8, gain: 0.2 * loud, attack: 0.002, decay: 0.05 });
+      // A rubbery "pop": a quick upward blip and a soft body.
+      this.tone({ type: 'sine', from: 420, to: 780 + power * 200, gain: 0.45 * loud, decay: 0.07 });
+      this.tone({ type: 'triangle', from: 260, to: 200, gain: 0.3 * loud, decay: 0.09 });
+      this.noiseBurst({ freq: 1500, q: 1, gain: 0.18 * loud, attack: 0.001, decay: 0.03 });
     }
-    // Mistimed hits sound duller: a low clunk on top.
-    if (quality < 0.6) this.tone({ type: 'square', from: 140, to: 110, gain: 0.08, decay: 0.08 });
+    // Mistimed hits get a dull clunk on top.
+    if (quality < 0.6) this.tone({ type: 'square', from: 140, to: 110, gain: 0.1 * loud, decay: 0.08 });
   }
 
-  /** A perfectly timed hit: a quick bright two-note chime. */
-  perfect(): void {
-    this.tone({ type: 'sine', from: 1320, to: 1320, gain: 0.18, decay: 0.12, delay: 0.02 });
-    this.tone({ type: 'sine', from: 1760, to: 1760, gain: 0.16, decay: 0.16, delay: 0.08 });
+  /**
+   * A perfectly timed hit: a coin-style two-note "ding" (a fourth apart).
+   * For your own hits it's bright and full, and rises a semitone with each
+   * consecutive perfect (`streak` 0, 1, 2...); the CPU gets a softer version.
+   */
+  perfect(mine: boolean, streak = 0): void {
+    const base = 988 * Math.pow(2, Math.min(streak, 7) / 12);
+    const gain = mine ? 0.2 : 0.07;
+    this.tone({ type: 'square', from: base, to: base, gain, decay: 0.07, delay: 0.015 });
+    this.tone({ type: 'square', from: base * 4 / 3, to: base * 4 / 3, gain, decay: 0.32, delay: 0.085 });
+    if (mine) this.tone({ type: 'sine', from: base * 2, to: base * 2, gain: 0.08, decay: 0.3, delay: 0.085 });
   }
 
   /** The ball hits the net: a springy trampoline "boing", louder for harder hits. */

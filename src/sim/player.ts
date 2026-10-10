@@ -18,11 +18,9 @@ export interface Intent {
   // Spike and pass are held state: holding charges the hit, releasing swings.
   spike: boolean;
   pass: boolean;
-  // Dive is a press this tick (an edge).
-  dive: boolean;
 }
 
-export const NEUTRAL_INTENT: Intent = { moveX: 0, moveZ: 0, jump: false, spike: false, pass: false, dive: false };
+export const NEUTRAL_INTENT: Intent = { moveX: 0, moveZ: 0, jump: false, spike: false, pass: false };
 
 export interface Player {
   id: number;
@@ -39,6 +37,7 @@ export interface Player {
   cooldown: number;
   // An active dive: a short lunge (where you can still pass or spike with
   // extra reach), then lying on the ground recovering. `ticks` counts up from 0.
+  // Dives start automatically (see autoDiveTarget in hit.ts), not from a button.
   dive: { ticks: number; dirX: number; dirZ: number } | null;
 }
 
@@ -95,7 +94,6 @@ export function stepPlayer(p: Player, intent: Intent, t: Tuning): Swing | null {
   const stick = stickOf(intent);
   const moving = stick.x !== 0 || stick.z !== 0;
 
-  if (intent.dive && !p.dive && p.grounded) startDive(p, stick);
   if (p.dive) return stepDive(p, intent, t);
 
   // Accelerate horizontal velocity toward the stick's target velocity.
@@ -136,19 +134,8 @@ export function stepPlayer(p: Player, intent: Intent, t: Tuning): Swing | null {
   return stepHitButtons(p, intent, t);
 }
 
-/** Dive toward the stick, or the way you're already moving if it's centered. */
-function startDive(p: Player, stick: { x: number; z: number }): void {
-  let dx = stick.x;
-  let dz = stick.z;
-  if (Math.hypot(dx, dz) < 0.2) {
-    dx = p.vel.x;
-    dz = p.vel.z;
-  }
-  if (Math.hypot(dx, dz) < 1e-3) {
-    // Standing still with the stick centered: dive toward the net.
-    dx = -p.pos.x;
-    dz = -p.pos.z;
-  }
+/** Start a dive in direction (dx, dz). */
+export function startDive(p: Player, dx: number, dz: number): void {
   const len = Math.hypot(dx, dz) || 1;
   p.dive = { ticks: 0, dirX: dx / len, dirZ: dz / len };
 }

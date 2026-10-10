@@ -1,7 +1,7 @@
 import type { Tuning } from '../config/tuning';
 import { createBall, launchBallAt, netContactHeight, stepBall, type Ball, type BallEvent } from './ball';
-import { missReason, tryHit, type HitResult, type MissReason } from './hit';
-import { createPlayer, diveTicks, NEUTRAL_INTENT, stepPlayer, type HitKind, type Intent, type Player } from './player';
+import { autoDiveTarget, missReason, tryHit, type HitResult, type MissReason } from './hit';
+import { createPlayer, diveTicks, NEUTRAL_INTENT, startDive, stepPlayer, type HitKind, type Intent, type Player } from './player';
 
 export type Team = 0 | 1;
 
@@ -110,6 +110,12 @@ export function stepWorld(world: World, intents: readonly Intent[], t: Tuning): 
 
   const turn = { possession: world.possession };
   world.players.forEach((p, i) => {
+    // A swing at a ball just out of reach turns into a dive automatically.
+    const diveTo = autoDiveTarget(p, world.ball, t, turn);
+    if (diveTo) {
+      startDive(p, diveTo.x - p.pos.x, diveTo.z - p.pos.z);
+      world.events.push({ type: 'dive', playerId: p.id });
+    }
     const hit = tryHit(p, world.ball, intents[i] ?? NEUTRAL_INTENT, t, turn);
     if (hit) {
       world.events.push({ type: 'hit', ...hit });

@@ -92,6 +92,39 @@ export function contactHeightOf(p: Player, t: Tuning): number {
   return isDiving(p, t) ? t.player.dive.contactHeight : t.player.contactHeight;
 }
 
+// How far ahead (ticks) to look for where the ball will be when choosing a dive direction.
+const DIVE_AIM_TICKS = 10;
+
+/**
+ * Automatic dives (like Mario Tennis 64): if a player has released a hit but
+ * the ball is just out of reach, and it won't come into reach on its own
+ * before the swing expires, return where to dive (the ball's position a moment
+ * from now). Null means don't dive: the ball is reachable anyway, too far, too
+ * high, or not this player's to play.
+ */
+export function autoDiveTarget(p: Player, ball: Ball, t: Tuning, turn?: Turn): Vec3 | null {
+  if (!p.hitBuffer || p.dive || !p.grounded) return null;
+  if (missReason(p, ball, t, turn) !== 'tooFar') return null;
+
+  const sim = cloneBall(ball);
+  const events: BallEvent[] = [];
+  let aim: Vec3 | null = null;
+  const lookTicks = Math.max(p.hitBuffer.ticksLeft, DIVE_AIM_TICKS);
+  for (let tick = 1; tick <= lookTicks && sim.alive; tick++) {
+    events.length = 0;
+    stepBall(sim, t, events);
+    // If it drifts into standing reach before the swing expires, no need to dive.
+    if (tick <= p.hitBuffer.ticksLeft && missReason(p, sim, t, turn) === null) return null;
+    if (tick === DIVE_AIM_TICKS) aim = { ...sim.pos };
+  }
+  aim ??= { ...sim.pos };
+
+  const distance = Math.hypot(aim.x - p.pos.x, aim.z - p.pos.z);
+  if (distance > t.player.reach + t.player.dive.autoRange) return null;
+  if (aim.y > p.pos.y + t.player.dive.contactHeight + t.player.dive.highReach) return null;
+  return aim;
+}
+
 /** Why a swing right now would not connect, or null if it would. */
 export function missReason(p: Player, ball: Ball, t: Tuning, turn?: Turn): MissReason | null {
   if (p.cooldown > 0) return 'cooldown';

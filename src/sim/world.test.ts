@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { createTuning } from '../config/tuning';
 import { stepBall, type BallEvent } from './ball';
-import { hitQuality, tryHit } from './hit';
-import { createPlayer, NEUTRAL_INTENT, stepPlayer, type Intent } from './player';
+import { autoDiveTarget, hitQuality, tryHit } from './hit';
+import { createPlayer, NEUTRAL_INTENT, startDive, stepPlayer, type Intent } from './player';
 import { createWorld, serve, stepWorld, type SimEvent, type World } from './world';
 
 const t = createTuning();
@@ -81,7 +81,6 @@ describe('world', () => {
     jump: tick % 45 === 0,
     spike: tick % 17 < 4,
     pass: tick % 29 < 6,
-    dive: tick % 97 === 0,
   });
 
   it('is deterministic: same inputs give the exact same state', () => {
@@ -309,13 +308,23 @@ describe('spike targeting', () => {
 });
 
 describe('dive', () => {
-  const diveIntent = (x: number, z: number): Intent => ({ ...NEUTRAL_INTENT, moveX: x, moveZ: z, dive: true });
+  /** Start a dive along (x, z) and run its first tick. */
+  const dive = (p: ReturnType<typeof createPlayer>, x: number, z: number) => {
+    startDive(p, x, z);
+    stepPlayer(p, NEUTRAL_INTENT, t);
+  };
+  const ballAt = (x: number, y: number, z: number, vx = 0, vy = -1, vz = 0) => ({
+    pos: { x, y, z },
+    vel: { x: vx, y: vy, z: vz },
+    alive: true,
+    lastTouch: 'net' as const,
+  });
 
   it('lunges further than running in the same time, then stays down', () => {
     const diver = createPlayer(0, 0, -3, -3);
     const runner = createPlayer(1, 0, -3, -3);
     const lunge = Math.round(t.player.dive.duration * 60);
-    stepPlayer(diver, diveIntent(1, 0), t);
+    dive(diver, 1, 0);
     stepPlayer(runner, { ...NEUTRAL_INTENT, moveX: 1 }, t);
     for (let i = 1; i < lunge; i++) {
       stepPlayer(diver, { ...NEUTRAL_INTENT, moveX: 1 }, t);
@@ -334,16 +343,10 @@ describe('dive', () => {
 
   it('can hit a ball out of normal reach while lunging, with less power', () => {
     const p = createPlayer(0, 0, 0, -2.5);
-    stepPlayer(p, diveIntent(1, 0), t);
+    dive(p, 1, 0);
     p.hitBuffer = { kind: 'pass', ticksLeft: 5, power: 1 };
     // Beyond standing reach, but within dive reach, at dive contact height.
-    const ball = {
-      pos: { x: p.pos.x + t.player.reach + 0.3, y: t.player.dive.contactHeight, z: p.pos.z },
-      vel: { x: 0, y: -1, z: 0 },
-      alive: true,
-      lastTouch: 'net' as const,
-    };
-    const hit = tryHit(p, ball, NEUTRAL_INTENT, t)!;
+    const hit = tryHit(p, ballAt(p.pos.x + t.player.reach + 0.3, t.player.dive.contactHeight, p.pos.z), NEUTRAL_INTENT, t)!;
     expect(hit).not.toBeNull();
     expect(hit.power).toBeCloseTo(t.player.dive.powerScale);
     expect(hit.quality).toBe(1);
@@ -351,17 +354,15 @@ describe('dive', () => {
 
   it('measures dive reach from the outstretched paws, ahead of the feet', () => {
     const p = createPlayer(0, 0, 0, -3);
-    stepPlayer(p, diveIntent(1, 0), t);
-    // Released early in the lunge: the hit waits for the ball to come into reach.
+    dive(p, 1, 0);
     p.hitBuffer = { kind: 'pass', ticksLeft: 1, power: 1 };
     const ahead = t.player.dive.reachOffset + t.player.reach + t.player.dive.reachBonus - 0.1;
-    const ball = { pos: { x: p.pos.x + ahead, y: 1.2, z: p.pos.z }, vel: { x: 0, y: -1, z: 0 }, alive: true, lastTouch: 'net' as const };
-    expect(tryHit(p, ball, NEUTRAL_INTENT, t)).not.toBeNull();
+    expect(tryHit(p, ballAt(p.pos.x + ahead, 1.2, p.pos.z), NEUTRAL_INTENT, t)).not.toBeNull();
   });
 
   it('keeps a mid-lunge hit ready until the lunge ends', () => {
     const p = createPlayer(0, 0, 0, -3);
-    stepPlayer(p, diveIntent(1, 0), t);
+    dive(p, 1, 0);
     stepPlayer(p, { ...NEUTRAL_INTENT, pass: true }, t);
     stepPlayer(p, NEUTRAL_INTENT, t); // release: the swing is buffered
     const lunge = Math.round(t.player.dive.duration * 60);
@@ -369,17 +370,71 @@ describe('dive', () => {
     expect(p.hitBuffer).not.toBeNull();
   });
 
-  it("can't hit while getting back up, and can't dive in the air", () => {
+  it("can't hit while getting back up", () => {
     const p = createPlayer(0, 0, 0, -2.5);
-    stepPlayer(p, diveIntent(1, 0), t);
+    dive(p, 1, 0);
     for (let i = 0; i < Math.round(t.player.dive.duration * 60) + 2; i++) stepPlayer(p, NEUTRAL_INTENT, t);
     p.hitBuffer = { kind: 'pass', ticksLeft: 5, power: 1 };
-    const ball = { pos: { ...p.pos, y: t.player.contactHeight }, vel: { x: 0, y: -1, z: 0 }, alive: true, lastTouch: 'net' as const };
-    expect(tryHit(p, ball, NEUTRAL_INTENT, t)).toBeNull();
-
-    const jumper = createPlayer(1, 0, 0, -2.5);
-    stepPlayer(jumper, { ...NEUTRAL_INTENT, jump: true }, t);
-    stepPlayer(jumper, diveIntent(1, 0), t);
-    expect(jumper.dive).toBeNull();
+    expect(tryHit(p, ballAt(p.pos.x, t.player.contactHeight, p.pos.z), NEUTRAL_INTENT, t)).toBeNull();
   });
 });
+
+describe('automatic dive', () => {
+  const swingingPlayer = () => {
+    const p = createPlayer(0, 0, 0, -3);
+    p.hitBuffer = { kind: 'pass', ticksLeft: 8, power: 0.5 };
+    return p;
+  };
+  const ballAt = (x: number, y: number, z: number, vx = 0, vy = -1, vz = 0) => ({
+    pos: { x, y, z },
+    vel: { x: vx, y: vy, z: vz },
+    alive: true,
+    lastTouch: 'net' as const,
+  });
+
+  it('dives toward a ball just out of reach', () => {
+    const p = swingingPlayer();
+    const target = autoDiveTarget(p, ballAt(p.pos.x + t.player.reach + 1, 0.9, p.pos.z), t);
+    expect(target).not.toBeNull();
+    expect(target!.x).toBeGreaterThan(p.pos.x);
+  });
+
+  it("doesn't dive when the ball is coming into reach anyway", () => {
+    const p = swingingPlayer();
+    // Moving toward the player fast enough to arrive before the swing expires.
+    const ball = ballAt(p.pos.x + t.player.reach + 0.4, 1.3, p.pos.z, -6, 0);
+    expect(autoDiveTarget(p, ball, t)).toBeNull();
+  });
+
+  it("doesn't dive for a ball far beyond diving range, or without a swing", () => {
+    const p = swingingPlayer();
+    expect(autoDiveTarget(p, ballAt(p.pos.x + t.player.reach + t.player.dive.autoRange + 1.5, 0.9, p.pos.z), t)).toBeNull();
+    p.hitBuffer = null;
+    expect(autoDiveTarget(p, ballAt(p.pos.x + t.player.reach + 1, 0.9, p.pos.z), t)).toBeNull();
+  });
+
+  it("doesn't dive while in the air", () => {
+    const p = swingingPlayer();
+    p.grounded = false;
+    expect(autoDiveTarget(p, ballAt(p.pos.x + t.player.reach + 1, 0.9, p.pos.z), t)).toBeNull();
+  });
+
+  it('in a rally, swinging at a ball just out of reach dives and makes the hit', () => {
+    const world = createWorld();
+    serve(world, 0, t);
+    const p = world.players[0];
+    world.possession = 0;
+    world.ball.lastTouch = 'net';
+    world.ball.pos = { x: p.pos.x + t.player.reach + 1, y: 1.0, z: p.pos.z };
+    world.ball.vel = { x: 0, y: -1.5, z: 0 };
+    stepWorld(world, [{ ...NEUTRAL_INTENT, pass: true }], t);
+    const events: string[] = [];
+    for (let i = 0; i < 30; i++) {
+      stepWorld(world, [], t);
+      events.push(...world.events.map((e) => e.type));
+    }
+    expect(events).toContain('dive');
+    expect(events).toContain('hit');
+  });
+});
+

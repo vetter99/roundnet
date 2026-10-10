@@ -6,8 +6,10 @@ import { HemisphericLight } from '@babylonjs/core/Lights/hemisphericLight';
 import { StandardMaterial } from '@babylonjs/core/Materials/standardMaterial';
 import { Color3, Color4 } from '@babylonjs/core/Maths/math.color';
 import { Vector3 } from '@babylonjs/core/Maths/math.vector';
-import type { Mesh } from '@babylonjs/core/Meshes/mesh';
+import { Mesh } from '@babylonjs/core/Meshes/mesh';
+import { VertexData } from '@babylonjs/core/Meshes/mesh.vertexData';
 import { MeshBuilder } from '@babylonjs/core/Meshes/meshBuilder';
+import { TrailMesh } from '@babylonjs/core/Meshes/trailMesh';
 import { TransformNode } from '@babylonjs/core/Meshes/transformNode';
 import { Scene } from '@babylonjs/core/scene';
 import type { Tuning } from '../config/tuning';
@@ -17,6 +19,9 @@ import type { HitKind } from '../sim/player';
 import { DT } from '../sim/time';
 import { cameraPosition, frame, type Framing } from './cameraFraming';
 import { Character, FUR } from './character';
+import { addHaze, createBallMaterial, createLawn, createNetMaterial, createScenery, createShadows, SKY } from './environment';
+import { createStadium, type Stadium } from './stadium';
+import type { ShadowGenerator } from '@babylonjs/core/Lights/Shadows/shadowGenerator';
 import { chargePower, diveRecoveryTicks, diveTicks } from '../sim/player';
 import { clamp, lerp, type Vec3 } from '../sim/vec';
 import type { World } from '../sim/world';
@@ -48,6 +53,12 @@ interface ChargeMeter {
   fillMat: StandardMaterial;
 }
 
+// The ball's speed trail fades in between these speeds (m/s), so only fast
+// spikes leave a streak.
+const TRAIL_MIN_SPEED = 9;
+const TRAIL_FULL_SPEED = 14;
+const TRAIL_MAX_ALPHA = 0.45;
+
 const METER_WIDTH = 0.5;
 const METER_HEIGHT = 0.07;
 const METER_LOW = new Color3(1, 0.85, 0.2);
@@ -61,6 +72,7 @@ export class Renderer {
   readonly scene: Scene;
   private readonly camera: UniversalCamera;
   private readonly ball: Mesh;
+  private readonly trailMat: StandardMaterial;
   // Landing spot + timing guide: a fixed target ring and an approach ring
   // that shrinks onto it as the ball nears the PERFECT moment.
   private readonly marker: TransformNode;
@@ -73,6 +85,8 @@ export class Renderer {
   private netSurface: Mesh | null = null;
   // Trampoline wobble after the ball hits the net: a decaying spring.
   private netWobble = { amplitude: 0, time: 0 };
+  private readonly shadows: ShadowGenerator;
+  private readonly stadium: Stadium;
   private readonly ballShadow: Mesh;
   private readonly ballShadowMat: StandardMaterial;
   private courtKey = '';
@@ -83,19 +97,26 @@ export class Renderer {
   constructor(canvas: HTMLCanvasElement) {
     this.engine = new Engine(canvas, true, { stencil: true });
     const scene = (this.scene = new Scene(this.engine));
-    scene.clearColor = new Color4(0.55, 0.75, 0.95, 1);
+    scene.clearColor = new Color4(SKY.r, SKY.g, SKY.b, 1);
 
     this.camera = new UniversalCamera('broadcast', new Vector3(0, 7, -10), scene);
     this.camera.inputs.clear();
 
+    // Bright, warm afternoon light: a sky fill plus a sun that casts soft shadows.
     const hemi = new HemisphericLight('sky', new Vector3(0, 1, 0), scene);
-    hemi.intensity = 0.75;
-    hemi.groundColor = new Color3(0.35, 0.4, 0.35);
-    const sun = new DirectionalLight('sun', new Vector3(-0.4, -1, 0.6), scene);
-    sun.intensity = 0.6;
+    hemi.intensity = 0.55;
+    hemi.diffuse = new Color3(1, 0.98, 0.93);
+    hemi.groundColor = new Color3(0.38, 0.46, 0.33);
+    const sun = new DirectionalLight('sun', new Vector3(-0.45, -1, 0.35), scene);
+    sun.position = new Vector3(13, 30, -10);
+    sun.intensity = 1.05;
+    sun.diffuse = new Color3(1, 0.95, 0.85);
+    this.shadows = createShadows(sun);
 
-    const grass = MeshBuilder.CreateGround('grass', { width: 60, height: 60 }, scene);
-    grass.material = flatMaterial('grass', new Color3(0.3, 0.55, 0.28), scene);
+    createLawn(scene);
+    createScenery(scene);
+    this.stadium = createStadium(scene);
+    addHaze(scene);
 
     // A soft dark disc under the ball; it shrinks and fades as the ball rises.
     this.ballShadow = MeshBuilder.CreateDisc('ballShadow', { radius: 1, tessellation: 32 }, scene);
@@ -106,9 +127,16 @@ export class Renderer {
     this.ballShadow.material = this.ballShadowMat;
 
     this.ball = MeshBuilder.CreateSphere('ball', { diameter: 1, segments: 20 }, scene);
-    const ballMat = flatMaterial('ball', new Color3(1, 0.88, 0.1), scene);
-    ballMat.emissiveColor = new Color3(0.25, 0.2, 0);
-    this.ball.material = ballMat;
+    this.ball.material = createBallMaterial(scene);
+    // A faint streak behind fast spikes.
+    const trail = new TrailMesh('ballTrail', this.ball, scene, { diameter: 0.16, length: 14, sections: 6, autoStart: true });
+    this.trailMat = flatMaterial('ballTrail', new Color3(1, 0.95, 0.7), scene);
+    this.trailMat.disableLighting = true;
+    this.trailMat.emissiveColor = new Color3(1, 0.95, 0.7);
+    this.trailMat.backFaceCulling = false;
+    this.trailMat.alpha = 0;
+    trail.material = this.trailMat;
+    trail.isPickable = false;
 
     this.marker = new TransformNode('marker', scene);
     this.approachMat = glowMaterial('approach', scene);
@@ -143,6 +171,9 @@ export class Renderer {
     this.ball.scaling.setAll(t.ball.radius * 2);
     // No ball on court between rallies; it reappears with the serve.
     this.ball.isVisible = !world.waitingForServe;
+    const v = world.ball.vel;
+    const fast = clamp((Math.hypot(v.x, v.y, v.z) - TRAIL_MIN_SPEED) / (TRAIL_FULL_SPEED - TRAIL_MIN_SPEED), 0, 1);
+    this.trailMat.alpha = world.ball.alive ? fast * TRAIL_MAX_ALPHA : 0;
     this.updateBallShadow(this.ball.position, world.ball.alive, t);
     this.updateNetWobble(frameSeconds, t);
 
@@ -161,14 +192,14 @@ export class Renderer {
         : null;
       view.character.update(p, x, y, z, t.player.size, frameSeconds, charge, dive);
       this.updateMeter(view.meter, charge?.power ?? null, x, y + 1.55 * t.player.size, z);
-      // A team-colored ring marks the player(s) whose ball it is.
-      const myBall = p.team === world.possession && world.ball.alive && world.ball.lastTouch !== 'feed';
-      view.reachRing.isVisible = myBall || t.debug.showReach;
+      // Reach rings are a debug aid only (they were confused with the timing rings).
+      view.reachRing.isVisible = t.debug.showReach;
       view.reachRing.position.set(x, 0.02, z);
       view.reachRing.scaling.set(t.player.reach, 1, t.player.reach);
     });
 
     this.updateMarker(world, landing, t);
+    this.stadium.update(this.time);
     this.scene.render();
   }
 
@@ -212,6 +243,11 @@ export class Renderer {
     meter.fillMat.emissiveColor = power >= 1 && Math.sin(this.time * 30) > 0 ? new Color3(1, 1, 1) : color;
   }
 
+  /** Show the rally length and best rally on the jumbotron. */
+  setRally(rally: number, best: number): void {
+    this.stadium.setRally(rally, best);
+  }
+
   /** Play the pass or spike animation for a player. */
   playSwing(playerId: number, kind: HitKind): void {
     this.players[playerId]?.character.playSwing(kind);
@@ -224,6 +260,8 @@ export class Renderer {
     const points = [{ x: 0, y: t.net.height, z: 0 }];
     for (const p of world.players) {
       points.push({ x: p.pos.x, y: p.pos.y, z: p.pos.z }, { x: p.pos.x, y: p.pos.y + t.player.contactHeight, z: p.pos.z });
+      // Where they'll be shortly, so the camera leads their movement.
+      points.push({ x: p.pos.x + p.vel.x * c.lookAhead, y: 0, z: p.pos.z + p.vel.z * c.lookAhead });
     }
     if (world.ball.alive) points.push({ ...world.ball.pos });
     if (landing) {
@@ -293,6 +331,7 @@ export class Renderer {
   private createPlayerView(team: 0 | 1): PlayerView {
     const scene = this.scene;
     const character = new Character(scene, TEAM_COLORS[team], team === 0 ? FUR.red : FUR.gray);
+    for (const mesh of character.root.getChildMeshes()) this.shadows.addShadowCaster(mesh);
 
     const reachRing = MeshBuilder.CreateTorus('reach', { diameter: 2, thickness: 0.04, tessellation: 48 }, scene);
     const reachMat = flatMaterial('reach', TEAM_COLORS[team], scene);
@@ -330,7 +369,7 @@ export class Renderer {
 
   /** Net and serve line are rebuilt whenever their tuning values change. */
   private rebuildCourtIfChanged(t: Tuning): void {
-    const key = `${t.net.radius}|${t.net.frameWidth}|${t.net.height}|${t.court.serveLineDistance}`;
+    const key = [t.net.radius, t.net.frameWidth, t.net.height, t.court.serveLineDistance, t.court.noSpikeZoneDistance, t.court.lineWidth].join('|');
     if (key === this.courtKey) return;
     this.courtKey = key;
     this.court?.dispose(false, true);
@@ -345,15 +384,15 @@ export class Renderer {
       scene,
     ));
     netSurface.position.y = height;
-    const netMat = flatMaterial('netSurface', new Color3(0.08, 0.08, 0.08), scene);
-    netMat.alpha = 0.9;
-    netSurface.material = netMat;
+    netSurface.material = createNetMaterial(scene);
+    netSurface.receiveShadows = true;
     netSurface.parent = court;
 
     const frame = MeshBuilder.CreateTorus('frame', { diameter: radius * 2 + frameWidth, thickness: frameWidth, tessellation: 64 }, scene);
     frame.position.y = height;
     frame.material = flatMaterial('frame', new Color3(1, 0.85, 0.1), scene);
     frame.parent = court;
+    this.shadows.addShadowCaster(frame);
 
     const legMat = flatMaterial('leg', new Color3(0.15, 0.15, 0.15), scene);
     for (let i = 0; i < 5; i++) {
@@ -362,17 +401,54 @@ export class Renderer {
       leg.position.set(Math.cos(angle) * (radius + frameWidth / 2), height / 2, Math.sin(angle) * (radius + frameWidth / 2));
       leg.material = legMat;
       leg.parent = court;
+      this.shadows.addShadowCaster(leg);
     }
 
-    const serveDiameter = (radius + frameWidth + t.court.serveLineDistance) * 2;
-    const serveLine = MeshBuilder.CreateTorus('serveLine', { diameter: serveDiameter, thickness: 0.04, tessellation: 96 }, scene);
-    serveLine.position.y = 0.01;
-    serveLine.scaling.y = 0.1;
-    const lineMat = flatMaterial('serveLine', new Color3(1, 1, 1), scene);
-    lineMat.alpha = 0.6;
-    serveLine.material = lineMat;
-    serveLine.parent = court;
+    // Painted lines, measured out from the net's edge: the serve line and
+    // the no-spike zone line close to the net.
+    const lineMat = flatMaterial('courtLine', new Color3(1, 1, 1), scene);
+    lineMat.emissiveColor = new Color3(0.35, 0.35, 0.35);
+    lineMat.alpha = 0.85;
+    lineMat.backFaceCulling = false;
+    const edge = radius + frameWidth;
+    for (const [name, distance] of [
+      ['serveLine', t.court.serveLineDistance],
+      ['noSpikeLine', t.court.noSpikeZoneDistance],
+    ] as const) {
+      const line = paintedRing(name, edge + distance, t.court.lineWidth, scene);
+      line.material = lineMat;
+      line.parent = court;
+    }
   }
+}
+
+/** A flat painted ring on the grass, centered on the net, `width` wide. */
+function paintedRing(name: string, radius: number, width: number, scene: Scene): Mesh {
+  const segments = 128;
+  const inner = radius - width / 2;
+  const outer = radius + width / 2;
+  const positions: number[] = [];
+  const indices: number[] = [];
+  const normals: number[] = [];
+  for (let i = 0; i <= segments; i++) {
+    const a = (i / segments) * Math.PI * 2;
+    const c = Math.cos(a);
+    const s = Math.sin(a);
+    positions.push(c * inner, 0.012, s * inner, c * outer, 0.012, s * outer);
+    normals.push(0, 1, 0, 0, 1, 0);
+    if (i < segments) {
+      const k = i * 2;
+      indices.push(k, k + 2, k + 1, k + 1, k + 2, k + 3);
+    }
+  }
+  const mesh = new Mesh(name, scene);
+  const data = new VertexData();
+  data.positions = positions;
+  data.indices = indices;
+  data.normals = normals;
+  data.applyToMesh(mesh);
+  mesh.isPickable = false;
+  return mesh;
 }
 
 const PERFECT_GREEN = new Color3(0.35, 1, 0.45);

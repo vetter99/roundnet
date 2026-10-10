@@ -73,6 +73,9 @@ export const DEFAULT_TUNING = {
       highReach: 1.2,
       // Dive hits are saves: their power is scaled down by this.
       powerScale: 0.6,
+      // There's no dive button: swinging at a ball that's out of reach, but no
+      // more than this far beyond it, dives for it automatically.
+      autoRange: 1.8,
     },
   },
 
@@ -91,8 +94,8 @@ export const DEFAULT_TUNING = {
     // Quality falls from 1 to 0 over this much extra height error.
     qualityFalloff: 0.8,
     // Upward speed of a pass: a quick tap vs. full charge.
-    passUpSpeedMin: 5.5,
-    passUpSpeedMax: 10.5,
+    passUpSpeedMin: 4.5,
+    passUpSpeedMax: 13.5,
     passHorizontalSpeed: 2,
     // Shortest allowed flight time when aiming at a point, to avoid absurd speeds.
     minFlightTime: 0.12,
@@ -118,7 +121,12 @@ export const DEFAULT_TUNING = {
   court: {
     // Servers stand behind this line, measured out from the net's edge
     // (real roundnet uses 6ft = 1.83m).
-    serveLineDistance: 2.4,
+    serveLineDistance: 3.2,
+    // The no-spike zone line, this far out from the net's edge.
+    // Drawn only; the rule isn't enforced yet.
+    noSpikeZoneDistance: 0.7,
+    // Width of the painted lines.
+    lineWidth: 0.045,
   },
 
   // The temporary serve: a ball fed off the net toward the receiving player.
@@ -143,9 +151,12 @@ export const DEFAULT_TUNING = {
     // Fraction of the screen the action may fill (lower = more breathing room).
     margin: 0.78,
     // How quickly it pulls back, comes back in, and pans (higher = snappier).
-    zoomOutSpeed: 4,
+    zoomOutSpeed: 7,
     zoomInSpeed: 1.2,
-    panSpeed: 2.5,
+    panSpeed: 5,
+    // Seconds of player movement to look ahead, so running toward the camera
+    // shows where you're going before you get there.
+    lookAhead: 0.5,
   },
 
   audio: {
