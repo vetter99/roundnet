@@ -68,11 +68,11 @@ and UX cards.
 | ID | Title | Pri | Size | Depends on |
 |---|---|---|---|---|
 | MECH-01 | Dive ✅ done | P0 | M | |
-| MECH-02 | Jump-spike bonus (playtest: tried it, couldn't time it) | P0 | S | BUG-01 |
+| MECH-02 | Jump-spike bonus (deferred by project lead) | P3 | S | BUG-01 |
 | MECH-03 | Recovery after weak hits and dives | P1 | S | MECH-01 |
 | MECH-04 | Quick-step / pivot | P2 | S | |
 | MECH-05 | Momentum into hits | P2 | M | |
-| SHOT-01 | Drop shot (soft touch) (playtest: wanted) | P0 | M | |
+| SHOT-01 | Drop shot ✅ tap spike; CPU uses it too | P0 | M | |
 | SHOT-02 | Readable wind-up tells | P1 | M | |
 | SHOT-03 | Fake / cancel a charge | P1 | S | |
 | SHOT-04 | Spin shots → merged into SHOT-06 | – | – | |
@@ -89,7 +89,7 @@ and UX cards.
 | INPUT-01 | Join screen, up to 4 controllers | P1 | M | |
 | INPUT-02 | Controller rumble | P1 | S | |
 | INPUT-03 | Button remapping | P2 | M | UX-03 |
-| INPUT-04 | Split keyboard for 2 players | P2 | S | INPUT-01 |
+| INPUT-04 | Split keyboard ✅ via the 2 Player toggle | P2 | S | |
 | INPUT-05 | Touch controls for phones | P3 | L | |
 | INPUT-06 | Triggers as the main hit buttons (playtest) | P1 | S | |
 | UX-01 | Title screen | P1 | M | |
@@ -98,18 +98,18 @@ and UX cards.
 | UX-04 | Hide dev panels for players | P0 | S | |
 | UX-05 | How-to-play / tutorial | P2 | M | UX-01 |
 | UX-06 | Character select | P2 | M | ART-03 |
-| UX-07 | Make the timing guide stand out (playtest) | P0 | S | |
-| UX-08 | Teach the dive and jump (playtest) | P1 | S | |
-| ART-01 | Court environment: park (playtest: clearer visuals help) | P1 | M | |
-| ART-02 | Ball and net models | P2 | S | |
-| ART-03 | Character variety | P2 | M | |
+| UX-07 | Timing guide ✅ kept as is; player circle removed | P0 | S | |
+| UX-08 | Teach the jump (dive is automatic now) | P1 | S | |
+| ART-01 | Court environment ✅ stadium pitch + bowl (baseline) | P1 | M | |
+| ART-02 | Ball and net ✅ yellow volleyball, webbed net | P2 | S | |
+| ART-03 | Character variety (squirrel + raccoon done) | P2 | M | |
 | ART-04 | Celebrations and reactions | P2 | M | |
 | ART-05 | Hit effects: particles, hit-stop, shake (deferred) | P3 | M | |
 | ART-06 | Camera ✅ smart framing done; alternatives listed | P2 | S | |
 | AUDIO-01 | Music rotation + menu track | P2 | S | UX-01 |
 | AUDIO-02 | Crowd reactions | P2 | M | |
 | AUDIO-03 | Footsteps and landing sounds | P3 | S | |
-| AUDIO-04 | Satisfying hit feedback for the player (playtest) | P0 | S | |
+| AUDIO-04 | Hit feedback ✅ cartoon hits + coin ding | P0 | S | |
 | MODE-01 | Training drills | P2 | M | |
 | MODE-02 | Party mode with power-ups | P3 | L | RULE-02 |
 | MODE-03 | Tournament vs. CPU | P3 | L | AI-01, RULE-02 |
@@ -123,8 +123,8 @@ and UX cards.
 | TECH-08 | Performance: bundle size, FPS counter | P2 | S | |
 | TECH-09 | Accessibility basics | P2 | S | |
 | TECH-10 | Custom domain | P3 | S | |
-| BUG-01 | Timing guide assumes the player is on the ground | P0 | S | |
-| BUG-02 | Near-side player's tail may hide the ball (confirm) | P1 | S | |
+| BUG-01 | Timing guide assumes the player is on the ground (after MECH-02) | P2 | S | |
+| BUG-02 | Tail may hide the ball (tails shrunk; confirm in play) | P2 | S | |
 | BUG-03 | Ball can be lost far away during a rally | P2 | S | |
 
 ---
@@ -143,7 +143,7 @@ low ideal contact height and 60% power. Then a short recovery on the ground.
 The CPU gets auto-dives too. Tests in `src/sim/world.test.ts`.
 
 ### MECH-02 · Jump-spike bonus
-**P0 · S** · Files: `src/sim/hit.ts`, `src/config/tuning.ts`
+**P3 · S** · **Deferred** by the project lead (2026-10-10). · Files: `src/sim/hit.ts`, `src/config/tuning.ts`
 
 Spiking near the top of a jump should pay off with a faster, steeper spike,
 since it's harder to time.
@@ -188,7 +188,7 @@ center"? Probably momentum adds speed but not direction for spikes.
 
 ## SHOT: shot variety (the core of the strategy)
 
-### SHOT-01 · Drop shot (soft touch)
+### SHOT-01 · Drop shot (soft touch) ✅ done (2026-10-10)
 **P0 · M** · Files: `src/sim/hit.ts`, `src/config/tuning.ts`
 
 A soft spike that barely pops off the net, forcing the defender to rush in.
@@ -202,7 +202,19 @@ It beats a defender standing far back.
 while a charged spike carries 3 m or more. The CPU has to sprint to return
 drop shots. Test checks both distances.
 
-**Playtest 1:** "A drop shot would be dope." 
+**Playtest 1:** "A drop shot would be dope."
+
+**Decided (2026-10-10):** a **quick tap of spike** plays a drop shot (holding
+still charges a normal spike). It comes off the net **short and low** (dies
+within ~1–1.5 m), is **very safe** (lands on the net even when mistimed; the
+only risk is being read), and the **CPU uses it sometimes**, mostly when the
+opponent stands far back.
+
+**Shipped:** a spike released below `hit.dropShotMaxPower` (a tap) lobs
+softly onto the net just past center; the net absorbs it (`ball.soft`) so it
+pops ~0.6 m high and lands ~1 m from center within half a second. Tests in
+`src/sim/world.test.ts`. The CPU drops on ~4 in 10 possessions when the
+opponent is more than 2.8 m from the net.
 
 ### SHOT-02 · Readable wind-up tells
 **P1 · M** · Files: `src/render/character.ts`

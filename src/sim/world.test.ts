@@ -438,3 +438,41 @@ describe('automatic dive', () => {
   });
 });
 
+
+describe('drop shot', () => {
+  /** Hit a spike at `power` from 2.4 m out; return the shot kind and the ball's events until it lands. */
+  function shoot(power: number) {
+    const p = createPlayer(0, 0, 0, -2.4);
+    p.hitBuffer = { kind: 'spike', ticksLeft: 5, power };
+    const ball = { pos: { x: 0, y: t.player.contactHeight, z: -2.2 }, vel: { x: 0, y: -1, z: 0 }, alive: true, lastTouch: 'net' as const };
+    const hit = tryHit(p, ball, NEUTRAL_INTENT, t)!;
+    const events: BallEvent[] = [];
+    for (let i = 0; i < 400 && ball.alive; i++) stepBall(ball, t, events);
+    const ground = events.find((e) => e.type === 'ground')!;
+    return { kind: hit.kind, nets: events.filter((e) => e.type === 'net').length, landsAt: Math.hypot(ground.at.x, ground.at.z) };
+  }
+
+  it('a tapped spike is a drop shot that dies just past the net', () => {
+    const drop = shoot(0.05);
+    expect(drop.kind).toBe('drop');
+    expect(drop.nets).toBe(1);
+    expect(drop.landsAt).toBeLessThan(1.5);
+  });
+
+  it('a charged spike carries much further', () => {
+    const spike = shoot(0.8);
+    expect(spike.kind).toBe('spike');
+    expect(spike.landsAt).toBeGreaterThan(3);
+  });
+
+  it('is safe even when badly timed', () => {
+    const p = createPlayer(0, 0, 0, -2.4);
+    p.hitBuffer = { kind: 'spike', ticksLeft: 5, power: 0.05 };
+    const ball = { pos: { x: 0, y: t.player.contactHeight - 0.9, z: -2.2 }, vel: { x: 0, y: -1, z: 0 }, alive: true, lastTouch: 'net' as const };
+    const hit = tryHit(p, ball, NEUTRAL_INTENT, t)!;
+    expect(hit.quality).toBeLessThan(0.1);
+    const events: BallEvent[] = [];
+    for (let i = 0; i < 400 && ball.alive; i++) stepBall(ball, t, events);
+    expect(events[0].type).toBe('net');
+  });
+});

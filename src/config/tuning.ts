@@ -93,6 +93,16 @@ export const DEFAULT_TUNING = {
     perfectWindow: 0.15,
     // Quality falls from 1 to 0 over this much extra height error.
     qualityFalloff: 0.8,
+    // A spike released below this charge power (a quick tap) is a drop shot.
+    dropShotMaxPower: 0.15,
+    // Horizontal speed of the drop shot's soft lob onto the net, and how far
+    // past the net center it lands (so its pop carries it off the far edge).
+    dropSpeed: 4,
+    dropPastCenter: 0.4,
+    // Off the net, a drop shot pops up only this fast and keeps this fraction
+    // of its horizontal speed, so it dies within ~1-1.5 m of the net.
+    dropBounceUp: 2.2,
+    dropHorizontalKeep: 0.35,
     // Upward speed of a pass: a quick tap vs. full charge.
     passUpSpeedMin: 4.5,
     passUpSpeedMax: 13.5,

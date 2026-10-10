@@ -33,6 +33,10 @@ const SET_SPIKE_LEAD_TICKS = 32;
 // Timing mistakes: release up to this far (m) above or below the ideal height.
 const SPIKE_TIMING_ERROR = 0.3;
 const PASS_TIMING_ERROR = 0.15;
+// Drop shots: when the opponent stands this far from the net, the CPU taps a
+// drop shot instead of spiking on DROP_OUT_OF_10 possessions out of 10.
+const DROP_WHEN_OPPONENT_BEYOND = 2.8;
+const DROP_OUT_OF_10 = 4;
 // How hard the pass leans toward the net (0 = straight up), for a better spike angle.
 const PASS_TOWARD_NET = 0.25;
 const WAIT_DISTANCE = 2.3;
@@ -55,6 +59,12 @@ function misreads(world: World): boolean {
   return roll(world) < MISREAD_BASE + MISREAD_FROM_POWER * power * power;
 }
 
+/** Whether this possession's spike should be a drop shot (opponent far back, some of the time). */
+function playsDrop(world: World, opponent: Player | undefined): boolean {
+  if (!opponent || Math.hypot(opponent.pos.x, opponent.pos.z) < DROP_WHEN_OPPONENT_BEYOND) return false;
+  return (world.possessionTick * 92821 + world.possession * 7) % 10 < DROP_OUT_OF_10;
+}
+
 function passesFirst(world: World): boolean {
   return (world.possessionTick * 131 + world.possession * 17) % 10 < PASS_FIRST_OUT_OF_10;
 }
@@ -74,7 +84,7 @@ export function botIntent(world: World, index: number, t: Tuning): Intent {
   const myLastHit = ball.lastTouch === 'player' && world.lastHitTeam === me.team;
   // A ball we passed to ourselves is ours to spike; one we spiked is on its way to the net.
   const secondTouch = myLastHit && world.lastHitKind === 'pass';
-  const waitingForNet = myLastHit && world.lastHitKind === 'spike';
+  const waitingForNet = myLastHit && (world.lastHitKind === 'spike' || world.lastHitKind === 'drop');
   const myBall = world.possession === me.team && ball.alive && !waitingForNet;
   const reaction =
     REACTION_TICKS + Math.round(Math.abs(slop(world, 0)) * REACTION_SLOP_TICKS) + (misreads(world) ? MISREAD_EXTRA_TICKS : 0);
@@ -93,12 +103,15 @@ export function botIntent(world: World, index: number, t: Tuning): Intent {
   moveToward(intent, me, plan.point);
 
   const kind: HitKind = secondTouch || !passesFirst(world) ? 'spike' : 'pass';
-  const lead = kind === 'pass' ? PASS_LEAD_TICKS : secondTouch ? SET_SPIKE_LEAD_TICKS : SPIKE_LEAD_TICKS;
+  const drop = kind === 'spike' && playsDrop(world, opponent);
+  // A drop shot is a quick tap: press just before contact so it barely charges.
+  const lead = drop ? 1 : kind === 'pass' ? PASS_LEAD_TICKS : secondTouch ? SET_SPIKE_LEAD_TICKS : SPIKE_LEAD_TICKS;
   const inReach = Math.hypot(plan.point.x - me.pos.x, plan.point.z - me.pos.z) < t.player.reach;
 
   if (me.charge) {
     // Keep holding until the ball falls to (roughly) contact height, then release.
-    const error = (me.charge.kind === 'pass' ? PASS_TIMING_ERROR : SPIKE_TIMING_ERROR) * slop(world, secondTouch ? 2 : 1);
+    // Drop shots release right away so the tap stays under drop-shot power.
+    const error = drop ? 0.2 : (me.charge.kind === 'pass' ? PASS_TIMING_ERROR : SPIKE_TIMING_ERROR) * slop(world, secondTouch ? 2 : 1);
     const release = ball.vel.y < 0 && ball.pos.y <= t.player.contactHeight + error;
     intent[me.charge.kind] = !release;
     if (release && me.charge.kind === 'pass') aimPass(intent, me);

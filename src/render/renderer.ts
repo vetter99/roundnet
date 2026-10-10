@@ -15,7 +15,7 @@ import { Scene } from '@babylonjs/core/scene';
 import type { Tuning } from '../config/tuning';
 import { predictLanding, type LandingPrediction } from '../sim/ball';
 import { isPlayable, predictDescentTo } from '../sim/hit';
-import type { HitKind } from '../sim/player';
+import type { ShotKind } from '../sim/player';
 import { DT } from '../sim/time';
 import { cameraPosition, frame, type Framing } from './cameraFraming';
 import { Character } from './character';
@@ -249,7 +249,7 @@ export class Renderer {
   }
 
   /** Play the pass or spike animation for a player. */
-  playSwing(playerId: number, kind: HitKind): void {
+  playSwing(playerId: number, kind: ShotKind): void {
     this.players[playerId]?.character.playSwing(kind);
   }
 

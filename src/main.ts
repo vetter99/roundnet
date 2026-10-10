@@ -16,7 +16,7 @@ const flash = document.getElementById('flash') as HTMLElement;
 const help = document.getElementById('help') as HTMLElement;
 const soundButton = document.getElementById('sound') as HTMLButtonElement;
 const prompt = document.getElementById('prompt') as HTMLElement;
-const twoPlayerButton = document.getElementById('twoPlayer') as HTMLButtonElement;
+const seatButtons = [document.getElementById('blueSeat'), document.getElementById('redSeat')] as HTMLButtonElement[];
 
 const TEAM_NAMES = ['Blue', 'Red'];
 const TEAM_CSS = ['#5b8cff', '#ff6b5b'];
@@ -47,27 +47,43 @@ let flashTimer = 0;
 // A device is a keyboard scheme, the CPU, or a gamepad.
 type Device = KeyboardScheme | 'cpu' | Gamepad;
 
-// When on, a second human plays Red instead of the CPU (toggled on screen).
-let twoPlayer = false;
-twoPlayerButton.addEventListener('click', () => {
-  twoPlayer = !twoPlayer;
-  twoPlayerButton.textContent = twoPlayer ? '🤖 Red: back to CPU' : '👥 2 Player';
-  twoPlayerButton.blur();
-  canvas.focus();
+// Who plays each side: a human or the CPU, toggled with the on-screen buttons.
+// Default: you play Blue against a CPU Red. Both CPU = watch AI vs AI.
+const human = [true, false];
+const SEAT_LABELS = [
+  ['🤖 Blue: CPU', '🎮 Blue: You'],
+  ['🤖 Red: CPU', '🎮 Red: Player 2'],
+];
+seatButtons.forEach((button, i) => {
+  const refresh = () => (button.textContent = SEAT_LABELS[i][human[i] ? 1 : 0]);
+  refresh();
+  button.addEventListener('click', () => {
+    human[i] = !human[i];
+    refresh();
+    button.blur();
+    canvas.focus();
+  });
 });
 
 /**
- * Decide which device drives each player: [Blue, Red]. One player: Blue gets
- * the first controller (or the whole keyboard) and Red is the CPU. Two
- * players: one controller each; or controller + keyboard; or, with no
- * controllers, the keyboard split into a WASD half and an arrow-keys half.
+ * Decide which device drives each player: [Blue, Red]. Human players get
+ * controllers in order; any human left over gets the keyboard (the whole
+ * keyboard for one, or a WASD half and an arrow-keys half for two). Players
+ * not set to human are the CPU.
  */
 function assignDevices(): [Device, Device] {
   const pads = input.gamepads();
-  if (!twoPlayer) return [pads[0] ?? 'all', 'cpu'];
-  if (pads.length >= 2) return [pads[0], pads[1]];
-  if (pads.length === 1) return [pads[0], 'all'];
-  return ['left', 'right'];
+  const devices: Device[] = ['cpu', 'cpu'];
+  const needKeyboard: number[] = [];
+  let nextPad = 0;
+  human.forEach((isHuman, i) => {
+    if (!isHuman) return;
+    if (nextPad < pads.length) devices[i] = pads[nextPad++];
+    else needKeyboard.push(i);
+  });
+  if (needKeyboard.length === 1) devices[needKeyboard[0]] = 'all';
+  if (needKeyboard.length === 2) [devices[0], devices[1]] = ['left', 'right'];
+  return [devices[0], devices[1]];
 }
 
 function deviceName(d: Device): string {
@@ -137,7 +153,9 @@ let lastMiss: { team: Team; reason: MissReason } | null = null;
 
 function onEvent(e: SimEvent): void {
   if (e.type === 'swing') {
-    renderer.playSwing(e.playerId, e.kind);
+    // A tapped spike is a drop shot: play the gentle push instead of the slam.
+    const drop = e.kind === 'spike' && e.power < tuning.hit.dropShotMaxPower;
+    renderer.playSwing(e.playerId, drop ? 'drop' : e.kind);
     sfx.swing(e.power);
   } else if (e.type === 'whiff') {
     lastMiss = { team: world.players[e.playerId].team, reason: e.reason };
@@ -268,8 +286,7 @@ function updateHud(frameSeconds: number, devices: [Device, Device]): void {
   soundButton.style.display = sfx.locked ? 'block' : 'none';
   const sound = sfx.muted ? 'Sound muted (M)' : 'M mute';
   const [blue, red] = devices;
+  const side = (name: string, d: Device) => (d === 'cpu' ? `${name}: CPU` : `${name} (${deviceName(d)}): ${controlsHelp(d)}`);
   help.textContent =
-    `${sound} · \` tuning · swing at a ball just out of reach to dive   |   ` +
-    `Blue (${deviceName(blue)}): ${controlsHelp(blue)}` +
-    (red === 'cpu' ? '   |   Red: CPU' : `   |   Red (${deviceName(red)}): ${controlsHelp(red)}`);
+    `${sound} · \` tuning · swing at a ball just out of reach to dive   |   ${side('Blue', blue)}   |   ${side('Red', red)}`;
 }

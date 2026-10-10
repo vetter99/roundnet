@@ -10,6 +10,8 @@ export interface Ball {
   // False once the ball touches the ground; it stops moving until re-served.
   alive: boolean;
   lastTouch: Touch;
+  // A soft drop shot: the net absorbs it, so it comes off short and low.
+  soft?: boolean;
 }
 
 export type BallEvent =
@@ -22,7 +24,7 @@ export function createBall(): Ball {
 }
 
 export function cloneBall(b: Ball): Ball {
-  return { pos: copyVec3(b.pos), vel: copyVec3(b.vel), alive: b.alive, lastTouch: b.lastTouch };
+  return { pos: copyVec3(b.pos), vel: copyVec3(b.vel), alive: b.alive, lastTouch: b.lastTouch, soft: b.soft };
 }
 
 /** Radius of the whole net including its frame. */
@@ -81,9 +83,17 @@ function stepBallOnce(ball: Ball, dt: number, t: Tuning, events: BallEvent[]): v
 function netBounce(ball: Ball, t: Tuning, events: BallEvent[]): void {
   const { vel } = ball;
   const inSpeed = -vel.y;
-  vel.y = Math.max(inSpeed * t.net.bounce, t.net.minUpSpeed);
-  vel.x *= t.net.horizontalKeep;
-  vel.z *= t.net.horizontalKeep;
+  if (ball.soft) {
+    // Drop shots die on the net: a small pop and little carry.
+    vel.y = t.hit.dropBounceUp;
+    vel.x *= t.hit.dropHorizontalKeep;
+    vel.z *= t.hit.dropHorizontalKeep;
+    ball.soft = false;
+  } else {
+    vel.y = Math.max(inSpeed * t.net.bounce, t.net.minUpSpeed);
+    vel.x *= t.net.horizontalKeep;
+    vel.z *= t.net.horizontalKeep;
+  }
   ball.lastTouch = 'net';
   events.push({ type: 'net', at: copyVec3(ball.pos), speed: inSpeed, upSpeed: vel.y });
 }

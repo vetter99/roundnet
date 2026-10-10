@@ -1,7 +1,7 @@
 import type { Tuning } from '../config/tuning';
 import { createBall, launchBallAt, netContactHeight, stepBall, type Ball, type BallEvent } from './ball';
 import { autoDiveTarget, missReason, tryHit, type HitResult, type MissReason } from './hit';
-import { createPlayer, diveTicks, NEUTRAL_INTENT, startDive, stepPlayer, type HitKind, type Intent, type Player } from './player';
+import { createPlayer, diveTicks, NEUTRAL_INTENT, startDive, stepPlayer, type HitKind, type Intent, type Player, type ShotKind } from './player';
 
 export type Team = 0 | 1;
 
@@ -39,7 +39,7 @@ export interface World {
   lastHitTeam: Team;
   // The kind of the last player hit (null after a serve), e.g. so a player
   // knows a ball they passed to themselves is theirs to play again.
-  lastHitKind: HitKind | null;
+  lastHitKind: ShotKind | null;
   // Charge power (0..1) of the last player hit; 0 after a serve.
   lastHitPower: number;
   // Ticks since the ball died; the serve prompt appears after a short pause.
@@ -172,6 +172,7 @@ export function serve(world: World, receiver: Team, t: Tuning): void {
   const ball = world.ball;
   ball.pos = { x: -ux * t.practice.feedDistance, y: t.practice.feedHeight, z: -uz * t.practice.feedDistance };
   ball.alive = true;
+  ball.soft = false;
   ball.lastTouch = 'feed';
   launchBallAt(ball, { x: ux * 0.15, y: netContactHeight(t), z: uz * 0.15 }, t.practice.feedSpeed, t);
 

@@ -57,8 +57,8 @@ src/main.ts           wires it together; fixed 60Hz loop with render interpolati
 - Hits charge while the button is held and swing on release (`chargePower`).
 - Dives are automatic: swinging at a ball just out of reach dives for it
   (`autoDiveTarget` in `src/sim/hit.ts`). There is no dive button.
-- `src/ai/bot.ts` is a deterministic CPU player. Red is the CPU unless the
-  on-screen 2 Player toggle hands it to a second controller or keyboard half.
+- `src/ai/bot.ts` is a deterministic CPU player. On-screen toggles set each
+  side to human or CPU (you vs CPU by default; 2 players; or CPU vs CPU).
 - Hit quality comes from timing: how close the ball is to the player's
   contact height at contact. Bad hits are weaker and drift off target.
 - Spikes always target the net center; the stick only aims passes. The worst-

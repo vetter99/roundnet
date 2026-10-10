@@ -1,11 +1,11 @@
 import type { Tuning } from '../config/tuning';
 import { cloneBall, launchBallAt, netContactHeight, stepBall, type Ball, type BallEvent } from './ball';
-import { isDiving, isRecovering, stickOf, type HitKind, type Intent, type Player } from './player';
+import { isDiving, isRecovering, stickOf, type Intent, type Player, type ShotKind } from './player';
 import { clamp, lerp, type Vec3 } from './vec';
 
 export interface HitResult {
   playerId: number;
-  kind: HitKind;
+  kind: ShotKind;
   // 1 = perfectly timed, 0 = barely made contact.
   quality: number;
   // How charged the hit was, 0..1.
@@ -146,13 +146,17 @@ export function tryHit(p: Player, ball: Ball, intent: Intent, t: Tuning, turn?: 
 
   const heightError = ball.pos.y - (p.pos.y + contactHeightOf(p, t));
   const quality = hitQuality(heightError, t);
-  const { kind } = p.hitBuffer;
+  // A spike tapped with almost no charge becomes a drop shot.
+  const kind: ShotKind = p.hitBuffer.kind === 'spike' && p.hitBuffer.power < t.hit.dropShotMaxPower ? 'drop' : p.hitBuffer.kind;
   // Dive hits are saves, not attacks.
   const power = p.hitBuffer.power * (isDiving(p, t) ? t.player.dive.powerScale : 1);
   const aim = stickOf(intent);
 
+  ball.soft = false;
   if (kind === 'spike') {
     spike(ball, quality, power, t);
+  } else if (kind === 'drop') {
+    dropShot(ball, t);
   } else {
     pass(ball, aim, quality, power, t);
   }
@@ -178,6 +182,18 @@ function spike(ball: Ball, quality: number, power: number, t: Tuning): void {
   }
   const speed = lerp(t.hit.spikeSpeedMin, t.hit.spikeSpeedMax, power) * lerp(t.hit.minQualityPower, 1, quality);
   launchBallAt(ball, target, speed, t);
+}
+
+/**
+ * A soft lob onto the net, a little past the center so its small pop carries
+ * it off the far edge (instead of landing back on the net). Very safe: timing
+ * doesn't push it off the net. It's marked soft so the net absorbs it.
+ */
+function dropShot(ball: Ball, t: Tuning): void {
+  const d = Math.hypot(ball.pos.x, ball.pos.z) || 1;
+  const past = t.hit.dropPastCenter;
+  launchBallAt(ball, { x: (-ball.pos.x / d) * past, y: netContactHeight(t), z: (-ball.pos.z / d) * past }, t.hit.dropSpeed, t);
+  ball.soft = true;
 }
 
 function pass(ball: Ball, aim: { x: number; z: number }, quality: number, power: number, t: Tuning): void {

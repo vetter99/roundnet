@@ -20,6 +20,7 @@ const RANGES: Record<string, Ranges> = {
     spikeSpeedMin: [4, 25], spikeSpeedMax: [4, 30], chargeTime: [0.1, 2], chargeMoveFactor: [0, 1], minQualityPower: [0, 1], mishitDrift: [0, 3],
     perfectWindow: [0, 0.6], qualityFalloff: [0.1, 2], passUpSpeedMin: [2, 15], passUpSpeedMax: [2, 18], passHorizontalSpeed: [0, 6],
     inputBufferTicks: [0, 20, 1], cooldownTicks: [0, 40, 1],
+    dropShotMaxPower: [0, 0.6], dropSpeed: [1, 10], dropPastCenter: [0, 0.7], dropBounceUp: [0.5, 6], dropHorizontalKeep: [0, 1],
   },
   'player.dive': { speed: [2, 15], duration: [0.1, 0.8], recovery: [0, 1.5], reachOffset: [0, 1.5], reachBonus: [0, 1.5], highReach: [0, 2], contactHeight: [0.2, 1.5], powerScale: [0, 1], autoRange: [0, 4] },
   court: { serveLineDistance: [1, 5], noSpikeZoneDistance: [0, 1.5], lineWidth: [0.01, 0.2] },

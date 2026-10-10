@@ -5,7 +5,7 @@
 // Browsers only allow audio after a click or key press on the page, so the
 // context starts suspended and `unlock()` resumes it on the first one.
 
-import type { HitKind } from '../sim/player';
+import type { ShotKind } from '../sim/player';
 
 export class Sfx {
   private readonly ctx: AudioContext | null;
@@ -77,9 +77,13 @@ export class Sfx {
    * brightness rather than deciding whether you hear it. The CPU's hits play
    * quieter (`mine` = false) so your own stand out.
    */
-  hit(kind: HitKind, power: number, quality: number, mine: boolean): void {
+  hit(kind: ShotKind, power: number, quality: number, mine: boolean): void {
     const loud = (0.8 + 0.2 * power) * (mine ? 1 : 0.6);
-    if (kind === 'spike') {
+    if (kind === 'drop') {
+      // A light, soft "tup": a gentle touch, not a smack.
+      this.tone({ type: 'sine', from: 520, to: 360, gain: 0.35 * loud, decay: 0.06 });
+      this.noiseBurst({ freq: 1200, q: 1.2, gain: 0.12 * loud, attack: 0.001, decay: 0.025 });
+    } else if (kind === 'spike') {
       // Sharp click, a slap of noise, and a falling "thwack" body.
       this.noiseBurst({ freq: 2600 + power * 1400, q: 0.9, gain: 0.5 * loud, attack: 0.001, decay: 0.035 });
       this.noiseBurst({ freq: 900, freqTo: 400, q: 0.7, gain: 0.45 * loud, attack: 0.002, decay: 0.09 });

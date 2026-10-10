@@ -42,10 +42,12 @@
       #prompt b { display: inline-block; min-width: 1.4em; padding: 0 0.3em; border-radius: 999px; background: #3fbf5f; }
       #credit { position: fixed; top: 12px; right: 16px; font-size: 11px; color: #fffb; text-shadow: 0 1px 2px #000a; }
       #credit a { color: inherit; }
-      #twoPlayer { position: fixed; top: 34px; right: 16px; padding: 8px 14px; border: 0; border-radius: 999px; cursor: pointer;
-                   background: #ffffffe0; color: #1d2b1f; font-family: 'Russo One', system-ui, sans-serif; font-size: 14px;
-                   box-shadow: 0 2px 8px #0005; }
-      #twoPlayer:hover { background: #fff; }
+      /* Who plays each side: toggles between a human and the CPU. */
+      #seats { position: fixed; top: 34px; right: 16px; display: flex; flex-direction: column; align-items: flex-end; gap: 6px; }
+      #seats button { padding: 7px 13px; border: 0; border-radius: 999px; cursor: pointer;
+                      background: #ffffffe0; color: #1d2b1f; font-family: 'Russo One', system-ui, sans-serif; font-size: 14px;
+                      box-shadow: 0 2px 8px #0005; }
+      #seats button:hover { background: #fff; }
       #help { position: fixed; bottom: 10px; left: 16px; right: 16px; color: #fffd; font-size: 13px; text-shadow: 0 1px 2px #000a; pointer-events: none; }
     </style>
   </head>
@@ -60,7 +62,10 @@
       <a href="https://opengameart.org/content/4-chiptunes-adventure" target="_blank" rel="noopener">Chiptune Adventures</a>
       by Juhani Junkala (CC0)
     </div>
-    <button id="twoPlayer">👥 2 Player</button>
+    <div id="seats">
+      <button id="blueSeat"></button>
+      <button id="redSeat"></button>
+    </div>
     <button id="sound">🔇 Click here to turn on sound</button>
     <script type="module" src="/src/main.ts"></script>
   </body>

@@ -41,6 +41,6 @@ describe('bot two-touch play', () => {
     const passThenSpike = patterns.filter((p) => p === 'pass>spike').length;
     expect(passThenSpike / patterns.length).toBeGreaterThan(0.5);
     // It never passes and then forgets to play its second touch.
-    expect(patterns.every((p) => p === 'spike' || p === 'pass>spike')).toBe(true);
+    expect(patterns.every((p) => p === 'spike' || p === 'drop' || p === 'pass>spike')).toBe(true);
   });
 });

@@ -3,7 +3,10 @@ import { netOuterRadius } from './ball';
 import { DT } from './time';
 import { clamp, type Vec3 } from './vec';
 
+/** The hit buttons. */
 export type HitKind = 'spike' | 'pass';
+/** The shot that results: a spike released with almost no charge is a drop shot. */
+export type ShotKind = HitKind | 'drop';
 
 /**
  * What a player wants to do this tick. Input devices and bots both produce

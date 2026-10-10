@@ -4,7 +4,7 @@ import type { Mesh } from '@babylonjs/core/Meshes/mesh';
 import { MeshBuilder } from '@babylonjs/core/Meshes/meshBuilder';
 import { TransformNode } from '@babylonjs/core/Meshes/transformNode';
 import type { Scene } from '@babylonjs/core/scene';
-import type { HitKind, Player } from '../sim/player';
+import type { Player, ShotKind } from '../sim/player';
 import { clamp, lerp } from '../sim/vec';
 
 // Cartoon squirrel, about 1.2m tall at size 1 (plus tail). Heights are from
@@ -88,7 +88,15 @@ interface SwingAnim {
   dip: ValueKey[];
 }
 
-const SWING_ANIMS: Record<HitKind, SwingAnim> = {
+const SWING_ANIMS: Record<ShotKind, SwingAnim> = {
+  // Drop shot: a short, gentle push of the hitting paw, barely any wind-up.
+  drop: {
+    duration: 0.26,
+    right: [[0, 0, 0], [0.3, -1.9, 0.1], [0.6, -1.4, 0.15], [1, 0, 0]],
+    left: [[0, 0, 0], [0.3, -0.6, 0], [0.6, -0.4, 0], [1, 0, 0]],
+    lean: [[0, 0], [0.3, 0.05], [0.6, 0.12], [1, 0]],
+    dip: [[0, 0], [0.3, 0.02], [0.6, -0.02], [1, 0]],
+  },
   // Volleyball-style bump: both arms come forward together and lift.
   pass: {
     duration: 0.36,
@@ -109,7 +117,7 @@ const SWING_ANIMS: Record<HitKind, SwingAnim> = {
 
 // While charging, the pose winds up to this point in the swing animation and
 // holds there; releasing plays the rest of the swing from that point.
-const WINDUP_PHASE: Record<HitKind, number> = { pass: 0.25, spike: 0.3 };
+const WINDUP_PHASE: Record<ShotKind, number> = { pass: 0.25, spike: 0.3, drop: 0.3 };
 
 // The tail is many overlapping spheres blended between its control points,
 // so it reads as one bushy shape.
@@ -128,7 +136,7 @@ export interface DiveView {
 const DIVE_PITCH = 1.3;
 
 export interface ChargeView {
-  kind: HitKind;
+  kind: ShotKind;
   power: number;
 }
 
@@ -148,7 +156,7 @@ export class Character {
   private walkPhase = 0;
   private swing: { anim: SwingAnim; time: number } | null = null;
   // The wind-up pose phase held while charging, so the release continues from it.
-  private heldPhase: { kind: HitKind; phase: number } | null = null;
+  private heldPhase: { kind: ShotKind; phase: number } | null = null;
   private landTimer = 0;
   private wasGrounded = true;
 
@@ -297,7 +305,7 @@ export class Character {
   }
 
   /** Play the pass or spike animation; call whenever this player swings. */
-  playSwing(kind: HitKind): void {
+  playSwing(kind: ShotKind): void {
     const anim = SWING_ANIMS[kind];
     const startPhase = this.heldPhase?.kind === kind ? this.heldPhase.phase : 0;
     this.swing = { anim, time: startPhase * anim.duration };
