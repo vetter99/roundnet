@@ -37,6 +37,11 @@ export function serverSpot(team: Team, t: Tuning): { x: number; z: number } {
   return { x: 0, z: sideOf(team) * (netOuterRadius(t) + t.court.serveLineDistance + t.serve.behindLine) };
 }
 
+/** Where the receiver starts: on the serve line, opposite the server (then free to move). */
+export function receiverSpot(team: Team, t: Tuning): { x: number; z: number } {
+  return { x: 0, z: sideOf(team) * (netOuterRadius(t) + t.court.serveLineDistance) };
+}
+
 /** Get ready for a serve: place server and receiver, reset the aim. */
 export function setUpServe(world: World, t: Tuning): void {
   const server = serverTeam(world);
@@ -46,8 +51,7 @@ export function setUpServe(world: World, t: Tuning): void {
   world.serve.inFlight = false;
   world.serve.returnPending = false;
   for (const p of world.players) {
-    const spot =
-      p.team === server ? serverSpot(server, t) : { x: 0, z: sideOf(p.team) * t.serve.receiverDistance };
+    const spot = p.team === server ? serverSpot(server, t) : receiverSpot(p.team, t);
     p.pos = { x: spot.x, y: 0, z: spot.z };
     p.vel = { x: 0, y: 0, z: 0 };
     p.grounded = true;

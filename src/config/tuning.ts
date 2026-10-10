@@ -143,8 +143,6 @@ export const DEFAULT_TUNING = {
   serve: {
     // The server stands this far behind the serve line.
     behindLine: 0.4,
-    // The receiver starts this far from the net center, opposite the server.
-    receiverDistance: 3,
     // How fast the stick moves the aim across the net (m/s), and how far out
     // it can go (fraction of the net radius; 1 = the edge).
     aimSpeed: 1.4,

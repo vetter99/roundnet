@@ -485,6 +485,8 @@ describe('serve duel', () => {
     const [blue, redPlayer] = world.players;
     expect(Math.hypot(redPlayer.pos.x, redPlayer.pos.z)).toBeGreaterThan(t.net.radius + t.net.frameWidth + t.court.serveLineDistance);
     expect(Math.sign(blue.pos.z)).toBe(-Math.sign(redPlayer.pos.z));
+    // The receiver starts right on the serve line.
+    expect(Math.hypot(blue.pos.x, blue.pos.z)).toBeCloseTo(t.net.radius + t.net.frameWidth + t.court.serveLineDistance);
   });
 
   it("the server's stick moves the aim, not the server", () => {
