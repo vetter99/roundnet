@@ -20,7 +20,7 @@ import { MeshBuilder } from '@babylonjs/core/Meshes/meshBuilder';
 import { TransformNode } from '@babylonjs/core/Meshes/transformNode';
 import type { Scene } from '@babylonjs/core/scene';
 
-export type CharacterKind = 'bear' | 'cat' | 'truffles' | 'pinball' | 'guy' | 'fox' | 'pig';
+export type CharacterKind = 'bear' | 'cat' | 'truffles' | 'pinball' | 'guy' | 'fox' | 'pig' | 'shark' | 'penguin' | 'capybara';
 
 /** Every character, in picker order, with display names. */
 export const CHARACTERS: { kind: CharacterKind; name: string }[] = [
@@ -31,6 +31,9 @@ export const CHARACTERS: { kind: CharacterKind; name: string }[] = [
   { kind: 'guy', name: 'Tattoo Guy' },
   { kind: 'fox', name: 'Tilt' },
   { kind: 'pig', name: 'Chris P. Bacon' },
+  { kind: 'shark', name: 'Doo Doo' },
+  { kind: 'penguin', name: 'Pesto' },
+  { kind: 'capybara', name: 'Capy' },
 ];
 
 /** Who plays each seat by default: Blue 1, Blue 2, Red 1, Red 2 (1v1 uses the "1" seats). */
@@ -49,7 +52,13 @@ export interface Rig {
   // Pivots the rig keeps spinning (a propeller, wheels): `idle` rad/s
   // standing, plus `run` rad/s at a full run.
   spinners: Spinner[];
+  // How the character moves (see Character.update); a builder can change it.
+  // Extra leg pivots pushed onto `legs` (back left, back right) walk too.
+  gait: Gait;
 }
+
+/** walk: two legs. waddle: short steps, rocking. hop: no legs, bouncing. four: four legs, body level. */
+export type Gait = 'walk' | 'waddle' | 'hop' | 'four';
 
 export interface Spinner {
   node: TransformNode;
@@ -1128,6 +1137,150 @@ function buildPig(kit: Kit, rig: Rig, team: Color3, number: number): void {
   kit.tube(rig.tail, [[0, 0, 0], [0, 0.06, -0.06], [0.05, 0.11, -0.04], [0.03, 0.06, 0.0], [-0.02, 0.1, -0.06]], 0.025, 0.018, pink);
 }
 
+// ---------------------------------------------------------------------------
+// 8. Doo Doo, a baby shark (an original one: gray-blue, not the song's yellow
+//    shark): no legs, he bounces upright on his tail with his fins for arms,
+//    tail wagging hard, a big toothy grin, a dorsal fin on top, and a striped
+//    swim ring around his middle (he's a baby).
+
+function buildShark(kit: Kit, rig: Rig, team: Color3, number: number): void {
+  rig.gait = 'hop';
+  const skin = kit.mat('sharkSkin', new Color3(0.38, 0.55, 0.72), 0.2);
+  const belly = kit.mat('belly', new Color3(0.95, 0.95, 0.92), 0.1);
+  const dark = kit.mat('dark', new Color3(0.1, 0.12, 0.18), 0.3);
+  const teeth = kit.mat('teeth', WHITE, 0.2);
+  const b = rig.bounce;
+
+  // The body tapers down to the tail he stands on; jersey on top, belly below.
+  kit.cylinder(b, 0.34, 0.4, 0.14, skin, [0, 0.2, 0]);
+  kit.sphere(b, 0.3, belly, [0, 0.22, 0.07], [1, 1, 0.6]);
+  jersey(kit, rig, team, number, 0.52, 0.44, [1, 1.05, 0.95]);
+  // The swim ring around his waist, striped orange and white.
+  const ring = kit.mat('swimRing', new Color3(1, 1, 1), 0.2);
+  ring.diffuseTexture = panels(kit.scene, ['#ff6a10', '#ffffff']);
+  kit.torus(b, 0.48, 0.13, ring, [0, 0.3, 0]);
+
+  // The head: a long pointed snout, white underneath, and a wide grin full
+  // of pointy teeth across the front.
+  const h = rig.head;
+  kit.sphere(h, 0.46, skin, [0, 0.02, 0.02], [1, 0.95, 1.2]);
+  kit.cylinder(h, 0.24, 0.1, 0.36, skin, [0, 0.05, 0.27], [Math.PI / 2, 0, 0], [1, 1, 0.75]);
+  kit.sphere(h, 0.4, belly, [0, -0.1, 0.1], [1, 0.55, 1.15]);
+  kit.sphere(h, 0.2, dark, [0, -0.06, 0.26], [1.5, 0.45, 0.6]);
+  for (let k = -3; k <= 3; k++) {
+    const x = k * 0.038;
+    const z = 0.31 - Math.abs(k) * 0.02;
+    kit.cylinder(h, 0.05, 0, 0.035, teeth, [x, -0.035, z], [Math.PI, 0, 0]);
+    kit.cylinder(h, 0.045, 0, 0.03, teeth, [x + 0.019, -0.085, z - 0.01]);
+  }
+  // Round eyes on the sides of the snout.
+  for (const side of [-1, 1]) eye(kit, h, [side * 0.15, 0.1, 0.18], { size: 0.09, iris: dark, look: [side * 0.3, 0.2] });
+  // Dorsal fin on top of his head, swept back.
+  kit.cylinder(h, 0.24, 0, 0.2, skin, [0, 0.27, -0.06], [-0.45, 0, 0], [1, 1, 0.3]);
+  // Gill slits.
+  for (const side of [-1, 1]) {
+    for (let k = 0; k < 3; k++) kit.box(h, [0.01, 0.1, 0.02], dark, [side * 0.245, -0.03, 0.04 - k * 0.05], [0, 0, side * 0.1]);
+  }
+
+  // Pectoral fins for arms (no hands).
+  setShoulders(rig, 0.2);
+  rig.arms.forEach((pivot) => {
+    const side = Math.sign(pivot.position.x);
+    kit.sphere(pivot, 0.12, skin, [0, 0, 0]);
+    kit.cylinder(pivot, 0.26, 0.02, 0.15, skin, [side * 0.03, -0.13, 0], [0, 0, side * 0.15], [1, 1, 0.3]);
+  });
+  // The tail fin he bounces on, wagging behind him: two blades in a crescent.
+  rig.tail.position.set(0, 0.06, -0.06);
+  kit.cylinder(rig.tail, 0.3, 0, 0.14, skin, [0, 0.12, -0.12], [-0.9, 0, 0], [1, 1, 0.3]);
+  kit.cylinder(rig.tail, 0.2, 0, 0.12, skin, [0, -0.02, -0.12], [-2.3, 0, 0], [1, 1, 0.3]);
+}
+
+// ---------------------------------------------------------------------------
+// 9. Pesto, the giant baby penguin: a huge fluffy brown chick, bigger than
+//    everyone, who waddles side to side on tiny feet and flaps little flippers.
+
+function buildPenguin(kit: Kit, rig: Rig, team: Color3, number: number): void {
+  rig.gait = 'waddle';
+  const fluff = kit.mat('fluff', new Color3(0.55, 0.42, 0.3), 0.05);
+  const fluffLight = kit.mat('fluffLight', new Color3(0.66, 0.53, 0.4), 0.05);
+  const black = kit.mat('beak', new Color3(0.08, 0.08, 0.1), 0.3);
+  const feet = kit.mat('feet', new Color3(0.35, 0.33, 0.38), 0.1);
+  const b = rig.bounce;
+
+  // The giant fluffy body, the jersey stretched around its middle, with tufts
+  // bulging out above and below it.
+  kit.sphere(b, 0.7, fluff, [0, 0.42, 0], [1.05, 1, 1.02]);
+  jersey(kit, rig, team, number, 0.46, 0.64, [1.26, 0.82, 1.2]);
+  const tufts: V3[] = [[0.26, 0.17, 0.12], [-0.26, 0.18, 0.1], [0.2, 0.15, -0.22], [-0.18, 0.16, -0.24], [0.0, 0.12, 0.26], [0.22, 0.72, -0.08], [-0.22, 0.73, -0.06]];
+  tufts.forEach((at, k) => kit.sphere(b, 0.22, k % 2 ? fluffLight : fluff, at));
+
+  // The head: a round fluffy blob with a little black beak and dark eyes.
+  const h = rig.head;
+  h.position.y = 0.88;
+  kit.sphere(h, 0.48, fluff, [0, 0, 0]);
+  for (const [x, y, z] of [[0.1, 0.22, 0.02], [-0.08, 0.24, -0.02], [0.0, 0.26, 0.06]] as V3[]) kit.sphere(h, 0.1, fluffLight, [x, y, z], [1, 1.4, 1]);
+  kit.cylinder(h, 0.1, 0, 0.07, black, [0, -0.04, 0.26], [Math.PI / 2, 0, 0]);
+  for (const side of [-1, 1]) eye(kit, h, [side * 0.1, 0.05, 0.2], { size: 0.08, iris: black, look: [0, 0.2] });
+
+  // Little flippers (no hands).
+  setShoulders(rig, 0.38);
+  rig.arms.forEach((pivot) => {
+    const side = Math.sign(pivot.position.x);
+    kit.sphere(pivot, 0.12, fluff, [0, 0, 0]);
+    kit.capsule(pivot, 0.26, 0.05, fluff, [side * 0.02, -0.12, 0], [0, 0, side * 0.15], [1, 1, 0.45]);
+  });
+  // Tiny legs and flat feet under all that fluff.
+  for (const pivot of rig.legs) {
+    pivot.position.x = Math.sign(pivot.position.x) * 0.13;
+    kit.capsule(pivot, 0.14, 0.04, feet, [0, -0.12, 0]);
+    kit.sphere(pivot, 0.14, feet, [0, -0.22, 0.06], [1, 0.3, 1.4]);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// 10. Capy, the "ok I pull up" capybara: four legs, body level, strolling
+//     along totally unbothered with half-closed eyes and an orange balanced
+//     on his head. No arms: his hits are a lunge of the whole body.
+
+function buildCapybara(kit: Kit, rig: Rig, team: Color3, number: number): void {
+  rig.gait = 'four';
+  const fur = kit.mat('fur', new Color3(0.58, 0.42, 0.26), 0.05);
+  const dark = kit.mat('dark', new Color3(0.3, 0.2, 0.13), 0.1);
+  const b = rig.bounce;
+
+  // The barrel body, level, with the jersey wrapped around it (number on top).
+  kit.sphere(b, 0.46, fur, [0, 0.4, -0.02], [1, 0.95, 1.55]);
+  const torso = jersey(kit, rig, team, number, 0.42, 0.44, [1, 1.3, 0.95]);
+  torso.position.z = 0.0;
+  torso.rotation.set(-Math.PI / 2, Math.PI, 0);
+  kit.sphere(b, 0.3, fur, [0, 0.42, -0.3]);
+
+  // The big blunt head, out front, with a broad dark nose and tiny round ears.
+  const h = rig.head;
+  h.position.set(0, 0.52, 0.36);
+  kit.sphere(h, 0.36, fur, [0, 0, 0.04], [0.95, 0.9, 1.35]);
+  kit.sphere(h, 0.16, dark, [0, -0.03, 0.27], [1.15, 0.6, 0.5]);
+  for (const side of [-1, 1]) {
+    kit.sphere(h, 0.03, kit.mat('nostril', INK), [side * 0.04, -0.01, 0.31]);
+    kit.sphere(h, 0.08, dark, [side * 0.13, 0.15, -0.06], [1, 1, 0.5]);
+    // Deadpan, half-closed eyes.
+    eye(kit, h, [side * 0.12, 0.07, 0.12], { size: 0.06, iris: dark, lid: fur, lidDrop: 0.55 });
+  }
+  // The orange, balanced on his head, with a leaf.
+  kit.sphere(h, 0.17, kit.mat('orange', new Color3(1, 0.55, 0.08), 0.15), [0, 0.24, 0.0]);
+  kit.sphere(h, 0.06, kit.mat('leaf', new Color3(0.25, 0.6, 0.2)), [0.03, 0.33, 0.0], [1, 0.25, 1.6], [0, 0.6, 0.3]);
+
+  // Four legs: the rig's two as the front pair, plus a back pair.
+  const legAt: V3[] = [[-0.13, 0.26, 0.2], [0.13, 0.26, 0.2], [-0.13, 0.26, -0.26], [0.13, 0.26, -0.26]];
+  for (let k = 0; k < 4; k++) {
+    const pivot = k < 2 ? rig.legs[k] : kit.node(b, [0, 0, 0]);
+    pivot.position.set(...legAt[k]);
+    if (k >= 2) rig.legs.push(pivot);
+    kit.capsule(pivot, 0.24, 0.055, fur, [0, -0.12, 0]);
+    kit.sphere(pivot, 0.1, dark, [0, -0.24, 0.02], [1, 0.5, 1.2]);
+  }
+}
+
 const BUILDERS: Record<CharacterKind, (kit: Kit, rig: Rig, team: Color3, number: number) => void> = {
   bear: buildBear,
   cat: buildCat,
@@ -1136,6 +1289,9 @@ const BUILDERS: Record<CharacterKind, (kit: Kit, rig: Rig, team: Color3, number:
   guy: buildGuy,
   fox: buildFox,
   pig: buildPig,
+  shark: buildShark,
+  penguin: buildPenguin,
+  capybara: buildCapybara,
 };
 
 /** Build a character's look onto the rig, in its team color with its jersey number. */

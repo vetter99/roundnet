@@ -102,7 +102,7 @@ and UX cards.
 | UX-08 | Teach the jump (dive is automatic now) | P1 | S | |
 | ART-01 | Court environment ✅ pitch, HD stands, 3D crowd | P1 | M | |
 | ART-02 | Ball and net ✅ yellow volleyball, webbed net | P2 | S | |
-| ART-03 | Character variety (7-character low-poly roster done 2026-10-11: bear, cat, TrufflesUpaGus, pinball machine, Tattoo Guy, Tilt the fox, Chris P. Bacon; per-seat picker) | P2 | M | |
+| ART-03 | Character variety (10-character low-poly roster done 2026-10-11 incl. Chris P. Bacon, Doo Doo, Pesto, Capy with distinct gaits; per-seat picker) | P2 | M | |
 | ART-04 | Celebrations and reactions | P2 | M | |
 | ART-05 | Hit effects: particles, hit-stop, shake (deferred) | P3 | M | |
 | ART-06 | Camera ✅ smart framing done; alternatives listed | P2 | S | |

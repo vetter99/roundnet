@@ -63,7 +63,7 @@ window.addEventListener('keydown', (e) => {
 // Per player: whether their charge was already full, to ding once on reaching it.
 const chargeWasFull = [false, false, false, false];
 const input = new LocalInput(window);
-const world = createMatch(tuning);
+const world = createMatch(tuning, 'practice', '2v2');
 createTuningPane(tuning);
 canvas.focus();
 

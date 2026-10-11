@@ -78,7 +78,11 @@ src/main.ts           wires it together; fixed 60Hz loop with render interpolati
   black cat, Red 1 TrufflesUpaGus (chihuahua matador, mushroom sombrero),
   Red 2 pinball machine; also pickable: Tattoo Guy, Tilt (pinball-loving
   trickster fox), Chris P. Bacon (a piglet on all fours, back end in a wheel
-  cart; no arms, so his hits are body lunges). The button next
+  cart; no arms, so his hits are body lunges), Doo Doo (an original baby
+  shark that hops on its tail), Pesto (giant fluffy penguin chick, waddles),
+  Capy (four-legged capybara with an orange on its head). Characters should
+  move distinctly, not all be standing-human variants: the rig supports
+  gaits (`walk`, `waddle`, `hop`, `four`) and extra leg pivots. The button next
   to each seat cycles its character (remembered in localStorage). Everyone
   wears a team-color jersey with their number. House style (keep it for new
   characters): match the world's low-poly toy look (icosphere facets, flat
@@ -88,7 +92,7 @@ src/main.ts           wires it together; fixed 60Hz loop with render interpolati
 - `src/ai/bot.ts` is a deterministic CPU player. In 2v2 the closer eligible
   teammate plays the ball, passes go to the partner, and the other supports
   or spreads out on defense. Seat buttons (Blue 1/2, Red 1/2) set each player
-  to human or CPU (all CPU on load); humans get gamepads in seat order, then
+  to human or CPU (all CPU, 2v2, on load); humans get gamepads in seat order, then
   the keyboard (whole, or split WASD / arrows for two).
 - Hit quality comes from timing: how close the ball is to the player's
   contact height at contact. Bad hits are weaker and drift off target.

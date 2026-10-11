@@ -4,7 +4,7 @@ import { TransformNode } from '@babylonjs/core/Meshes/transformNode';
 import type { Scene } from '@babylonjs/core/scene';
 import type { Player, ShotKind } from '../sim/player';
 import { clamp, lerp } from '../sim/vec';
-import { buildCharacter, type CharacterKind, type Spinner } from './roster';
+import { buildCharacter, type CharacterKind, type Gait, type Spinner } from './roster';
 
 // The shared rig, about 1.2m tall at size 1. Heights are from the feet; the
 // face points +z and the tail -z. Each character's look is built onto it in
@@ -113,6 +113,7 @@ export class Character {
   private landTimer = 0;
   private wasGrounded = true;
   private readonly spinners: Spinner[];
+  private gait: Gait = 'walk';
 
   constructor(scene: Scene, teamColor: Color3, kind: CharacterKind, jerseyNumber: number) {
     this.root = new TransformNode('player', scene);
@@ -140,9 +141,10 @@ export class Character {
       pivot.position.set(side * 0.1, HIP_Y, 0);
       return pivot;
     });
-    const rig = { scene, bounce: this.bounce, head, tail: this.tail, arms: this.arms, legs: this.legs, spinners: [] as Spinner[] };
+    const rig = { scene, bounce: this.bounce, head, tail: this.tail, arms: this.arms, legs: this.legs, spinners: [] as Spinner[], gait: 'walk' as Gait };
     buildCharacter(rig, kind, teamColor, jerseyNumber);
     this.spinners = rig.spinners;
+    this.gait = rig.gait;
   }
 
   private opacity = 1;
@@ -237,25 +239,46 @@ export class Character {
     const run = p.grounded ? clamp(speed / 6, 0, 1) : 0;
     this.walkPhase += dt * (5 + speed * 2.4);
     const stride = Math.sin(this.walkPhase);
-    // A springy hop on every step.
-    const hop = Math.abs(Math.cos(this.walkPhase)) * run * 0.08;
     const breathe = Math.sin(this.walkPhase * 0.4) * 0.015;
+    // How the body moves with each step, by gait:
+    // walk: a springy hop every step. waddle: short steps, rocking side to
+    // side. hop: no legs, big bounces (one per two steps) with squash on
+    // landing. four: a steady four-legged walk, the body level.
+    let hop = Math.abs(Math.cos(this.walkPhase)) * run * 0.08;
+    let rock = 0;
+    let lean = run * 0.15;
+    if (this.gait === 'waddle') {
+      hop *= 0.5;
+      rock = Math.sin(this.walkPhase) * (0.04 + run * 0.22);
+    } else if (this.gait === 'hop') {
+      const bounce = Math.sin(this.walkPhase * 0.5);
+      hop = Math.abs(bounce) * run * 0.22;
+      stretch += run * (Math.abs(bounce) < 0.25 ? -0.12 : 0.06);
+      lean = run * 0.25;
+    } else if (this.gait === 'four') {
+      hop *= 0.3;
+      lean = 0;
+    }
 
     this.bounce.position.y = hop + (anim ? sampleValue(anim.dip, phase) : 0);
-    this.bounce.rotation.x = (anim ? sampleValue(anim.lean, phase) : 0) + run * 0.15;
-    this.bounce.rotation.z = -aimTurn * SERVE_AIM_LEAN;
+    this.bounce.rotation.x = (anim ? sampleValue(anim.lean, phase) : 0) + lean;
+    this.bounce.rotation.z = -aimTurn * SERVE_AIM_LEAN + rock;
     this.bounce.scaling.set(1 - stretch * 0.5, 1 + stretch + breathe, 1 - stretch * 0.5);
 
-    // Tail swishes side to side while running, lifts when airborne.
-    this.tail.rotation.y = Math.sin(this.walkPhase * 0.5) * (0.15 + run * 0.35);
+    // Tail swishes side to side while running (hard, for a hopping shark), lifts when airborne.
+    const wag = this.gait === 'hop' ? 0.35 + run * 0.6 : 0.15 + run * 0.35;
+    this.tail.rotation.y = Math.sin(this.walkPhase * (this.gait === 'hop' ? 1.2 : 0.5)) * wag;
     for (const s of this.spinners) s.node.rotation[s.axis] += (s.idle + run * s.run) * dt;
     this.tail.rotation.x = p.grounded ? -run * 0.25 : clamp(-p.vel.y * 0.06, -0.3, 0.35);
 
     // Running: legs swing opposite each other and arms opposite the legs.
     // Airborne: one knee tucks and the arms lift out for balance.
+    // Four legs (front left, front right, back left, back right) move in
+    // diagonal pairs. Waddlers take short steps.
+    const reach = this.gait === 'waddle' ? 0.4 : 0.9;
     this.legs.forEach((leg, i) => {
-      const opposite = i === 0 ? 1 : -1;
-      leg.rotation.x = p.grounded ? opposite * stride * run * 0.9 : i === 0 ? -0.6 : -0.2;
+      const opposite = i === 0 || i === 3 ? 1 : -1;
+      leg.rotation.x = p.grounded ? opposite * stride * run * reach : i === 0 ? -0.6 : -0.2;
     });
     this.arms.forEach((arm, i) => {
       const side = i === 0 ? -1 : 1;
