@@ -86,9 +86,10 @@ src/main.ts           wires it together; fixed 60Hz loop with render interpolati
   cart; no arms, so his hits are body lunges), Doo Doo (an original baby
   shark on his belly, scooting on big flippers, tail swishing), Pesto (giant fluffy penguin chick, waddles),
   Capy (four-legged capybara with an orange on its head), Tube Man (wacky
-  inflatable tube man gliding on his blower, flailing). Characters should
-  move distinctly, not all be standing-human variants: the rig supports
-  gaits (`walk`, `waddle`, `hop`, `four`, `glide`), extra leg pivots, and
+  inflatable tube man gliding on his blower, flailing), My Leg (all legs,
+  struts), Jalcon (jaguar + peregrine falcon, hovers flapping). Characters
+  should move distinctly, not all be standing-human variants: the rig supports
+  gaits (`walk`, `waddle`, `hop`, `four`, `glide`, `strut`, `fly`), extra leg pivots, and
   `wobblers` (parts that sway on their own). The button next
   to each seat cycles its character (remembered in localStorage). Everyone
   wears a team-color jersey with their number. House style (keep it for new

@@ -20,7 +20,7 @@ import { MeshBuilder } from '@babylonjs/core/Meshes/meshBuilder';
 import { TransformNode } from '@babylonjs/core/Meshes/transformNode';
 import type { Scene } from '@babylonjs/core/scene';
 
-export type CharacterKind = 'bear' | 'cat' | 'truffles' | 'pinball' | 'guy' | 'fox' | 'pig' | 'shark' | 'penguin' | 'capybara' | 'tubeman';
+export type CharacterKind = 'bear' | 'cat' | 'truffles' | 'pinball' | 'guy' | 'fox' | 'pig' | 'shark' | 'penguin' | 'capybara' | 'tubeman' | 'myleg' | 'jalcon';
 
 /** Every character, in picker order, with display names. */
 export const CHARACTERS: { kind: CharacterKind; name: string }[] = [
@@ -35,6 +35,8 @@ export const CHARACTERS: { kind: CharacterKind; name: string }[] = [
   { kind: 'penguin', name: 'Pesto' },
   { kind: 'capybara', name: 'Capy' },
   { kind: 'tubeman', name: 'Tube Man' },
+  { kind: 'myleg', name: 'My Leg' },
+  { kind: 'jalcon', name: 'Jalcon' },
 ];
 
 /** Who plays each seat by default: Blue 1, Blue 2, Red 1, Red 2 (1v1 uses the "1" seats). */
@@ -63,8 +65,9 @@ export interface Rig {
 /**
  * walk: two legs. waddle: short steps, rocking. hop: no legs, bouncing.
  * four: four legs, body level. glide: no legs, slides along on a base.
+ * strut: two legs, big high steps. fly: hovers, flapping, legs dangling.
  */
-export type Gait = 'walk' | 'waddle' | 'hop' | 'four' | 'glide';
+export type Gait = 'walk' | 'waddle' | 'hop' | 'four' | 'glide' | 'strut' | 'fly';
 
 /** A part that sways about an axis: amplitude `amp` rad (plus `run` at a full run), `freq` rad/s, offset `phase`. */
 export interface Wobbler {
@@ -1380,6 +1383,167 @@ function buildTubeMan(kit: Kit, rig: Rig, team: Color3, number: number): void {
   });
 }
 
+// ---------------------------------------------------------------------------
+// 12. My Leg: a cute little round fella who is all legs. His arms are legs
+//     (upside down, knees and all, with sneakers for hands) and his legs are
+//     legs: long ones, with team-striped tube socks and sneakers. He struts
+//     around with big high steps.
+
+/** A leg hanging down from a pivot: thigh, knee, shin, a striped tube sock, and a sneaker at the end. */
+function wholeLeg(kit: Kit, pivot: TransformNode, skin: StandardMaterial, sock: StandardMaterial, shoe: Color3, length: number): void {
+  const thigh = length * 0.45;
+  kit.capsule(pivot, thigh + 0.06, 0.06, skin, [0, -thigh / 2, 0]);
+  kit.sphere(pivot, 0.12, skin, [0, -thigh, 0.01]);
+  kit.capsule(pivot, length - thigh, 0.05, skin, [0, -thigh - (length - thigh) / 2, 0]);
+  kit.cylinder(pivot, (length - thigh) * 0.55, 0.11, 0.11, sock, [0, -length + (length - thigh) * 0.3, 0]);
+  const sneaker = kit.mat('sneaker', shoe, 0.3);
+  kit.sphere(pivot, 0.17, sneaker, [0, -length - 0.02, 0.05], [0.9, 0.6, 1.5]);
+  kit.box(pivot, [0.13, 0.03, 0.24], kit.mat('sole', WHITE), [0, -length - 0.06, 0.05]);
+}
+
+function buildMyLeg(kit: Kit, rig: Rig, team: Color3, number: number): void {
+  rig.gait = 'strut';
+  const skin = kit.mat('skin', new Color3(1, 0.78, 0.66), 0.1);
+  const blush = kit.mat('blush', new Color3(1, 0.55, 0.6), 0.1);
+  const sock = kit.mat('sock', new Color3(1, 1, 1), 0.1);
+  sock.diffuseTexture = sockTexture(kit.scene, team);
+  const b = rig.bounce;
+
+  // A little round body in his jersey, up on top of long legs.
+  jersey(kit, rig, team, number, 0.62, 0.42, [1.05, 0.95, 0.95]);
+  kit.sphere(b, 0.34, kit.mat('shorts', SHORTS, 0.1), [0, 0.48, 0], [1.1, 0.6, 1]);
+
+  // A round cute head with huge eyes, rosy cheeks, a little smile and a hair curl.
+  const h = rig.head;
+  h.position.y = 0.95;
+  kit.sphere(h, 0.4, skin, [0, 0, 0], [1.05, 1, 1]);
+  for (const side of [-1, 1]) {
+    eye(kit, h, [side * 0.08, 0.03, 0.16], { size: 0.11, iris: kit.mat('iris', new Color3(0.2, 0.35, 0.7), 0.4), look: [0, 0.2] });
+    kit.sphere(h, 0.07, blush, [side * 0.12, -0.06, 0.14], [1, 0.6, 0.4]);
+  }
+  kit.capsule(h, 0.08, 0.012, kit.mat('smile', new Color3(0.5, 0.2, 0.2)), [0, -0.1, 0.18], [0, 0, Math.PI / 2]);
+  kit.tube(h, [[0, 0.18, 0.02], [0.03, 0.25, 0.04], [0.06, 0.22, 0.05], [0.04, 0.19, 0.04]], 0.018, 0.012, kit.mat('hair', new Color3(0.45, 0.28, 0.15)));
+
+  // Legs for legs: hips raised, long legs down to the ground.
+  for (const pivot of rig.legs) {
+    pivot.position.set(Math.sign(pivot.position.x) * 0.1, 0.46, 0);
+    wholeLeg(kit, pivot, skin, sock, new Color3(0.95, 0.3, 0.2), 0.4);
+  }
+  // Legs for arms: hanging from the shoulders, sneakers for hands.
+  setShoulders(rig, 0.2);
+  for (const pivot of rig.arms) {
+    pivot.position.y = 0.66;
+    kit.sphere(pivot, 0.12, skin, [0, 0, 0]);
+    wholeLeg(kit, pivot, skin, sock, new Color3(0.2, 0.55, 0.95), 0.24);
+  }
+}
+
+/** Tube sock stripes: white with two team-color bands near the top. */
+function sockTexture(scene: Scene, team: Color3): DynamicTexture {
+  const tex = new DynamicTexture('sock', { width: 32, height: 64 }, scene, true);
+  const ctx = tex.getContext() as CanvasRenderingContext2D;
+  ctx.fillStyle = '#f6f6f2';
+  ctx.fillRect(0, 0, 32, 64);
+  ctx.fillStyle = team.toHexString();
+  ctx.fillRect(0, 6, 32, 8);
+  ctx.fillRect(0, 20, 32, 8);
+  tex.update();
+  return tex;
+}
+
+// ---------------------------------------------------------------------------
+// 13. Jalcon, half jaguar, half peregrine falcon: a golden spotted jaguar
+//     body, arms and long tail, with the peregrine's slate-gray hood, dark
+//     tear stripes under fierce yellow-ringed eyes, a little hooked beak, big
+//     slate wings, a fan of tail feathers and yellow talons. It doesn't walk:
+//     it hovers just off the ground, wings beating, talons dangling.
+
+function buildJalcon(kit: Kit, rig: Rig, team: Color3, number: number): void {
+  rig.gait = 'fly';
+  const spots = kit.mat('jaguar', new Color3(1, 1, 1), 0.1);
+  spots.diffuseTexture = jaguarTexture(kit.scene);
+  const cream = kit.mat('cream', new Color3(0.98, 0.92, 0.8), 0.05);
+  const slate = kit.mat('slate', new Color3(0.32, 0.36, 0.44), 0.15);
+  const slateDark = kit.mat('slateDark', new Color3(0.16, 0.18, 0.22), 0.15);
+  const yellow = kit.mat('yellow', new Color3(1, 0.8, 0.15), 0.3);
+  const b = rig.bounce;
+
+  shorts(kit, rig, [1, 0.8, 0.95], new Color3(0.16, 0.18, 0.22));
+  jersey(kit, rig, team, number, 0.52, 0.44, [1.02, 1, 0.92]);
+
+  // The head: jaguar, with the falcon's dark hood over the top and back.
+  const h = rig.head;
+  kit.sphere(h, 0.48, spots, [0, 0, 0], [1.08, 0.95, 1]);
+  kit.sphere(h, 0.5, slateDark, [0, 0.06, -0.04], [1.1, 0.75, 1.02]);
+  kit.sphere(h, 0.24, cream, [0, -0.1, 0.16], [1.1, 0.7, 0.8]);
+  // Round jaguar ears poking out of the hood.
+  for (const side of [-1, 1]) kit.sphere(h, 0.11, spots, [side * 0.17, 0.2, -0.02], [1, 1, 0.5]);
+  // Fierce yellow-ringed eyes, each with the peregrine's dark tear stripe below.
+  for (const side of [-1, 1]) {
+    kit.sphere(h, 0.12, yellow, [side * 0.1, 0.04, 0.18], [1, 1, 0.5]);
+    eye(kit, h, [side * 0.1, 0.04, 0.2], { size: 0.08, iris: kit.mat('iris', new Color3(0.1, 0.08, 0.06), 0.5), lid: slateDark, lidDrop: 0.3, tilt: side * 0.25 });
+    kit.capsule(h, 0.12, 0.025, slateDark, [side * 0.12, -0.06, 0.18], [0, 0, side * 0.15]);
+  }
+  // A small hooked beak on the muzzle.
+  kit.cylinder(h, 0.09, 0.0, 0.07, kit.mat('beak', new Color3(0.35, 0.36, 0.42), 0.4), [0, -0.04, 0.27], [Math.PI / 2 + 0.5, 0, 0]);
+  kit.sphere(h, 0.05, yellow, [0, -0.01, 0.24], [1.3, 0.7, 0.8]);
+
+  // Big slate wings on its back, beating up and down.
+  for (const side of [-1, 1]) {
+    const root = kit.node(b, [side * 0.12, 0.66, -0.16]);
+    rig.wobblers.push({ node: root, axis: 'z', amp: 0.5, run: 0.25, freq: 9, phase: side > 0 ? 0 : Math.PI });
+    const wing = kit.node(root, [0, 0, 0], [0, side * -0.4, side * 0.5]);
+    kit.sphere(wing, 0.5, slate, [side * 0.26, 0.06, 0], [1, 0.2, 0.45]);
+    kit.sphere(wing, 0.36, slateDark, [side * 0.48, 0.02, -0.02], [1, 0.18, 0.35]);
+    kit.sphere(wing, 0.3, cream, [side * 0.22, 0.02, 0.02], [1, 0.12, 0.35]);
+  }
+  // Jaguar arms with spotted paws.
+  setShoulders(rig, 0.21);
+  for (const pivot of rig.arms) arm(kit, pivot, spots, cream, 0.05, 0.15);
+  // Yellow falcon talons for feet, dangling.
+  for (const pivot of rig.legs) {
+    kit.capsule(pivot, 0.16, 0.05, spots, [0, -0.08, 0]);
+    kit.capsule(pivot, 0.1, 0.025, yellow, [0, -0.18, 0]);
+    for (const a of [-0.5, 0, 0.5]) kit.cylinder(pivot, 0.08, 0.0, 0.025, slateDark, [Math.sin(a) * 0.04, -0.24, 0.03 + Math.cos(a) * 0.02], [1.2, a, 0]);
+  }
+  // A long spotted jaguar tail ending in a fan of falcon tail feathers.
+  kit.tube(rig.tail, [[0, 0, 0], [0, -0.02, -0.18], [0, 0.06, -0.36], [0, 0.18, -0.48]], 0.045, 0.035, spots);
+  for (const a of [-0.45, -0.15, 0.15, 0.45]) {
+    kit.sphere(rig.tail, 0.22, slate, [Math.sin(a) * 0.08, 0.26, -0.56], [0.35, 1, 0.12], [0.6, 0, a]);
+  }
+}
+
+/** Golden jaguar fur with black rosettes (rings around darker centers). */
+function jaguarTexture(scene: Scene): DynamicTexture {
+  const w = 256;
+  const h = 128;
+  const tex = new DynamicTexture('jaguar', { width: w, height: h }, scene, true);
+  const ctx = tex.getContext() as CanvasRenderingContext2D;
+  ctx.fillStyle = '#e0a03a';
+  ctx.fillRect(0, 0, w, h);
+  let seed = 7;
+  const rand = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+  for (let k = 0; k < 40; k++) {
+    const x = rand() * w;
+    const y = rand() * h;
+    const r = 5 + rand() * 5;
+    ctx.fillStyle = '#b9762a';
+    ctx.beginPath();
+    ctx.arc(x, y, r, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = '#1e140c';
+    ctx.lineWidth = 3;
+    ctx.setLineDash([r * 0.9, r * 0.5]);
+    ctx.stroke();
+    ctx.fillStyle = '#1e140c';
+    ctx.beginPath();
+    ctx.arc(x, y, r * 0.25, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  tex.update();
+  return tex;
+}
+
 const BUILDERS: Record<CharacterKind, (kit: Kit, rig: Rig, team: Color3, number: number) => void> = {
   bear: buildBear,
   cat: buildCat,
@@ -1392,6 +1556,8 @@ const BUILDERS: Record<CharacterKind, (kit: Kit, rig: Rig, team: Color3, number:
   penguin: buildPenguin,
   capybara: buildCapybara,
   tubeman: buildTubeMan,
+  myleg: buildMyLeg,
+  jalcon: buildJalcon,
 };
 
 /** Build a character's look onto the rig, in its team color with its jersey number. */

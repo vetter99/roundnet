@@ -15,6 +15,8 @@ const SHOULDER_X = 0.23;
 const HEAD_Y = 0.93;
 // Heads are drawn this much bigger than built, for the big-headed toy look.
 const HEAD_SCALE = 1.15;
+// The 'fly' gait hovers the body this high (m) off the ground.
+const FLY_HEIGHT = 0.15;
 const LAND_SQUASH_TIME = 0.18;
 
 // Swing animations as keyframes over normalized time 0..1.
@@ -261,6 +263,13 @@ export class Character {
     } else if (this.gait === 'glide') {
       hop = 0;
       lean = run * 0.1;
+    } else if (this.gait === 'strut') {
+      hop *= 1.6;
+      lean = -run * 0.05;
+    } else if (this.gait === 'fly') {
+      // Hovering off the ground, bobbing with the wingbeats, leaning into the flight.
+      hop = FLY_HEIGHT + Math.sin(this.time * 9) * 0.04;
+      lean = run * 0.35;
     }
 
     this.bounce.position.y = hop + (anim ? sampleValue(anim.dip, phase) : 0);
@@ -279,11 +288,13 @@ export class Character {
     // Running: legs swing opposite each other and arms opposite the legs.
     // Airborne: one knee tucks and the arms lift out for balance.
     // Four legs (front left, front right, back left, back right) move in
-    // diagonal pairs. Waddlers take short steps.
-    const reach = this.gait === 'waddle' ? 0.4 : 0.9;
+    // diagonal pairs. Waddlers take short steps, strutters big high steps;
+    // fliers let their legs dangle.
+    const reach = this.gait === 'waddle' ? 0.4 : this.gait === 'strut' ? 1.3 : 0.9;
     this.legs.forEach((leg, i) => {
       const opposite = i === 0 || i === 3 ? 1 : -1;
-      leg.rotation.x = p.grounded ? opposite * stride * run * reach : i === 0 ? -0.6 : -0.2;
+      if (this.gait === 'fly') leg.rotation.x = 0.25 + Math.sin(this.time * 9 + i) * 0.08;
+      else leg.rotation.x = p.grounded ? opposite * stride * run * reach : i === 0 ? -0.6 : -0.2;
     });
     this.arms.forEach((arm, i) => {
       const side = i === 0 ? -1 : 1;
