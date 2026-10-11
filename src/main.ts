@@ -36,24 +36,34 @@ soundButton.addEventListener('click', () => {
   sfx.unlock();
   canvas.focus();
 });
-// The stats panel: the × hides it, I toggles it; remembered on this browser.
+// The stats panel: hidden until you turn it on (the Stats button or I); the ×
+// hides it again. Remembered on this browser.
 const statsPanel = document.querySelector('#hud .panel') as HTMLElement;
-const STATS_HIDDEN_KEY = 'roundnet.statsHidden';
+const statsButton = document.getElementById('statsToggle') as HTMLButtonElement;
+const STATS_SHOWN_KEY = 'roundnet.statsShown';
 function setStatsHidden(hidden: boolean): void {
   statsPanel.classList.toggle('hidden', hidden);
+  statsButton.textContent = hidden ? '📊 Show stats' : '📊 Hide stats';
   try {
-    localStorage.setItem(STATS_HIDDEN_KEY, hidden ? '1' : '0');
+    localStorage.setItem(STATS_SHOWN_KEY, hidden ? '0' : '1');
   } catch {
     // Storage can be unavailable (private mode); the panel still works.
   }
 }
+let statsShown = false;
 try {
-  statsPanel.classList.toggle('hidden', localStorage.getItem(STATS_HIDDEN_KEY) === '1');
+  statsShown = localStorage.getItem(STATS_SHOWN_KEY) === '1';
 } catch {
-  // Shown by default.
+  // Hidden by default.
 }
+setStatsHidden(!statsShown);
 (document.getElementById('closeStats') as HTMLButtonElement).addEventListener('click', () => {
   setStatsHidden(true);
+  canvas.focus();
+});
+statsButton.addEventListener('click', () => {
+  setStatsHidden(!statsPanel.classList.contains('hidden'));
+  statsButton.blur();
   canvas.focus();
 });
 window.addEventListener('keydown', (e) => {

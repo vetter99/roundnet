@@ -20,7 +20,7 @@ import { MeshBuilder } from '@babylonjs/core/Meshes/meshBuilder';
 import { TransformNode } from '@babylonjs/core/Meshes/transformNode';
 import type { Scene } from '@babylonjs/core/scene';
 
-export type CharacterKind = 'bear' | 'cat' | 'truffles' | 'pinball' | 'guy' | 'fox' | 'pig' | 'shark' | 'penguin' | 'capybara';
+export type CharacterKind = 'bear' | 'cat' | 'truffles' | 'pinball' | 'guy' | 'fox' | 'pig' | 'shark' | 'penguin' | 'capybara' | 'tubeman';
 
 /** Every character, in picker order, with display names. */
 export const CHARACTERS: { kind: CharacterKind; name: string }[] = [
@@ -34,6 +34,7 @@ export const CHARACTERS: { kind: CharacterKind; name: string }[] = [
   { kind: 'shark', name: 'Doo Doo' },
   { kind: 'penguin', name: 'Pesto' },
   { kind: 'capybara', name: 'Capy' },
+  { kind: 'tubeman', name: 'Tube Man' },
 ];
 
 /** Who plays each seat by default: Blue 1, Blue 2, Red 1, Red 2 (1v1 uses the "1" seats). */
@@ -55,10 +56,25 @@ export interface Rig {
   // How the character moves (see Character.update); a builder can change it.
   // Extra leg pivots pushed onto `legs` (back left, back right) walk too.
   gait: Gait;
+  // Parts that sway on their own, like a flailing inflatable (see Wobbler).
+  wobblers: Wobbler[];
 }
 
-/** walk: two legs. waddle: short steps, rocking. hop: no legs, bouncing. four: four legs, body level. */
-export type Gait = 'walk' | 'waddle' | 'hop' | 'four';
+/**
+ * walk: two legs. waddle: short steps, rocking. hop: no legs, bouncing.
+ * four: four legs, body level. glide: no legs, slides along on a base.
+ */
+export type Gait = 'walk' | 'waddle' | 'hop' | 'four' | 'glide';
+
+/** A part that sways about an axis: amplitude `amp` rad (plus `run` at a full run), `freq` rad/s, offset `phase`. */
+export interface Wobbler {
+  node: TransformNode;
+  axis: 'x' | 'z';
+  amp: number;
+  run: number;
+  freq: number;
+  phase: number;
+}
 
 export interface Spinner {
   node: TransformNode;
@@ -1281,6 +1297,78 @@ function buildCapybara(kit: Kit, rig: Rig, team: Color3, number: number): void {
   }
 }
 
+// ---------------------------------------------------------------------------
+// 11. The wacky waving inflatable tube man: no legs, he glides around on his
+//     blower box while his whole tube body and long floppy arms flail nonstop
+//     (wilder when he's moving). His tube is his team color with his number
+//     on it; on top, a goofy wide-open face and a spiky hair flap.
+
+function buildTubeMan(kit: Kit, rig: Rig, team: Color3, number: number): void {
+  rig.gait = 'glide';
+  const tube = kit.mat('tube', team, 0.3, 24);
+  const stripe = kit.mat('stripe', WHITE, 0.2);
+  const blower = kit.mat('blower', new Color3(0.2, 0.2, 0.23), 0.3);
+  const grille = kit.mat('grille', new Color3(0.08, 0.08, 0.09), 0.2);
+  const numberMat = kit.mat('number', new Color3(1, 1, 1), 0.2);
+  numberMat.diffuseTexture = numberTexture(kit.scene, team, number);
+
+  // The blower box he stands on, with a fan grille and little casters.
+  kit.box(rig.bounce, [0.44, 0.24, 0.44], blower, [0, 0.14, 0]);
+  kit.cylinder(rig.bounce, 0.02, 0.3, 0.3, grille, [0, 0.14, 0.225], [Math.PI / 2, 0, 0]);
+  for (const [x, z] of [[-0.17, -0.17], [0.17, -0.17], [-0.17, 0.17], [0.17, 0.17]]) kit.sphere(rig.bounce, 0.06, grille, [x, 0.03, z]);
+
+  // The tube: a chain of segments, each swaying a bit more than the one
+  // below, so waves run up his body.
+  const SEGMENTS = 6;
+  const SEG = 0.2;
+  let parent: TransformNode = kit.node(rig.bounce, [0, 0.26, 0]);
+  const segments: TransformNode[] = [];
+  for (let k = 0; k < SEGMENTS; k++) {
+    const seg = kit.node(parent, [0, k === 0 ? 0 : SEG, 0]);
+    const up = (k + 1) / SEGMENTS;
+    rig.wobblers.push({ node: seg, axis: 'z', amp: 0.05 + up * 0.12, run: 0.08, freq: 5.5, phase: k * 0.9 });
+    rig.wobblers.push({ node: seg, axis: 'x', amp: 0.03 + up * 0.08, run: 0.06, freq: 4.1, phase: k * 0.7 + 1 });
+    kit.cylinder(seg, SEG + 0.02, 0.22, 0.24, k % 3 === 2 ? stripe : tube, [0, SEG / 2, 0]);
+    segments.push(seg);
+    parent = seg;
+  }
+  // His number, front and back, on the middle of the tube.
+  kit.card(segments[2], 0.17, 0.17, numberMat, [0, 0.1, 0.122], [0, Math.PI, 0]);
+  kit.card(segments[2], 0.17, 0.17, numberMat, [0, 0.1, -0.122]);
+
+  // The head sits on top of the tube and flails with it: a rounded top, big
+  // eyes, a wide-open mouth, raised brows, and a spiky hair flap.
+  const top = segments[SEGMENTS - 1];
+  const h = rig.head;
+  h.parent = top;
+  h.position.set(0, SEG + 0.12, 0);
+  kit.sphere(h, 0.26, tube, [0, 0, 0], [1, 1.25, 1]);
+  for (const side of [-1, 1]) {
+    eye(kit, h, [side * 0.055, 0.05, 0.1], { size: 0.08, iris: kit.mat('iris', new Color3(0.1, 0.1, 0.12)), look: [side * -0.3, 0.4] });
+    // Brows raised high at the outside: gleefully surprised.
+    kit.capsule(h, 0.07, 0.012, grille, [side * 0.055, 0.125, 0.11], [0, 0, Math.PI / 2 - side * 0.35]);
+  }
+  kit.sphere(h, 0.09, kit.mat('mouth', new Color3(0.15, 0.03, 0.05)), [0, -0.07, 0.11], [1, 1.3, 0.5]);
+  const hair = kit.mat('hair', new Color3(1, 0.85, 0.1), 0.2);
+  for (let k = -2; k <= 2; k++) kit.cylinder(h, 0.14, 0, 0.06, hair, [k * 0.035, 0.18, -0.01], [0.2 * Math.abs(k), 0, -k * 0.3]);
+
+  // Long floppy arms, also chains of segments, flung up and out and flailing.
+  rig.arms.forEach((pivot, i) => {
+    const side = i === 0 ? -1 : 1;
+    pivot.parent = segments[SEGMENTS - 2];
+    pivot.position.set(side * 0.12, SEG * 0.8, 0);
+    let armParent: TransformNode = kit.node(pivot, [0, 0, 0], [0, 0, side * 1.9]);
+    for (let k = 0; k < 3; k++) {
+      const seg = kit.node(armParent, [0, k === 0 ? 0 : -0.15, 0]);
+      rig.wobblers.push({ node: seg, axis: 'z', amp: 0.35 + k * 0.15, run: 0.25, freq: 6.5 + i, phase: k * 1.1 + i * 2 });
+      kit.cylinder(seg, 0.17, 0.08, 0.08, tube, [0, -0.075, 0]);
+      armParent = seg;
+    }
+    // The flared end of the arm.
+    kit.cylinder(armParent, 0.08, 0.13, 0.08, tube, [0, -0.18, 0]);
+  });
+}
+
 const BUILDERS: Record<CharacterKind, (kit: Kit, rig: Rig, team: Color3, number: number) => void> = {
   bear: buildBear,
   cat: buildCat,
@@ -1292,6 +1380,7 @@ const BUILDERS: Record<CharacterKind, (kit: Kit, rig: Rig, team: Color3, number:
   shark: buildShark,
   penguin: buildPenguin,
   capybara: buildCapybara,
+  tubeman: buildTubeMan,
 };
 
 /** Build a character's look onto the rig, in its team color with its jersey number. */

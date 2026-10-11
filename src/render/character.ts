@@ -4,7 +4,7 @@ import { TransformNode } from '@babylonjs/core/Meshes/transformNode';
 import type { Scene } from '@babylonjs/core/scene';
 import type { Player, ShotKind } from '../sim/player';
 import { clamp, lerp } from '../sim/vec';
-import { buildCharacter, type CharacterKind, type Gait, type Spinner } from './roster';
+import { buildCharacter, type CharacterKind, type Gait, type Spinner, type Wobbler } from './roster';
 
 // The shared rig, about 1.2m tall at size 1. Heights are from the feet; the
 // face points +z and the tail -z. Each character's look is built onto it in
@@ -114,6 +114,9 @@ export class Character {
   private wasGrounded = true;
   private readonly spinners: Spinner[];
   private gait: Gait = 'walk';
+  private readonly wobblers: Wobbler[];
+  // Seconds since creation, for parts that sway on their own.
+  private time = 0;
 
   constructor(scene: Scene, teamColor: Color3, kind: CharacterKind, jerseyNumber: number) {
     this.root = new TransformNode('player', scene);
@@ -141,9 +144,10 @@ export class Character {
       pivot.position.set(side * 0.1, HIP_Y, 0);
       return pivot;
     });
-    const rig = { scene, bounce: this.bounce, head, tail: this.tail, arms: this.arms, legs: this.legs, spinners: [] as Spinner[], gait: 'walk' as Gait };
+    const rig = { scene, bounce: this.bounce, head, tail: this.tail, arms: this.arms, legs: this.legs, spinners: [] as Spinner[], gait: 'walk' as Gait, wobblers: [] as Wobbler[] };
     buildCharacter(rig, kind, teamColor, jerseyNumber);
     this.spinners = rig.spinners;
+    this.wobblers = rig.wobblers;
     this.gait = rig.gait;
   }
 
@@ -258,6 +262,9 @@ export class Character {
     } else if (this.gait === 'four') {
       hop *= 0.3;
       lean = 0;
+    } else if (this.gait === 'glide') {
+      hop = 0;
+      lean = run * 0.1;
     }
 
     this.bounce.position.y = hop + (anim ? sampleValue(anim.dip, phase) : 0);
@@ -269,6 +276,8 @@ export class Character {
     const wag = this.gait === 'hop' ? 0.35 + run * 0.6 : 0.15 + run * 0.35;
     this.tail.rotation.y = Math.sin(this.walkPhase * (this.gait === 'hop' ? 1.2 : 0.5)) * wag;
     for (const s of this.spinners) s.node.rotation[s.axis] += (s.idle + run * s.run) * dt;
+    this.time += dt;
+    for (const w of this.wobblers) w.node.rotation[w.axis] = Math.sin(this.time * w.freq + w.phase) * (w.amp + run * w.run);
     this.tail.rotation.x = p.grounded ? -run * 0.25 : clamp(-p.vel.y * 0.06, -0.3, 0.35);
 
     // Running: legs swing opposite each other and arms opposite the legs.
@@ -320,10 +329,14 @@ export class Character {
       arm.scaling.y = 1;
       return;
     }
-    this.root.computeWorldMatrix(true);
-    this.bounce.computeWorldMatrix(true);
-    const toBounce = Matrix.Invert(this.bounce.getWorldMatrix());
-    const reach = Vector3.TransformCoordinates(new Vector3(at.x, at.y, at.z), toBounce).subtractInPlace(arm.position);
+    // The arm's parent is usually the body, but may hang off a moving part
+    // (e.g. a flailing tube), so update the whole chain above it first.
+    const chain: TransformNode[] = [];
+    for (let n = arm.parent as TransformNode | null; n; n = n.parent as TransformNode | null) chain.unshift(n);
+    for (const n of chain) n.computeWorldMatrix(true);
+    const parent = arm.parent as TransformNode;
+    const toParent = Matrix.Invert(parent.getWorldMatrix());
+    const reach = Vector3.TransformCoordinates(new Vector3(at.x, at.y, at.z), toParent).subtractInPlace(arm.position);
     const length = reach.length();
     if (length < 1e-4) return;
     arm.rotationQuaternion = Quaternion.FromUnitVectorsToRef(

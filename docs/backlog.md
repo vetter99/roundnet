@@ -95,14 +95,14 @@ and UX cards.
 | UX-01 | Title screen | P1 | M | |
 | UX-02 | Pause menu | P1 | S | |
 | UX-03 | Settings screen | P1 | M | UX-02 |
-| UX-04 | Hide dev panels for players ✅ (× closes the stats panel, I toggles, remembered) | P0 | S | |
+| UX-04 | Hide dev panels for players ✅ (stats hidden on load; Show stats button, I key or × toggle it; remembered) | P0 | S | |
 | UX-05 | How-to-play / tutorial | P2 | M | UX-01 |
 | UX-06 | Character select | P2 | M | ART-03 |
 | UX-07 | Timing guide ✅ kept as is; player circle removed | P0 | S | |
 | UX-08 | Teach the jump (dive is automatic now) | P1 | S | |
 | ART-01 | Court environment ✅ pitch, HD stands, 3D crowd | P1 | M | |
 | ART-02 | Ball and net ✅ yellow volleyball, webbed net | P2 | S | |
-| ART-03 | Character variety (10-character low-poly roster done 2026-10-11 incl. Chris P. Bacon, Doo Doo, Pesto, Capy with distinct gaits; per-seat picker) | P2 | M | |
+| ART-03 | Character variety (11-character low-poly roster done 2026-10-11 incl. Chris P. Bacon, Doo Doo, Pesto, Capy, Tube Man with distinct gaits; per-seat picker) | P2 | M | |
 | ART-04 | Celebrations and reactions | P2 | M | |
 | ART-05 | Hit effects: particles, hit-stop, shake (deferred) | P3 | M | |
 | ART-06 | Camera ✅ smart framing done; alternatives listed | P2 | S | |
