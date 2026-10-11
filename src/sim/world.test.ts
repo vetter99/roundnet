@@ -8,6 +8,33 @@ import { createMatch, createWorld, feedBall, otherTeam, stepWorld, type SimEvent
 
 const t = createTuning();
 
+/**
+ * Serve the real-roundnet way for whoever is serving: toss with pass, hold
+ * spike, and release as the ball drops to the sweet spot (or `releaseAt` m
+ * above / below it). `tap` holds spike only for the last moment (a soft
+ * serve); `spinX` is sideways stick while charging. Runs until the serve is
+ * hit (or the toss lands) and returns every event along the way.
+ */
+function tossAndServe(world: World, tt = t, opts: { tap?: boolean; spinX?: number; releaseAt?: number } = {}): SimEvent[] {
+  const idx = world.players.findIndex((p) => p.id === world.serve.serverId);
+  const as = (i: Partial<Intent>) => world.players.map((_, k) => (k === idx ? { ...NEUTRAL_INTENT, ...i } : NEUTRAL_INTENT));
+  const events: SimEvent[] = [];
+  const step = (i: Partial<Intent>) => {
+    stepWorld(world, as(i), tt);
+    events.push(...world.events);
+  };
+  step({ pass: true });
+  step({});
+  const releaseHeight = tt.serve.contactHeight + (opts.releaseAt ?? 0);
+  for (let i = 0; i < 120 && world.waitingForServe; i++) {
+    const b = world.ball;
+    const release = b.vel.y < 0 && b.pos.y <= releaseHeight;
+    const holding = !opts.tap || (b.vel.y < 0 && b.pos.y <= releaseHeight + 0.15);
+    step(release || !holding ? {} : { spike: true, moveX: opts.spinX ?? 0 });
+  }
+  return events;
+}
+
 describe('hits', () => {
   function setup(ballHeightError: number) {
     const p = createPlayer(0, 0, 0, -2.5);
@@ -126,9 +153,8 @@ describe('world', () => {
     expect(world.waitingForServe).toBe(true);
     expect(world.ball.alive).toBe(false);
 
-    // Red taps pass: the serve happens on release.
-    stepWorld(world, [NEUTRAL_INTENT, { ...NEUTRAL_INTENT, pass: true }], t);
-    stepWorld(world, [], t);
+    // Red tosses and hits: the serve is in the air.
+    tossAndServe(world);
     expect(world.waitingForServe).toBe(false);
     expect(world.ball.alive).toBe(true);
 
@@ -141,12 +167,71 @@ describe('world', () => {
     expect(Math.sign(world.ball.vel.z)).toBe(Math.sign(world.players[0].pos.z));
   });
 
-  it("only the server's pass starts the serve", () => {
+  it("only the server's pass tosses the ball", () => {
     const world = createMatch(t);
     // Blue is receiving, so Blue tapping pass does nothing.
     stepWorld(world, [{ ...NEUTRAL_INTENT, pass: true }], t);
     stepWorld(world, [], t);
     expect(world.waitingForServe).toBe(true);
+    expect(world.serve.tossed).toBe(false);
+  });
+
+  it('serving takes two steps: pass tosses the ball up, then spike hits it', () => {
+    const world = createMatch(t);
+    const red = (intent: Partial<Intent>): Intent[] => [NEUTRAL_INTENT, { ...NEUTRAL_INTENT, ...intent }];
+    // A spike before the toss does nothing.
+    stepWorld(world, red({ spike: true }), t);
+    stepWorld(world, red({}), t);
+    expect(world.serve.tossed).toBe(false);
+    expect(world.waitingForServe).toBe(true);
+    // Pass tosses it straight up; it's still waiting to be hit.
+    stepWorld(world, red({ pass: true }), t);
+    expect(world.events).toContainEqual({ type: 'toss', playerId: 1 });
+    expect(world.serve.tossed).toBe(true);
+    for (let i = 0; i < 5; i++) stepWorld(world, red({}), t);
+    expect(world.ball.vel.y).toBeGreaterThan(0);
+    expect(world.waitingForServe).toBe(true);
+  });
+
+  it('a toss that is never hit is a fault', () => {
+    const world = createMatch(t);
+    const red = (intent: Partial<Intent>): Intent[] => [NEUTRAL_INTENT, { ...NEUTRAL_INTENT, ...intent }];
+    stepWorld(world, red({ pass: true }), t);
+    const events: SimEvent[] = [];
+    for (let i = 0; i < 120; i++) {
+      stepWorld(world, red({}), t);
+      events.push(...world.events);
+    }
+    expect(events).toContainEqual({ type: 'fault', team: 1, lost: false });
+    // After a pause, Red gets a second serve.
+    for (let i = 0; i < t.practice.resetDelayTicks + 2; i++) stepWorld(world, [], t);
+    expect(world.waitingForServe).toBe(true);
+    expect(world.serve.tossed).toBe(false);
+    expect(world.serve.faults).toBe(1);
+  });
+
+  it('a well-timed hit is full quality; hit early it goes long, late it goes short', () => {
+    /** Serve straight at the net center with the given timing; returns quality and where it hits the net (z). */
+    const serveTimed = (releaseAt: number) => {
+      const world = createMatch(t);
+      const events = tossAndServe(world, t, { tap: true, releaseAt });
+      const serve = events.find((e) => e.type === 'serve');
+      let net: SimEvent | undefined;
+      for (let i = 0; i < 120 && !net; i++) {
+        stepWorld(world, [], t);
+        net = world.events.find((e) => e.type === 'net' || e.type === 'ground');
+      }
+      return { quality: serve?.type === 'serve' ? serve.quality : 0, z: net?.type === 'net' ? net.at.z : Infinity };
+    };
+    const good = serveTimed(0);
+    const early = serveTimed(0.3);
+    const late = serveTimed(-0.3);
+    expect(good.quality).toBeCloseTo(1);
+    expect(early.quality).toBeLessThan(1);
+    expect(late.quality).toBeLessThan(1);
+    // Red serves from +z toward -z: long is more negative z, short more positive.
+    expect(early.z).toBeLessThan(good.z);
+    expect(late.z).toBeGreaterThan(good.z);
   });
 
   it('after the ball lands, the game waits for the next serve', () => {
@@ -515,7 +600,7 @@ describe('serve duel', () => {
     expect(Math.hypot(blue.pos.x, blue.pos.z)).toBeCloseTo(t.net.radius + t.net.frameWidth + t.court.serveLineDistance + t.serve.receiverBack);
   });
 
-  it('the ball is held in the paw, slid toward the aim, and the serve leaves from there', () => {
+  it('the ball is held in the paw, slid toward the aim, and tossed up from there', () => {
     const world = createMatch(t);
     const server = world.players[1];
     const center = serveHand(world, server, t);
@@ -523,9 +608,9 @@ describe('serve duel', () => {
     world.serve.aim = { x: -t.net.radius, z: 0 };
     const right = serveHand(world, server, t);
     expect(right.x).toBeLessThan(center.x - 0.2);
-    stepWorld(world, red({ spike: true }), t);
-    stepWorld(world, red({}), t);
-    expect(world.ball.pos.x).toBeCloseTo(right.x, 1);
+    stepWorld(world, red({ pass: true }), t);
+    expect(world.ball.pos.x).toBeCloseTo(right.x, 2);
+    expect(world.ball.pos.z).toBeCloseTo(right.z, 2);
   });
 
   it("the server's stick moves the aim, not the server", () => {
@@ -542,8 +627,7 @@ describe('serve duel', () => {
     const world = createMatch(t);
     for (let i = 0; i < 10; i++) stepWorld(world, red({ moveX: 1 }), t);
     const aim = { ...world.serve.aim };
-    stepWorld(world, red({ spike: true }), t);
-    stepWorld(world, [], t);
+    tossAndServe(world, t, { tap: true });
     let net: SimEvent | undefined;
     for (let i = 0; i < 120 && !net; i++) {
       stepWorld(world, [], t);
@@ -561,9 +645,7 @@ describe('serve duel', () => {
     const world = createMatch(loose);
     const serveOffNet = () => {
       world.serve.aim = { x: 3, z: 0 };
-      stepWorld(world, red({ spike: true }), loose);
-      stepWorld(world, [], loose);
-      const faults: SimEvent[] = [];
+      const faults: SimEvent[] = tossAndServe(world, loose, { tap: true }).filter((e) => e.type === 'fault');
       for (let i = 0; i < 240 && !world.waitingForServe; i++) {
         stepWorld(world, [], loose);
         faults.push(...world.events.filter((e) => e.type === 'fault'));
@@ -586,10 +668,8 @@ describe('serve spin', () => {
   function serveWithSpin(spinX: number, flightX = 0) {
     const world = createMatch(t);
     const red = (intent: Partial<Intent>): Intent[] => [NEUTRAL_INTENT, { ...NEUTRAL_INTENT, ...intent }];
-    stepWorld(world, red({ spike: true }), t); // start charging: the aim locks
-    // A normal-strength serve (a tapped one with full spin curves right off the net).
-    for (let i = 0; i < 20; i++) stepWorld(world, red({ spike: true, moveX: spinX }), t);
-    stepWorld(world, red({}), t); // release: the serve is in the air
+    // Toss, charge with the stick held sideways for spin, release at the sweet spot.
+    tossAndServe(world, t, { spinX });
     let net: SimEvent | undefined;
     for (let i = 0; i < 120 && !net; i++) {
       stepWorld(world, red({ moveX: flightX }), t);
@@ -621,11 +701,7 @@ describe('serve spin', () => {
 
   it('reports the spin on the serve event', () => {
     const world = createMatch(t);
-    const red = (intent: Partial<Intent>): Intent[] => [NEUTRAL_INTENT, { ...NEUTRAL_INTENT, ...intent }];
-    stepWorld(world, red({ spike: true }), t);
-    stepWorld(world, red({ spike: true, moveX: 1 }), t);
-    stepWorld(world, red({ moveX: 1 }), t);
-    const serve = world.events.find((e) => e.type === 'serve');
+    const serve = tossAndServe(world, t, { spinX: 1 }).find((e) => e.type === 'serve');
     expect(serve).toMatchObject({ type: 'serve' });
     expect(serve?.type === 'serve' && Math.abs(serve.spin)).toBeCloseTo(1);
   });
@@ -670,11 +746,9 @@ describe('match mode', () => {
     const loose = createTuning();
     loose.serve.aimLimit = 10;
     const world = createMatch(loose, 'match');
-    const red = (intent: Partial<Intent>): Intent[] => [NEUTRAL_INTENT, { ...NEUTRAL_INTENT, ...intent }];
     for (let attempt = 0; attempt < 2; attempt++) {
       world.serve.aim = { x: 3, z: 0 };
-      stepWorld(world, red({ spike: true }), loose);
-      stepWorld(world, [], loose);
+      tossAndServe(world, loose, { tap: true });
       for (let i = 0; i < 240 && !world.waitingForServe; i++) stepWorld(world, [], loose);
     }
     expect(world.score).toEqual([1, 0]);

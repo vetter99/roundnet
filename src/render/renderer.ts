@@ -205,10 +205,12 @@ export class Renderer {
     this.ball.position.set(lerp(prev.ball.x, b.x, a), lerp(prev.ball.y, b.y, a), lerp(prev.ball.z, b.z, a));
     this.ball.scaling.setAll(t.ball.radius * 2);
     // Waiting for the serve, the ball sits in the server's paw (none once the game is over).
-    const holder = world.waitingForServe && world.winner === null ? world.players.find((p) => p.id === world.serve.serverId) : undefined;
+    // (Until it's tossed: then it's a real ball in the air.)
+    const holder =
+      world.waitingForServe && world.winner === null && !world.serve.tossed ? world.players.find((p) => p.id === world.serve.serverId) : undefined;
     const held = holder ? serveHand(world, holder, t) : undefined;
     if (held) this.ball.position.set(held.x, held.y, held.z);
-    this.ball.isVisible = !world.waitingForServe || held !== undefined;
+    this.ball.isVisible = !world.waitingForServe || held !== undefined || world.serve.tossed;
     const v = world.ball.vel;
     const fast = clamp((Math.hypot(v.x, v.y, v.z) - TRAIL_MIN_SPEED) / (TRAIL_FULL_SPEED - TRAIL_MIN_SPEED), 0, 1);
     const spin = this.updateBallSpin(world, frameSeconds);
@@ -413,7 +415,8 @@ export class Renderer {
 
   private updateMarker(world: World, landing: LandingPrediction | null, t: Tuning): void {
     const ball = world.ball;
-    const show = landing !== null && (t.marker.mode === 'always' || !landing.viaNet);
+    // No marker under a serve toss (it's the server's to hit, not anyone's to play).
+    const show = landing !== null && !world.serve.tossed && (t.marker.mode === 'always' || !landing.viaNet);
     this.marker.setEnabled(show);
     if (!landing || !show) return;
     this.marker.position.set(landing.point.x, 0.03, landing.point.z);

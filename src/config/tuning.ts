@@ -182,6 +182,13 @@ export const DEFAULT_TUNING = {
     // sideways (up to handReach at the edge of the net) and up for a deeper
     // aim (up to handLift), so the receiver reads the aim from the ball in hand.
     handHeight: 0.6,
+    // The toss: straight up out of the paw at this speed (m/s; 4.2 peaks about
+    // 0.7 m above the paw). The sweet spot to hit it is this high on the way
+    // down (timing quality works like a rally hit, see hit.perfectWindow). A
+    // badly timed hit lands up to this far long (early) or short (late), m.
+    tossSpeed: 4.2,
+    contactHeight: 0.95,
+    mistimeDrift: 0.7,
     handForward: 0.22,
     handSide: 0.3,
     handReach: 0.28,

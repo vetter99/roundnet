@@ -7,6 +7,7 @@ import {
   faultServe,
   launchServe,
   serverIntent,
+  tossServe,
   serveWobble,
   setNextReceiver,
   setUpServe,
@@ -28,7 +29,8 @@ export type SimEvent =
   // The ball came off the net, so the other team must now play it.
   | { type: 'possession'; team: Team }
   // A serve was hit; a serve that missed the net (lost = out of tries).
-  | { type: 'serve'; playerId: number; power: number; spin: number }
+  | { type: 'toss'; playerId: number }
+  | { type: 'serve'; playerId: number; power: number; spin: number; quality: number }
   | { type: 'fault'; team: Team; lost: boolean }
   // Match mode: a point scored, and the end of a game.
   | { type: 'point'; team: Team }
@@ -197,13 +199,21 @@ export function stepWorld(world: World, intents: readonly Intent[], t: Tuning): 
     const swing = stepPlayer(p, serving ? serverIntent(intent) : intent, t);
     if (p.dive && !wasDiving) world.events.push({ type: 'dive', playerId: p.id });
     if (p.dive?.ticks === diveTicks(t)) world.events.push({ type: 'diveLand', playerId: p.id });
+    // Serving, step 1: pressing pass tosses the ball up.
+    if (serving && !world.serve.tossed && p.charge?.kind === 'pass' && p.charge.ticks === 0) {
+      tossServe(world, p, t);
+      world.events.push({ type: 'toss', playerId: p.id });
+    }
     if (!swing) return;
+    // A server's swings never become rally hits (the toss's pass release, or a spike before the toss).
+    if (serving) p.hitBuffer = null;
+    // Serving, step 2: releasing spike while the ball is up hits the serve.
+    const serveHit = serving && world.serve.tossed && swing.kind === 'spike';
+    if (serving && !serveHit) return;
     world.events.push({ type: 'swing', playerId: p.id, ...swing, spin: serving ? world.serve.spin : swing.spin });
-    // Releasing a charged hit while aiming serves the ball.
-    if (serving && wobble) {
-      p.hitBuffer = null;
-      launchServe(world, p, swing.power, wobble, t);
-      world.events.push({ type: 'serve', playerId: p.id, power: swing.power, spin: world.serve.spin });
+    if (serveHit && wobble) {
+      const quality = launchServe(world, p, swing.power, wobble, t);
+      world.events.push({ type: 'serve', playerId: p.id, power: swing.power, spin: world.serve.spin, quality });
     }
   });
   separatePlayers(world, t);
@@ -254,9 +264,12 @@ export function stepWorld(world: World, intents: readonly Intent[], t: Tuning): 
       world.serve.faults = 0;
       world.events.push({ type: 'possession', team: world.possession });
     } else if (e.type === 'ground') {
-      if (world.serve.inFlight) {
-        // A serve that never reached the net: a fault. Two in a row lose the
-        // serve, and in a match give the receiver the point.
+      if (world.serve.inFlight || world.serve.tossed) {
+        // A serve that never reached the net, or a toss that was never hit: a
+        // fault. Two in a row lose the serve, and in a match give the
+        // receiver the point. Then the next serve is set up after a pause.
+        world.serve.tossed = false;
+        world.waitingForServe = false;
         const server = otherTeam(world.nextReceiver);
         const receiver = world.nextReceiver;
         const lost = faultServe(world, t);

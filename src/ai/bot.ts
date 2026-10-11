@@ -70,9 +70,12 @@ const SUPPORT_ANGLE = 1.5;
 // less when the partner is closer.
 const PASS_TO_PARTNER_REACH = 3.5;
 // Serving: the CPU aims a little to one side of the net center, then after a
-// pause charges for SERVE_CHARGE_TICKS (about two-thirds power) and releases.
+// pause tosses, starts charging as the toss slows below SERVE_CHARGE_FROM_VY
+// (m/s upward; about two-thirds power by the hit), and releases as the ball
+// drops to the sweet spot, off by up to SERVE_TIMING_ERROR (m) each serve.
 const SERVE_DELAY_TICKS = 50;
-const SERVE_CHARGE_TICKS = 22;
+const SERVE_CHARGE_FROM_VY = 1.5;
+const SERVE_TIMING_ERROR = 0.12;
 const SERVE_AIM_SIDE = 0.35;
 
 /** A repeatable pseudo-random value in [-1, 1] for this possession; `salt` varies it per touch. */
@@ -119,7 +122,16 @@ export function botIntent(world: World, index: number, t: Tuning): Intent {
     intent.moveX = Math.max(-1, Math.min(1, dx * 6));
     intent.moveZ = Math.max(-1, Math.min(1, dz * 6));
     const elapsed = world.tick - world.serveReadyTick;
-    intent.spike = elapsed >= SERVE_DELAY_TICKS && elapsed < SERVE_DELAY_TICKS + SERVE_CHARGE_TICKS;
+    if (!world.serve.tossed) {
+      intent.pass = elapsed >= SERVE_DELAY_TICKS;
+      return intent;
+    }
+    // Tossed: charge from near the top of the toss, release at the sweet spot (give or take).
+    intent.moveX = 0;
+    intent.moveZ = 0;
+    const error = ((((world.serveReadyTick * 7919) % 9) - 4) / 4) * SERVE_TIMING_ERROR;
+    const release = ball.vel.y < 0 && ball.pos.y <= t.serve.contactHeight + error;
+    intent.spike = (me.charge?.kind === 'spike' || ball.vel.y < SERVE_CHARGE_FROM_VY) && !release;
     // While charging, on about half of serves push the stick sideways for spin.
     const spinChoice = (world.serveReadyTick * 48271) % 4;
     if (me.charge && spinChoice < 2) {

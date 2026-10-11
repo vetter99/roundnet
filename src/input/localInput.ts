@@ -63,6 +63,8 @@ const KEYMAPS: Record<KeyboardScheme, KeyMap> = {
 
 /** The key shown in prompts for passing/serving in each scheme. */
 export const PASS_KEY_LABEL: Record<KeyboardScheme, string> = { all: 'J', left: 'J', right: ',' };
+/** The key shown in prompts for spiking (and hitting the serve) in each scheme. */
+export const SPIKE_KEY_LABEL: Record<KeyboardScheme, string> = { all: 'K', left: 'K', right: '.' };
 
 const CAPTURED_KEYS = new Set(Object.values(KEYMAPS).flatMap((map) => Object.values(map).flat()));
 

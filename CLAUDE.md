@@ -57,16 +57,17 @@ src/main.ts           wires it together; fixed 60Hz loop with render interpolati
   alternates) and match (to `match.pointsToWin`, win by 2; the side that lets
   the ball land loses the point; the winner serves; `match.maxTouches`; a
   double fault gives the receiver the point).
-- Serving is a duel (`src/sim/serve.ts`): the server aims a target on the net
-  with the stick, holds a hit button to charge and releases; more charge =
-  more aim wobble. Two tries per serve. No aim marker: the server holds the
-  ball out in their off paw, and aiming slides the paw (`serveHand`); the
-  serve leaves from there. While charging, the aim locks and sideways stick sets
-  spin (`serve.spin`): the arm cocks to one side and sweeps across on
-  release, and the serve curves that way. No steering after release. The
-  receiver starts 2 m behind their serve line (`serve.receiverBack`). The
-  renderer shows a camera straight behind the (see-through) receiver until
-  the return; human stick input follows the camera.
+- Serving is a duel (`src/sim/serve.ts`), toss then hit like real roundnet:
+  the stick aims (the ball held out in the off paw slides toward the aim,
+  `serveHand`; no marker), pass tosses the ball a short way up, then hold
+  spike to charge (sideways stick = spin; the arm cocks and sweeps) and
+  release to hit. Timing works like a rally hit: at `serve.contactHeight` it
+  goes where aimed at full power; early it goes long, late short and slower.
+  More charge wobbles the aim. A serve that misses the net, or a toss that's
+  never hit, is a fault; two tries per serve. The receiver starts 2 m behind
+  their serve line (`serve.receiverBack`). The renderer shows a camera
+  straight behind the (see-through) receiver until the return; human stick
+  input follows the camera.
   `feedBall` (feeding the ball off the net) is only a test/practice helper.
 - All settings (mode, format, stats, seats and characters) live in the pause
   menu; the play screen only shows a Pause button (or Esc / P / controller Menu).

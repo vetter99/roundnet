@@ -2,7 +2,7 @@ import { botIntent } from './ai/bot';
 import { Sfx } from './audio/sfx';
 import { tuning } from './config/tuning';
 import { createTuningPane } from './debug/tuningPane';
-import { LocalInput, PASS_KEY_LABEL, type InputFrame, type KeyboardScheme } from './input/localInput';
+import { LocalInput, PASS_KEY_LABEL, SPIKE_KEY_LABEL, type InputFrame, type KeyboardScheme } from './input/localInput';
 import { Renderer, snapshot } from './render/renderer';
 import { CHARACTERS, SEAT_CHARACTERS, type CharacterKind } from './render/roster';
 import type { MissReason } from './sim/hit';
@@ -346,9 +346,13 @@ function onEvent(e: SimEvent): void {
     showFlash(`Point ${TEAM_NAMES[e.team]}`, TEAM_CSS[e.team], 1);
   } else if (e.type === 'gameOver') {
     showFlash(`${TEAM_NAMES[e.winner]} wins ${Math.max(...world.score)}–${Math.min(...world.score)}!`, TEAM_CSS[e.winner], 3);
+  } else if (e.type === 'toss') {
+    // The toss: a gentle push of the paw.
+    renderer.playSwing(e.playerId, 'drop');
+    sfx.swing(0.2);
   } else if (e.type === 'serve') {
     const featured = isHuman(e.playerId) || !world.players.some((p) => isHuman(p.id));
-    sfx.hit('spike', e.power, 1, featured ? 1 : tuning.audio.cpuHits);
+    sfx.hit('spike', e.power, e.quality, featured ? 1 : tuning.audio.cpuHits);
   } else if (e.type === 'fault') {
     sfx.ground();
     showFlash(e.lost ? `Double fault: serve goes to ${TEAM_NAMES[1 - e.team]}` : 'Fault: 2nd serve', '#ffd84a', 1.2);
@@ -478,12 +482,16 @@ function updateHud(frameSeconds: number, devices: Device[]): void {
   const showServePrompt = world.waitingForServe && world.winner === null;
   prompt.style.display = showServePrompt ? 'block' : 'none';
   if (showServePrompt) {
-    const key = serverDevice === 'cpu' ? '' : typeof serverDevice === 'string' ? PASS_KEY_LABEL[serverDevice] : 'A';
+    const keyboard = typeof serverDevice === 'string' && serverDevice !== 'cpu';
+    const tossKey = keyboard ? PASS_KEY_LABEL[serverDevice] : 'A';
+    const hitKey = keyboard ? SPIKE_KEY_LABEL[serverDevice] : 'B';
     const second = world.serve.faults > 0 ? ' <small>(2nd serve)</small>' : '';
     prompt.innerHTML =
       serverDevice === 'cpu'
         ? `${playerSpan(serverPlayer)} is serving…${second}`
-        : `${playerSpan(serverPlayer)}: stick aims · hold <b>${key}</b> to charge (stick ←→ while holding = spin) · release to serve${second}`;
+        : world.serve.tossed
+          ? `${playerSpan(serverPlayer)}: hold <b>${hitKey}</b>, release as it drops to chest height (stick ←→ = spin)${second}`
+          : `${playerSpan(serverPlayer)}: stick aims · <b>${tossKey}</b> to toss${second}`;
   }
   const match = world.mode === 'match';
   const touches = match && world.ball.alive && world.ball.lastTouch !== 'feed' ? ` · touch ${world.touches} of ${tuning.match.maxTouches}` : '';
