@@ -162,7 +162,15 @@ export const DEFAULT_TUNING = {
     // Serve speed for a tap vs. a full charge (m/s).
     speedMin: 6,
     speedMax: 12,
-    handHeight: 1.1,
+    // The server holds the ball out in their off paw, this high, this far in
+    // front, and this far to their left of center. Aiming slides the paw
+    // sideways (up to handReach at the edge of the net) and up for a deeper
+    // aim (up to handLift), so the receiver reads the aim from the ball in hand.
+    handHeight: 0.6,
+    handForward: 0.22,
+    handSide: 0.3,
+    handReach: 0.28,
+    handLift: 0.12,
     // Attempts per serve before it's lost.
     tries: 2,
     // Spin: sideways stick while charging sets sidespin; the serve curves this

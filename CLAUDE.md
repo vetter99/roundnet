@@ -56,8 +56,9 @@ src/main.ts           wires it together; fixed 60Hz loop with render interpolati
   double fault gives the receiver the point).
 - Serving is a duel (`src/sim/serve.ts`): the server aims a target on the net
   with the stick, holds a hit button to charge and releases; more charge =
-  more aim wobble. Two tries per serve. No aim marker: the server turns and
-  leans toward the aim. While charging, the aim locks and sideways stick sets
+  more aim wobble. Two tries per serve. No aim marker: the server holds the
+  ball out in their off paw, and aiming slides the paw (`serveHand`); the
+  serve leaves from there. While charging, the aim locks and sideways stick sets
   spin (`serve.spin`): the arm cocks to one side and sweeps across on
   release, and the serve curves that way. No steering after release. The
   receiver starts behind their serve line (`serve.receiverBack`). The

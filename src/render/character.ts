@@ -1,5 +1,6 @@
 import { StandardMaterial } from '@babylonjs/core/Materials/standardMaterial';
 import { Color3 } from '@babylonjs/core/Maths/math.color';
+import { Matrix, Quaternion, Vector3 } from '@babylonjs/core/Maths/math.vector';
 import type { Mesh } from '@babylonjs/core/Meshes/mesh';
 import { MeshBuilder } from '@babylonjs/core/Meshes/meshBuilder';
 import { TransformNode } from '@babylonjs/core/Meshes/transformNode';
@@ -134,8 +135,13 @@ export interface DiveView {
 
 // Serving: the server turns this many times further than their real aim
 // angle (so a small aim change is visible) and leans sideways into it.
-const SERVE_AIM_EXAGGERATION = 3;
-const SERVE_AIM_LEAN = 0.35;
+const SERVE_AIM_EXAGGERATION = 1.5;
+const SERVE_AIM_LEAN = 0.25;
+// Shoulder to the center of a ball held in the paw (m, at size 1); the arm
+// stretches a little, cartoon style, when the ball is further than this.
+const HOLD_REACH = 0.33;
+// Arms hang straight down from the shoulder at rest.
+const HANG = new Vector3(0, -1, 0);
 // Serve spin: while charging, the hitting arm cocks out to one side (radians)
 // and the body twists with it; on release the arm sweeps across to the other
 // side, the direction the ball will curve.
@@ -354,6 +360,7 @@ export class Character {
     faceNet = false,
     serveAim?: { x: number; z: number },
     serveSpin = 0,
+    holdBall?: { x: number; y: number; z: number },
   ): void {
     this.root.position.set(x, y, z);
     this.root.scaling.setAll(size);
@@ -451,7 +458,31 @@ export class Character {
       this.root.rotation.y -= cock * SERVE_SPIN_TWIST;
     }
 
+    this.holdBall(holdBall);
+
     if (dive) this.applyDivePose(dive, anim !== undefined);
+  }
+
+  /** Reach the off (left) paw to a ball held out before serving (world position), or let go. */
+  private holdBall(at?: { x: number; y: number; z: number }): void {
+    const arm = this.arms[0];
+    if (!at) {
+      arm.rotationQuaternion = null;
+      arm.scaling.y = 1;
+      return;
+    }
+    this.root.computeWorldMatrix(true);
+    this.bounce.computeWorldMatrix(true);
+    const toBounce = Matrix.Invert(this.bounce.getWorldMatrix());
+    const reach = Vector3.TransformCoordinates(new Vector3(at.x, at.y, at.z), toBounce).subtractInPlace(arm.position);
+    const length = reach.length();
+    if (length < 1e-4) return;
+    arm.rotationQuaternion = Quaternion.FromUnitVectorsToRef(
+      HANG,
+      reach.scaleInPlace(1 / length),
+      arm.rotationQuaternion ?? new Quaternion(),
+    );
+    arm.scaling.y = clamp(length / HOLD_REACH, 0.7, 1.5);
   }
 
   /** Stretch out flat in the lunge, lie there, then push back up. Overrides the normal pose. */

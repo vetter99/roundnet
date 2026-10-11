@@ -3,6 +3,7 @@ import { createTuning } from '../config/tuning';
 import { stepBall, type BallEvent } from './ball';
 import { autoDiveTarget, hitQuality, tryHit } from './hit';
 import { createPlayer, NEUTRAL_INTENT, startDive, stepPlayer, type Intent } from './player';
+import { serveHand } from './serve';
 import { createMatch, createWorld, feedBall, stepWorld, type SimEvent, type World } from './world';
 
 const t = createTuning();
@@ -487,6 +488,19 @@ describe('serve duel', () => {
     expect(Math.sign(blue.pos.z)).toBe(-Math.sign(redPlayer.pos.z));
     // The receiver starts behind their serve line.
     expect(Math.hypot(blue.pos.x, blue.pos.z)).toBeCloseTo(t.net.radius + t.net.frameWidth + t.court.serveLineDistance + t.serve.receiverBack);
+  });
+
+  it('the ball is held in the paw, slid toward the aim, and the serve leaves from there', () => {
+    const world = createMatch(t);
+    const server = world.players[1];
+    const center = serveHand(world, server, t);
+    // Red faces -z, so its right is -x: aiming to Red's right slides the paw that way.
+    world.serve.aim = { x: -t.net.radius, z: 0 };
+    const right = serveHand(world, server, t);
+    expect(right.x).toBeLessThan(center.x - 0.2);
+    stepWorld(world, red({ spike: true }), t);
+    stepWorld(world, red({}), t);
+    expect(world.ball.pos.x).toBeCloseTo(right.x, 1);
   });
 
   it("the server's stick moves the aim, not the server", () => {

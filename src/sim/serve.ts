@@ -115,6 +115,28 @@ function pinServer(server: Player, t: Tuning): void {
   server.pos.z = spot.z;
 }
 
+/**
+ * Where the server holds the ball before serving: out in front in their off
+ * paw, slid toward the aim (sideways, and up for a deeper aim). The serve
+ * leaves from here, and the renderer draws the ball here.
+ */
+export function serveHand(world: World, server: Player, t: Tuning): { x: number; y: number; z: number } {
+  const spot = serverSpot(server.team, t);
+  // The server faces the net straight on: forward is toward it, right is their right.
+  const fz = -Math.sign(spot.z) || 1;
+  const right = { x: fz, z: 0 };
+  const limit = t.net.radius * t.serve.aimLimit || 1;
+  const aim = world.serve.aim;
+  const across = clamp((aim.x * right.x + aim.z * right.z) / limit, -1, 1);
+  const deep = clamp((aim.z * fz) / limit, -1, 1);
+  const lateral = -t.serve.handSide + across * t.serve.handReach;
+  return {
+    x: spot.x + right.x * lateral,
+    y: t.serve.handHeight + deep * t.serve.handLift,
+    z: spot.z + fz * t.serve.handForward + right.z * lateral,
+  };
+}
+
 /** How far the aim is thrown off right now by the server's charge (wobbles more with power). */
 export function serveWobble(world: World, server: Player, t: Tuning): { x: number; z: number } {
   if (!server.charge) return { x: 0, z: 0 };
@@ -125,10 +147,8 @@ export function serveWobble(world: World, server: Player, t: Tuning): { x: numbe
 
 /** Serve at the aim (plus the wobble at release), faster the more it was charged. */
 export function launchServe(world: World, server: Player, power: number, wobble: { x: number; z: number }, t: Tuning): void {
-  const spot = serverSpot(server.team, t);
-  const toNet = -Math.sign(spot.z) || 1;
   const ball = world.ball;
-  ball.pos = { x: spot.x, y: t.serve.handHeight, z: spot.z + toNet * 0.35 };
+  ball.pos = serveHand(world, server, t);
   ball.alive = true;
   ball.soft = false;
   ball.curve = undefined;

@@ -26,8 +26,10 @@ import type { ShadowGenerator } from '@babylonjs/core/Lights/Shadows/shadowGener
 import { chargePower, diveRecoveryTicks, diveTicks } from '../sim/player';
 import { clamp, lerp, type Vec3 } from '../sim/vec';
 import { serverTeam, type World } from '../sim/world';
-import { serveWobble } from '../sim/serve';
+import { serveHand, serveWobble } from '../sim/serve';
 
+// A ball that moves further than this (m) in one tick was teleported, not thrown.
+const BALL_JUMP = 1.5;
 const TEAM_COLORS = [new Color3(0.2, 0.45, 0.95), new Color3(0.95, 0.3, 0.25)];
 
 /** Positions from the previous tick, used to interpolate between ticks. */
@@ -182,10 +184,16 @@ export class Renderer {
     this.rebuildCourtIfChanged(t);
 
     const b = world.ball.pos;
-    this.ball.position.set(lerp(prev.ball.x, b.x, alpha), lerp(prev.ball.y, b.y, alpha), lerp(prev.ball.z, b.z, alpha));
+    // A ball that jumped (e.g. from the ground into the server's hand) isn't blended.
+    const jumped = Math.hypot(b.x - prev.ball.x, b.y - prev.ball.y, b.z - prev.ball.z) > BALL_JUMP;
+    const a = jumped ? 1 : alpha;
+    this.ball.position.set(lerp(prev.ball.x, b.x, a), lerp(prev.ball.y, b.y, a), lerp(prev.ball.z, b.z, a));
     this.ball.scaling.setAll(t.ball.radius * 2);
-    // No ball on court between rallies; it reappears with the serve.
-    this.ball.isVisible = !world.waitingForServe;
+    // Waiting for the serve, the ball sits in the server's paw (none once the game is over).
+    const holder = world.waitingForServe && world.winner === null ? world.players.find((p) => p.team === serverTeam(world)) : undefined;
+    const held = holder ? serveHand(world, holder, t) : undefined;
+    if (held) this.ball.position.set(held.x, held.y, held.z);
+    this.ball.isVisible = !world.waitingForServe || held !== undefined;
     const v = world.ball.vel;
     const fast = clamp((Math.hypot(v.x, v.y, v.z) - TRAIL_MIN_SPEED) / (TRAIL_FULL_SPEED - TRAIL_MIN_SPEED), 0, 1);
     const spin = this.updateBallSpin(world, frameSeconds);
@@ -214,7 +222,7 @@ export class Renderer {
       const aim = wobble ? { x: world.serve.aim.x + wobble.x, z: world.serve.aim.z + wobble.z } : undefined;
       // Spin shows in the arm: cocked to one side while charging.
       const spin = aiming ? world.serve.spin : 0;
-      view.character.update(p, x, y, z, t.player.size, frameSeconds, charge, dive, world.waitingForServe, aim, spin);
+      view.character.update(p, x, y, z, t.player.size, frameSeconds, charge, dive, world.waitingForServe, aim, spin, aiming ? held : undefined);
       this.updateMeter(view.meter, charge?.power ?? null, x, y + 1.55 * t.player.size, z);
       // Reach rings are a debug aid only (they were confused with the timing rings).
       view.reachRing.isVisible = t.debug.showReach;
