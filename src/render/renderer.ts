@@ -32,7 +32,8 @@ import { serveHand, serveWobble } from '../sim/serve';
 
 // A ball that moves further than this (m) in one tick was teleported, not thrown.
 const BALL_JUMP = 1.5;
-const TEAM_COLORS = [new Color3(0.2, 0.45, 0.95), new Color3(0.95, 0.3, 0.25)];
+// Saturated team colors, for the jerseys.
+const TEAM_COLORS = [new Color3(0.08, 0.36, 1), new Color3(1, 0.16, 0.12)];
 
 /** Positions from the previous tick, used to interpolate between ticks. */
 export interface Snapshot {

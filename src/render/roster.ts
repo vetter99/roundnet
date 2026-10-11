@@ -3,6 +3,12 @@
 // a tail pivot), which does all the animation. Everyone wears a sleeveless
 // jersey in their team color with a big white number, so the team reads
 // from any angle.
+//
+// House style (classic Nintendo mascots): big heads (the rig scales the head
+// up), prominent noses, big round hands on shoulders that sit in the torso,
+// short stubby bodies with big feet, saturated colors, a dark cartoon outline
+// on the main shapes (Kit marks them), and one iconic silhouette anchor each
+// (a hat, tufts, a mustache, a backbox).
 
 import { StandardMaterial } from '@babylonjs/core/Materials/standardMaterial';
 import { DynamicTexture } from '@babylonjs/core/Materials/Textures/dynamicTexture';
@@ -37,6 +43,10 @@ export interface Rig {
   // Index 0 is the left side (-x), 1 the right (+x).
   arms: TransformNode[];
   legs: TransformNode[];
+  // Pivots the rig keeps spinning about their y axis (e.g. a propeller), faster while running.
+  spinners: TransformNode[];
+  // Meshes big enough to get the cartoon outline.
+  outlined: Mesh[];
 }
 
 type V3 = [number, number, number];
@@ -46,11 +56,23 @@ const INK = new Color3(0.06, 0.05, 0.06);
 const PINK = new Color3(0.95, 0.55, 0.62);
 const GOLD = new Color3(0.95, 0.75, 0.22);
 const CHROME = new Color3(0.78, 0.8, 0.84);
-const SHORTS = new Color3(0.16, 0.16, 0.19);
+const SHORTS = new Color3(0.14, 0.14, 0.18);
+// Shapes at least this thick (m) get the cartoon outline; smaller details don't.
+const OUTLINE_MIN_SIZE = 0.07;
 
-/** Shape-making helpers for one character. */
+/** Shape-making helpers for one character. Big, solid shapes get the cartoon outline. */
 class Kit {
-  constructor(readonly scene: Scene) {}
+  constructor(
+    readonly scene: Scene,
+    private readonly outlined: Mesh[],
+  ) {}
+
+  /** Mark a mesh for the outline if it's big enough to matter and not see-through. */
+  private outline(mesh: Mesh, size: number): Mesh {
+    const mat = mesh.material as StandardMaterial | null;
+    if (size >= OUTLINE_MIN_SIZE && (mat?.alpha ?? 1) >= 1) this.outlined.push(mesh);
+    return mesh;
+  }
 
   mat(name: string, color: Color3, shine = 0.08, power = 32): StandardMaterial {
     const m = new StandardMaterial(name, this.scene);
@@ -77,26 +99,31 @@ class Kit {
   }
 
   sphere(parent: TransformNode, d: number, mat: StandardMaterial, pos: V3, scale?: V3, rot?: V3, segments = 20): Mesh {
-    return this.place(MeshBuilder.CreateSphere('part', { diameter: d, segments }, this.scene), parent, mat, pos, rot, scale);
+    const mesh = this.place(MeshBuilder.CreateSphere('part', { diameter: d, segments }, this.scene), parent, mat, pos, rot, scale);
+    return this.outline(mesh, d * Math.min(...(scale ?? [1, 1, 1])));
   }
 
   capsule(parent: TransformNode, height: number, radius: number, mat: StandardMaterial, pos: V3, rot?: V3, scale?: V3): Mesh {
-    return this.place(MeshBuilder.CreateCapsule('part', { height, radius, tessellation: 14 }, this.scene), parent, mat, pos, rot, scale);
+    const mesh = this.place(MeshBuilder.CreateCapsule('part', { height, radius, tessellation: 14 }, this.scene), parent, mat, pos, rot, scale);
+    return this.outline(mesh, radius * 2 * Math.min(...(scale ?? [1, 1, 1])));
   }
 
   cylinder(parent: TransformNode, height: number, top: number, bottom: number, mat: StandardMaterial, pos: V3, rot?: V3, scale?: V3): Mesh {
     const mesh = MeshBuilder.CreateCylinder('part', { height, diameterTop: top, diameterBottom: bottom, tessellation: 20 }, this.scene);
-    return this.place(mesh, parent, mat, pos, rot, scale);
+    this.place(mesh, parent, mat, pos, rot, scale);
+    return this.outline(mesh, Math.min(height, Math.max(top, bottom)));
   }
 
   box(parent: TransformNode, size: V3, mat: StandardMaterial, pos: V3, rot?: V3): Mesh {
     const mesh = MeshBuilder.CreateBox('part', { width: size[0], height: size[1], depth: size[2] }, this.scene);
-    return this.place(mesh, parent, mat, pos, rot);
+    this.place(mesh, parent, mat, pos, rot);
+    return this.outline(mesh, Math.min(...size));
   }
 
   torus(parent: TransformNode, diameter: number, thickness: number, mat: StandardMaterial, pos: V3, rot?: V3, scale?: V3): Mesh {
     const mesh = MeshBuilder.CreateTorus('part', { diameter, thickness, tessellation: 32 }, this.scene);
-    return this.place(mesh, parent, mat, pos, rot, scale);
+    this.place(mesh, parent, mat, pos, rot, scale);
+    return this.outline(mesh, thickness);
   }
 
   /** A smooth bent tube through `points`, tapering from `r0` to `r1`. */
@@ -108,7 +135,8 @@ class Kit {
       { path: smooth(path), radiusFunction: (_, d) => r0 + (r1 - r0) * Math.min(1, d / length), tessellation: 14, cap: 3 },
       this.scene,
     );
-    return this.place(mesh, parent, mat, [0, 0, 0]);
+    this.place(mesh, parent, mat, [0, 0, 0]);
+    return this.outline(mesh, r0 * 2);
   }
 
   /** An empty pivot for grouping parts (e.g. a prop tilted as a whole). */
@@ -124,7 +152,8 @@ class Kit {
   lathe(parent: TransformNode, profile: [number, number][], mat: StandardMaterial, pos: V3, rot?: V3): Mesh {
     const shape = profile.map(([r, y]) => new Vector3(r, y, 0));
     const mesh = MeshBuilder.CreateLathe('part', { shape, tessellation: 40, sideOrientation: 2 }, this.scene);
-    return this.place(mesh, parent, mat, pos, rot);
+    this.place(mesh, parent, mat, pos, rot);
+    return this.outline(mesh, 1);
   }
 
   /** A flat card facing +z (both sides drawn), e.g. a number patch or a cape. */
@@ -240,21 +269,39 @@ function eye(
 }
 
 /** A plain arm: upper and fore arm in one capsule, with a hand at the end (about where the rig expects the paw). */
-function arm(kit: Kit, pivot: TransformNode, skin: StandardMaterial, hand: StandardMaterial, thickness = 0.05, handSize = 0.11): void {
-  kit.capsule(pivot, 0.27, thickness, skin, [0, -0.12, 0]);
-  kit.sphere(pivot, handSize, hand, [0, -0.255, 0.005], [1, 0.95, 0.9], undefined, 16);
-  // A little thumb so it reads as a hand.
-  kit.sphere(pivot, handSize * 0.42, hand, [0, -0.235, 0.05], undefined, undefined, 10);
+/**
+ * Put the shoulders where the torso's sides are (`halfWidth` out from the
+ * middle), so the round shoulder joints sit in the body instead of floating.
+ */
+function setShoulders(rig: Rig, halfWidth: number): void {
+  for (const pivot of rig.arms) pivot.position.x = Math.sign(pivot.position.x) * halfWidth;
 }
 
-/** A leg with a chunky sneaker (white sole, colored upper, laces). */
-function sneakerLeg(kit: Kit, pivot: TransformNode, skin: StandardMaterial, upper: Color3, thickness = 0.062): void {
+/**
+ * A cartoon arm: a round shoulder joint, an arm tapering from the shoulder to
+ * the wrist, and a big round hand (mitten with a thumb and finger bumps).
+ * `thickness` is the arm's radius at the shoulder; `handSize` the hand's width.
+ */
+function arm(kit: Kit, pivot: TransformNode, skin: StandardMaterial, hand: StandardMaterial, thickness = 0.055, handSize = 0.15): void {
+  kit.sphere(pivot, thickness * 2.7, skin, [0, -0.005, 0], undefined, undefined, 18);
+  kit.tube(pivot, [[0, 0, 0], [0, -0.1, 0.008], [0, -0.2, 0.012]], thickness, thickness * 0.68, skin);
+  const side = Math.sign(pivot.position.x) || 1;
+  // The hand: a big round mitten, the thumb on the inside, three finger bumps along the front.
+  kit.sphere(pivot, handSize, hand, [0, -0.255, 0.012], [1, 0.95, 0.85], undefined, 20);
+  kit.sphere(pivot, handSize * 0.42, hand, [-side * handSize * 0.42, -0.235, 0.04], [0.8, 1.1, 0.9], undefined, 12);
+  for (let k = -1; k <= 1; k++) {
+    kit.sphere(pivot, handSize * 0.34, hand, [k * handSize * 0.24, -0.255 - handSize * 0.4, 0.035], [1, 1.2, 1], undefined, 10);
+  }
+}
+
+/** A short, chunky leg with a big cartoon sneaker (white sole, colored upper, laces). */
+function sneakerLeg(kit: Kit, pivot: TransformNode, skin: StandardMaterial, upper: Color3, thickness = 0.07): void {
   kit.capsule(pivot, 0.2, thickness, skin, [0, -0.09, 0]);
-  const shoe = kit.mat('shoe', upper, 0.25, 40);
+  const shoe = kit.mat('shoe', upper, 0.35, 40);
   const sole = kit.mat('sole', WHITE, 0.1);
-  kit.sphere(pivot, 0.16, shoe, [0, -0.19, 0.04], [0.95, 0.62, 1.45], undefined, 18);
-  kit.box(pivot, [0.13, 0.035, 0.24], sole, [0, -0.225, 0.045]);
-  kit.box(pivot, [0.08, 0.012, 0.05], kit.mat('laces', WHITE), [0, -0.15, 0.1], [0.5, 0, 0]);
+  kit.sphere(pivot, 0.2, shoe, [0, -0.18, 0.05], [0.95, 0.62, 1.4], undefined, 20);
+  kit.box(pivot, [0.16, 0.04, 0.28], sole, [0, -0.22, 0.055]);
+  kit.box(pivot, [0.09, 0.014, 0.06], kit.mat('laces', WHITE), [0, -0.135, 0.12], [0.5, 0, 0]);
 }
 
 /** Shorts over the hips. */
@@ -265,11 +312,11 @@ function shorts(kit: Kit, rig: Rig, scale: V3, color = SHORTS): void {
 // ---------------------------------------------------------------------------
 // 1. The bear: purple and properly ugly (crooked bulbous nose, underbite with
 //    snaggle tusks, one bulging bloodshot eye and one squint, warts, mangy
-//    patches, drool), covered in big green leaves, in a rainbow cap, with a
-//    giant crayon tucked behind his ear (he draws a lot).
+//    patches, drool), covered in big green leaves, in a derpy rainbow
+//    propeller beanie, with a giant crayon tucked behind his ear (he draws a lot).
 
 function buildBear(kit: Kit, rig: Rig, team: Color3, number: number): void {
-  const fur = kit.mat('fur', new Color3(0.47, 0.32, 0.66), 0.05);
+  const fur = kit.mat('fur', new Color3(0.52, 0.27, 0.8), 0.1);
   const pale = kit.mat('muzzle', new Color3(0.74, 0.62, 0.84), 0.05);
   const mange = kit.mat('mange', new Color3(0.8, 0.62, 0.68), 0.05);
   const nose = kit.mat('nose', new Color3(0.42, 0.2, 0.3), 0.5, 40);
@@ -322,16 +369,25 @@ function buildBear(kit: Kit, rig: Rig, team: Color3, number: number): void {
   for (const p of [[0.15, -0.06, 0.22], [-0.04, 0.17, 0.2], [-0.17, -0.13, 0.17]] as V3[]) kit.sphere(h, 0.045, wart, p, undefined, undefined, 10);
   kit.cylinder(h, 0.06, 0.003, 0.003, brow, [0.155, -0.03, 0.235], [0.3, 0, -0.4]);
 
-  // The rainbow cap: rainbow panels, a red brim and a button on top.
-  const rainbow = ['#e8403a', '#f28c28', '#f5d02a', '#4cb84a', '#3a7be8', '#8a4fd6'];
-  const capMat = kit.mat('rainbowCap', new Color3(1, 1, 1), 0.15);
+  // The derpy rainbow propeller beanie, jammed on crooked: rainbow panels, a
+  // red band, and a rainbow propeller on a stalk that spins (faster when he runs).
+  const rainbow = ['#ff2d2d', '#ff8a00', '#ffe000', '#2fc83a', '#1f7bff', '#9b3dff'];
+  const capMat = kit.mat('beanie', new Color3(1, 1, 1), 0.2);
   capMat.diffuseTexture = panels(kit.scene, rainbow);
-  const cap = kit.node(h, [0, 0.13, 0], [-0.15, 0, 0.05]);
-  kit.sphere(cap, 0.5, capMat, [0, 0, 0], [1.08, 0.62, 1.05], undefined, 36);
-  kit.cylinder(cap, 0.02, 0.36, 0.36, kit.mat('brim', Color3.FromHexString(rainbow[0]), 0.15), [0, -0.01, 0.2], undefined, [1, 1, 0.75]);
-  kit.sphere(cap, 0.06, kit.mat('capButton', Color3.FromHexString(rainbow[4]), 0.2), [0, 0.155, 0]);
+  const cap = kit.node(h, [0.02, 0.15, 0], [-0.08, 0, 0.22]);
+  kit.sphere(cap, 0.5, capMat, [0, 0, 0], [1.06, 0.6, 1.04], undefined, 36);
+  kit.torus(cap, 0.5, 0.05, kit.mat('band', Color3.FromHexString(rainbow[0]), 0.2), [0, -0.01, 0], undefined, [1.04, 1, 1.02]);
+  const chrome = kit.mat('stalk', CHROME, 0.9, 96);
+  kit.cylinder(cap, 0.1, 0.022, 0.022, chrome, [0, 0.17, 0]);
+  const propeller = kit.node(cap, [0, 0.23, 0]);
+  rig.spinners.push(propeller);
+  kit.sphere(propeller, 0.06, kit.mat('hub', Color3.FromHexString(rainbow[2]), 0.4), [0, 0, 0]);
+  [0, 1, 2, 3].forEach((k) => {
+    const blade = kit.node(propeller, [0, 0, 0], [0, (k * Math.PI) / 2, 0]);
+    kit.sphere(blade, 0.22, kit.mat(`blade${k}`, Color3.FromHexString(rainbow[[0, 1, 3, 4][k]]), 0.4), [0.13, 0, 0], [1, 0.12, 0.38], [0.35, 0, 0]);
+  });
 
-  // The giant crayon, tucked behind his right ear under the cap.
+  // The giant crayon, tucked behind his right ear under the beanie.
   const crayon = kit.mat('crayon', new Color3(0.93, 0.25, 0.55), 0.3);
   const wrapper = kit.mat('wrapper', new Color3(0.2, 0.1, 0.35), 0.1);
   const crayonRoot = kit.node(h, [0.25, 0.05, -0.08], [0.4, 0.2, -1.1]);
@@ -369,12 +425,9 @@ function buildBear(kit: Kit, rig: Rig, team: Color3, number: number): void {
     kit.card(pivot, 0.15, 0.15, leafMats[1 - side], [0, -0.08, 0.08], [0.3, 0, side ? 0.9 : -0.5]);
   });
 
-  // Shoulders out past the big belly.
-  for (const pivot of rig.arms) {
-    pivot.position.x = Math.sign(pivot.position.x) * 0.3;
-    kit.sphere(pivot, 0.15, fur, [0, 0, 0]);
-    arm(kit, pivot, fur, fur, 0.058, 0.13);
-  }
+  // Shoulders in the sides of the big belly; huge pale-padded paws.
+  setShoulders(rig, 0.27);
+  for (const pivot of rig.arms) arm(kit, pivot, fur, pale, 0.068, 0.18);
   // Bare bear feet with pale pads.
   for (const pivot of rig.legs) {
     kit.capsule(pivot, 0.2, 0.07, fur, [0, -0.09, 0]);
@@ -450,7 +503,7 @@ function leafMaterial(kit: Kit, name: string, fill: string, vein: string): Stand
 //    ear, crumbs and a mustard stain on its jersey.
 
 function buildCat(kit: Kit, rig: Rig, team: Color3, number: number): void {
-  const fur = kit.mat('fur', new Color3(0.1, 0.1, 0.12), 0.35, 24);
+  const fur = kit.mat('fur', new Color3(0.09, 0.09, 0.12), 0.45, 28);
   const muzzle = kit.mat('muzzle', new Color3(0.24, 0.24, 0.27), 0.2);
   const pink = kit.mat('pink', PINK, 0.3);
   const white = kit.mat('white', WHITE, 0.3);
@@ -475,7 +528,7 @@ function buildCat(kit: Kit, rig: Rig, team: Color3, number: number): void {
   kit.cylinder(h, 0.1, 0, 0.07, fur, [0.25, 0.2, 0.01], [0, 0, -2.0]);
 
   kit.sphere(h, 0.24, muzzle, [0, -0.1, 0.18], [1.25, 0.72, 0.8], undefined, 24);
-  kit.sphere(h, 0.05, pink, [0, -0.05, 0.27], [1.3, 0.8, 0.8]);
+  kit.sphere(h, 0.085, pink, [0, -0.05, 0.275], [1.3, 0.8, 0.85]);
   // Wall-eyed: a big yellow eye looking out left, a smaller green one looking out right under a smug lid.
   eye(kit, h, [-0.1, 0.05, 0.2], { size: 0.13, iris: kit.mat('irisY', new Color3(0.95, 0.82, 0.15), 0.4), look: [-0.9, 0.3] });
   eye(kit, h, [0.11, 0.04, 0.2], { size: 0.1, iris: kit.mat('irisG', new Color3(0.4, 0.82, 0.3), 0.4), look: [0.9, -0.4], lid: fur, lidDrop: 0.45, tilt: -0.25 });
@@ -490,8 +543,10 @@ function buildCat(kit: Kit, rig: Rig, team: Color3, number: number): void {
     }
   }
 
-  for (const pivot of rig.arms) arm(kit, pivot, fur, fur, 0.045, 0.1);
-  for (const pivot of rig.legs) sneakerLeg(kit, pivot, fur, new Color3(0.55, 0.55, 0.52), 0.05);
+  // White paws on a black cat, and loud lime sneakers.
+  setShoulders(rig, 0.2);
+  for (const pivot of rig.arms) arm(kit, pivot, fur, kit.mat('paws', WHITE, 0.2), 0.052, 0.16);
+  for (const pivot of rig.legs) sneakerLeg(kit, pivot, fur, new Color3(0.55, 0.95, 0.1), 0.06);
   // A long tail curling out to the side (clear of the number), kinked near the tip.
   kit.tube(rig.tail, [[0, 0, 0], [0.1, 0.03, -0.12], [0.26, 0.12, -0.16], [0.36, 0.3, -0.12], [0.33, 0.44, -0.06], [0.26, 0.42, -0.02]], 0.04, 0.025, fur);
 }
@@ -518,7 +573,7 @@ function buildTruffles(kit: Kit, rig: Rig, team: Color3, number: number): void {
   // Apple-domed head, short pointy muzzle.
   kit.sphere(h, 0.5, fur, [0, 0.02, 0], [1.05, 0.95, 0.95], undefined, 32);
   kit.sphere(h, 0.2, cream, [0, -0.1, 0.18], [1, 0.75, 1.1], undefined, 20);
-  kit.sphere(h, 0.065, dark, [0, -0.07, 0.29], [1.2, 0.9, 0.9]);
+  kit.sphere(h, 0.1, dark, [0, -0.065, 0.295], [1.2, 0.9, 0.9]);
   // Big bulging eyes.
   eye(kit, h, [-0.11, 0.03, 0.2], { size: 0.13, iris: kit.mat('iris', new Color3(0.25, 0.14, 0.06), 0.6, 64), look: [-0.1, 0.1] });
   eye(kit, h, [0.11, 0.03, 0.2], { size: 0.13, iris: kit.mat('iris2', new Color3(0.25, 0.14, 0.06), 0.6, 64), look: [0.1, 0.1] });
@@ -547,11 +602,12 @@ function buildTruffles(kit: Kit, rig: Rig, team: Color3, number: number): void {
     if (r > 0) spot.rotation.set(Math.sin(a) * (y > 0.1 ? 0.6 : 0.15), 0, -Math.cos(a) * (y > 0.1 ? 0.6 : 0.15));
   }
 
-  // Matador: gold fringed epaulettes and a short cape.
+  // Matador: gold fringed epaulettes on the shoulders, and a short cape.
+  setShoulders(rig, 0.19);
   for (const pivot of rig.arms) {
-    kit.sphere(pivot, 0.13, gold, [0, 0.03, 0], [1.2, 0.5, 1.1]);
-    for (let i = 0; i < 5; i++) kit.cylinder(pivot, 0.05, 0.012, 0.012, gold, [-0.04 + i * 0.02, -0.01, 0.04]);
-    arm(kit, pivot, fur, cream, 0.04, 0.1);
+    arm(kit, pivot, fur, cream, 0.048, 0.15);
+    kit.sphere(pivot, 0.16, gold, [0, 0.035, 0], [1.15, 0.45, 1.1]);
+    for (let i = 0; i < 5; i++) kit.cylinder(pivot, 0.06, 0.014, 0.014, gold, [-0.05 + i * 0.025, -0.01, 0.05]);
   }
   // A short matador capelet across the shoulders (it stops above the jersey number).
   const cape = kit.mat('cape', new Color3(0.62, 0.04, 0.08), 0.15);
@@ -628,8 +684,8 @@ function buildPinball(kit: Kit, rig: Rig, team: Color3, number: number): void {
   // Flipper arms, mounted on the outside of the cabinet: a chrome rod with a
   // white flipper bat on the end and a red rubber ring.
   for (const pivot of rig.arms) {
-    pivot.position.x = Math.sign(pivot.position.x) * 0.31;
-    kit.sphere(pivot, 0.08, kit.mat('button', new Color3(0.9, 0.15, 0.15), 0.5), [0, 0, 0]);
+    pivot.position.x = Math.sign(pivot.position.x) * 0.28;
+    kit.sphere(pivot, 0.11, kit.mat('button', new Color3(1, 0.12, 0.12), 0.5), [0, 0, 0]);
     kit.cylinder(pivot, 0.16, 0.025, 0.025, chrome, [0, -0.08, 0]);
     kit.capsule(pivot, 0.17, 0.045, kit.mat('flipper', WHITE, 0.4), [0, -0.23, 0.03], [0.3, 0, 0], [1, 1, 0.6]);
     kit.torus(pivot, 0.1, 0.02, kit.mat('rubber', new Color3(0.85, 0.1, 0.12), 0.2), [0, -0.17, 0.02], [Math.PI / 2, 0, 0]);
@@ -714,20 +770,21 @@ function buildGuy(kit: Kit, rig: Rig, team: Color3, number: number): void {
   }
   kit.sphere(h, 0.3, stubble, [0, -0.15, 0.1], [1.25, 0.65, 0.95], undefined, 24);
   // Round nose.
-  kit.sphere(h, 0.1, kit.mat('noseSkin', new Color3(0.97, 0.68, 0.6), 0.15), [0, -0.01, 0.255], [1, 0.9, 0.85]);
+  kit.sphere(h, 0.14, kit.mat('noseSkin', new Color3(0.98, 0.66, 0.58), 0.2), [0, -0.01, 0.26], [1, 0.9, 0.85]);
   // Big goofy grin under a curled mustache.
   kit.sphere(h, 0.13, kit.mat('mouth', new Color3(0.45, 0.13, 0.14), 0.2), [0, -0.135, 0.225], [1.6, 0.55, 0.5]);
   kit.box(h, [0.11, 0.022, 0.012], kit.mat('teeth', WHITE, 0.3), [0, -0.118, 0.26]);
   // The mustache: thin, drooping out from the middle, then curling up at the tips.
   for (const side of [-1, 1]) {
-    kit.tube(h, [[side * 0.01, -0.06, 0.262], [side * 0.06, -0.08, 0.258], [side * 0.11, -0.085, 0.24], [side * 0.14, -0.06, 0.22], [side * 0.13, -0.035, 0.215]], 0.018, 0.007, stache);
+    kit.tube(h, [[side * 0.01, -0.07, 0.272], [side * 0.065, -0.09, 0.262], [side * 0.12, -0.09, 0.24], [side * 0.155, -0.06, 0.215], [side * 0.14, -0.03, 0.21]], 0.034, 0.01, stache);
   }
   // Smiling, squinty eyes behind round clear glasses.
   for (const side of [-1, 1]) {
     eye(kit, h, [side * 0.085, 0.045, 0.22], { size: 0.065, iris: kit.mat('iris', new Color3(0.35, 0.5, 0.62), 0.4), lid: skin, lidDrop: 0.45 });
     kit.torus(h, 0.12, 0.012, frame, [side * 0.085, 0.045, 0.262], [Math.PI / 2, 0, 0]);
     kit.cylinder(h, 0.004, 0.11, 0.11, lens, [side * 0.085, 0.045, 0.262], [Math.PI / 2, 0, 0]);
-    kit.cylinder(h, 0.13, 0.008, 0.008, frame, [side * 0.17, 0.05, 0.19], [Math.PI / 2, side * 0.6, 0]);
+    // Temple arms running back to the ears, flaring out a little.
+    kit.cylinder(h, 0.16, 0.008, 0.008, frame, [side * 0.165, 0.05, 0.185], [Math.PI / 2, -side * 0.3, 0]);
   }
   kit.cylinder(h, 0.05, 0.008, 0.008, frame, [0, 0.055, 0.262], [0, 0, Math.PI / 2]);
 
@@ -759,12 +816,8 @@ function buildGuy(kit: Kit, rig: Rig, team: Color3, number: number): void {
   leftSkin.diffuseTexture = tattooTexture(kit.scene, skinColor, 'bird');
   const rightSkin = kit.mat('rightArm', new Color3(1, 1, 1), 0.12, 24);
   rightSkin.diffuseTexture = tattooTexture(kit.scene, skinColor, 'cheetah');
-  rig.arms.forEach((pivot, i) => {
-    // Shoulders out past the belly so the tattooed arms show.
-    pivot.position.x = Math.sign(pivot.position.x) * 0.34;
-    kit.sphere(pivot, 0.15, skin, [0, 0, 0]);
-    arm(kit, pivot, i === 0 ? leftSkin : rightSkin, skin, 0.064, 0.125);
-  });
+  setShoulders(rig, 0.3);
+  rig.arms.forEach((pivot, i) => arm(kit, pivot, i === 0 ? leftSkin : rightSkin, skin, 0.07, 0.18));
   kit.torus(rig.arms[0], 0.135, 0.03, kit.mat('watchBand', WHITE, 0.4), [0, -0.21, 0]);
   kit.box(rig.arms[0], [0.05, 0.06, 0.02], kit.mat('watchFace', new Color3(0.05, 0.05, 0.08), 0.9, 96), [0, -0.21, 0.066]);
   kit.torus(rig.arms[1], 0.04, 0.01, kit.mat('ring', GOLD, 0.8, 80), [0.02, -0.27, 0.03], [0, 0, Math.PI / 2]);
@@ -956,5 +1009,5 @@ const BUILDERS: Record<CharacterKind, (kit: Kit, rig: Rig, team: Color3, number:
 
 /** Build a character's look onto the rig, in its team color with its jersey number. */
 export function buildCharacter(rig: Rig, kind: CharacterKind, team: Color3, number: number): void {
-  BUILDERS[kind](new Kit(rig.scene), rig, team, number);
+  BUILDERS[kind](new Kit(rig.scene, rig.outlined), rig, team, number);
 }

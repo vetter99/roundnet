@@ -78,7 +78,10 @@ src/main.ts           wires it together; fixed 60Hz loop with render interpolati
   black cat, Red 1 TrufflesUpaGus (chihuahua matador, mushroom sombrero),
   Red 2 pinball machine; a 5th, Tattoo Guy, can be picked. The button next
   to each seat cycles its character (remembered in localStorage). Everyone
-  wears a team-color jersey with their number.
+  wears a team-color jersey with their number. House style (keep it for new
+  characters): Nintendo-mascot proportions (big heads via `HEAD_SCALE`, big
+  noses and round hands, stubby bodies, big feet), saturated colors, a dark
+  cartoon outline on the main shapes, and one iconic silhouette anchor each.
 - `src/ai/bot.ts` is a deterministic CPU player. In 2v2 the closer eligible
   teammate plays the ball, passes go to the partner, and the other supports
   or spreads out on defense. Seat buttons (Blue 1/2, Red 1/2) set each player
