@@ -77,7 +77,8 @@ src/main.ts           wires it together; fixed 60Hz loop with render interpolati
   `src/render/character.ts`. Defaults per seat: Blue 1 purple bear, Blue 2
   black cat, Red 1 TrufflesUpaGus (chihuahua matador, mushroom sombrero),
   Red 2 pinball machine; also pickable: Tattoo Guy, Tilt (pinball-loving
-  trickster fox), Chris P. Bacon (piglet in a wheel cart). The button next
+  trickster fox), Chris P. Bacon (a piglet on all fours, back end in a wheel
+  cart; no arms, so his hits are body lunges). The button next
   to each seat cycles its character (remembered in localStorage). Everyone
   wears a team-color jersey with their number. House style (keep it for new
   characters): match the world's low-poly toy look (icosphere facets, flat

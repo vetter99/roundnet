@@ -1057,9 +1057,12 @@ function buildFox(kit: Kit, rig: Rig, team: Color3, number: number): void {
 }
 
 // ---------------------------------------------------------------------------
-// 7. Chris P. Bacon: a pink piglet with a big snout, perky ears and a curly
-//    tail, in a black harness, his back end wrapped in blue cloth and sitting
-//    in a two-wheeled cart on a yellow frame. The wheels roll as he moves.
+// 7. Chris P. Bacon: a pink piglet on all fours like the real one, his body
+//    level with the ground, walking on his front legs while his back end,
+//    wrapped in blue cloth, rides in a two-wheeled cart on a yellow frame (the
+//    wheels roll as he moves). Big snout, perky ears, a curly tail, a black
+//    harness, and his jersey around his middle with the number on his back.
+//    No arms: his hits are a lunge of the whole body, and he serves off his snout.
 
 function buildPig(kit: Kit, rig: Rig, team: Color3, number: number): void {
   const pink = kit.mat('pink', new Color3(1, 0.72, 0.74), 0.1);
@@ -1068,48 +1071,61 @@ function buildPig(kit: Kit, rig: Rig, team: Color3, number: number): void {
   const yellow = kit.mat('frame', new Color3(1, 0.82, 0.1), 0.4);
   const tire = kit.mat('tire', new Color3(0.12, 0.12, 0.13), 0.1);
   const rim = kit.mat('rim', CHROME, 0.7, 48);
+  const b = rig.bounce;
 
-  // Blue cloth wrapped around his back end, and a round jersey belly.
-  kit.sphere(rig.bounce, 0.42, kit.mat('cloth', new Color3(0.15, 0.4, 0.95), 0.1), [0, 0.3, -0.02], [1.15, 0.85, 1.1]);
-  jersey(kit, rig, team, number, 0.52, 0.46, [1.08, 1, 1.05]);
-  // The harness: a strap around the chest and one over each shoulder, with a silver ring.
-  kit.torus(rig.bounce, 0.5, 0.03, black, [0, 0.58, 0], undefined, [1.05, 1, 1.02]);
-  for (const side of [-1, 1]) kit.torus(rig.bounce, 0.3, 0.028, black, [side * 0.12, 0.66, 0], [0, 0, Math.PI / 2 + side * 0.2], [1, 1, 1.4]);
-  kit.torus(rig.bounce, 0.06, 0.014, rim, [0, 0.66, -0.25], [Math.PI / 2, 0, 0]);
+  // The body, level and long (front is +z). The jersey wraps his middle with
+  // its "front" turned up, so the number is on his back.
+  kit.sphere(b, 0.4, pink, [0, 0.36, 0.12], [1, 0.95, 1.25]);
+  const torso = jersey(kit, rig, team, number, 0.37, 0.42, [1, 1.35, 0.92]);
+  torso.position.z = 0.02;
+  // Turned up, then around, so the number reads upright from behind him.
+  torso.rotation.set(-Math.PI / 2, Math.PI, 0);
+  // His back end, wrapped in blue cloth.
+  kit.sphere(b, 0.38, kit.mat('cloth', new Color3(0.15, 0.4, 0.95), 0.1), [0, 0.33, -0.2], [1.05, 0.95, 1]);
+  // The harness: a strap around the chest and one just in front of the cloth
+  // (clear of the number), with a silver ring on top.
+  for (const z of [0.2, -0.13]) kit.torus(b, 0.44, 0.03, black, [0, 0.37, z], [Math.PI / 2, 0, 0], [1.02, 1, 1.05]);
+  kit.torus(b, 0.07, 0.016, rim, [0, 0.6, 0.2], [Math.PI / 2, 0, 0]);
 
-  // The cart: a yellow frame from the harness down to an axle, with a wheel each side.
+  // The cart: a yellow frame from the harness back to an axle, with a wheel each side.
   for (const side of [-1, 1]) {
-    kit.cylinder(rig.bounce, 0.42, 0.035, 0.035, yellow, [side * 0.2, 0.36, -0.12], [0.5, 0, 0]);
+    kit.cylinder(b, 0.36, 0.035, 0.035, yellow, [side * 0.22, 0.28, -0.12], [1.0, 0, 0]);
     // The mount turns the wheel's axis sideways; the wheel spins about it.
-    const mount = kit.node(rig.bounce, [side * 0.27, 0.12, -0.22], [0, 0, Math.PI / 2]);
+    const mount = kit.node(b, [side * 0.27, 0.13, -0.28], [0, 0, Math.PI / 2]);
     const wheel = kit.node(mount, [0, 0, 0]);
     rig.spinners.push({ node: wheel, axis: 'y', idle: 0, run: side * 18 });
-    kit.cylinder(wheel, 0.05, 0.24, 0.24, tire, [0, 0, 0]);
-    kit.cylinder(wheel, 0.06, 0.15, 0.15, rim, [0, 0, 0]);
-    for (let k = 0; k < 3; k++) kit.box(wheel, [0.2, 0.065, 0.02], rim, [0, 0, 0], [0, (k * Math.PI) / 3, 0]);
+    kit.cylinder(wheel, 0.05, 0.26, 0.26, tire, [0, 0, 0]);
+    kit.cylinder(wheel, 0.06, 0.16, 0.16, rim, [0, 0, 0]);
+    for (let k = 0; k < 3; k++) kit.box(wheel, [0.22, 0.065, 0.02], rim, [0, 0, 0], [0, (k * Math.PI) / 3, 0]);
   }
-  kit.cylinder(rig.bounce, 0.54, 0.03, 0.03, yellow, [0, 0.12, -0.22], [0, 0, Math.PI / 2]);
+  kit.cylinder(b, 0.54, 0.03, 0.03, yellow, [0, 0.13, -0.28], [0, 0, Math.PI / 2]);
 
+  // The head, low and out front.
   const h = rig.head;
-  kit.sphere(h, 0.48, pink, [0, 0, 0], [1.08, 0.98, 1]);
+  h.position.set(0, 0.44, 0.34);
+  kit.sphere(h, 0.44, pink, [0, 0, 0], [1.05, 0.95, 1]);
   // The big flat snout with two nostrils.
-  kit.cylinder(h, 0.1, 0.17, 0.19, deep, [0, -0.06, 0.25], [Math.PI / 2, 0, 0], [1.15, 1, 0.85]);
-  for (const side of [-1, 1]) kit.sphere(h, 0.035, kit.mat('nostril', new Color3(0.45, 0.15, 0.2)), [side * 0.035, -0.06, 0.3], [1, 1.3, 0.5]);
+  kit.cylinder(h, 0.1, 0.16, 0.18, deep, [0, -0.04, 0.22], [Math.PI / 2, 0, 0], [1.15, 1, 0.85]);
+  for (const side of [-1, 1]) kit.sphere(h, 0.035, kit.mat('nostril', new Color3(0.45, 0.15, 0.2)), [side * 0.035, -0.04, 0.27], [1, 1.3, 0.5]);
   // Happy little eyes and a smile.
-  for (const side of [-1, 1]) eye(kit, h, [side * 0.1, 0.06, 0.2], { size: 0.07, iris: kit.mat('iris', new Color3(0.3, 0.18, 0.1), 0.3), look: [0, 0.2] });
-  kit.capsule(h, 0.12, 0.012, kit.mat('mouth', new Color3(0.5, 0.2, 0.25)), [0, -0.16, 0.22], [0, 0, Math.PI / 2], [1, 1, 1]);
+  for (const side of [-1, 1]) eye(kit, h, [side * 0.1, 0.07, 0.17], { size: 0.07, iris: kit.mat('iris', new Color3(0.3, 0.18, 0.1), 0.3), look: [0, 0.2] });
+  kit.capsule(h, 0.11, 0.012, kit.mat('mouth', new Color3(0.5, 0.2, 0.25)), [0, -0.14, 0.19], [0, 0, Math.PI / 2]);
   // Perky ears, tipping forward.
   for (const side of [-1, 1]) {
-    const ear = kit.node(h, [side * 0.16, 0.19, 0.0], [0.45, 0, -side * 0.35]);
-    kit.cylinder(ear, 0.18, 0, 0.16, pink, [0, 0.07, 0], undefined, [1, 1, 0.4]);
-    kit.cylinder(ear, 0.12, 0, 0.1, deep, [0, 0.05, 0.02], undefined, [1, 1, 0.3]);
+    const ear = kit.node(h, [side * 0.14, 0.17, 0.0], [0.45, 0, -side * 0.35]);
+    kit.cylinder(ear, 0.17, 0, 0.15, pink, [0, 0.07, 0], undefined, [1, 1, 0.4]);
+    kit.cylinder(ear, 0.11, 0, 0.09, deep, [0, 0.05, 0.02], undefined, [1, 1, 0.3]);
   }
 
-  // Front legs as arms, with little hooves.
-  setShoulders(rig, 0.22);
-  for (const pivot of rig.arms) arm(kit, pivot, pink, deep, 0.055, 0.13);
-  // No back legs (the cart carries him); a curly tail out the back.
-  kit.tube(rig.tail, [[0, 0.06, 0], [0, 0.12, -0.06], [0.05, 0.18, -0.04], [0.03, 0.13, -0.0], [-0.02, 0.17, -0.06]], 0.025, 0.018, pink);
+  // He walks on his front legs (the rig's legs, moved up under his chest), on little hooves.
+  for (const pivot of rig.legs) {
+    pivot.position.set(Math.sign(pivot.position.x) * 0.11, 0.28, 0.22);
+    kit.capsule(pivot, 0.24, 0.05, pink, [0, -0.12, 0]);
+    kit.cylinder(pivot, 0.06, 0.09, 0.1, deep, [0, -0.25, 0.01]);
+  }
+  // A curly tail out the back of the cloth.
+  rig.tail.position.set(0, 0.42, -0.36);
+  kit.tube(rig.tail, [[0, 0, 0], [0, 0.06, -0.06], [0.05, 0.11, -0.04], [0.03, 0.06, 0.0], [-0.02, 0.1, -0.06]], 0.025, 0.018, pink);
 }
 
 const BUILDERS: Record<CharacterKind, (kit: Kit, rig: Rig, team: Color3, number: number) => void> = {
