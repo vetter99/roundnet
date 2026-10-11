@@ -107,8 +107,7 @@ src/main.ts           wires it together; fixed 60Hz loop with render interpolati
 - Spikes always target the net center; the stick aims passes, and on spikes
   sideways stick while charging adds sidespin (`hit.spikeSpinCurve`), like the
   serve. Spun balls curve, kick sideways off the net, and show it with the
-  hitter's arm sweep, a cyan/magenta corkscrew trail, and the striped ball
-  turning. The worst-timed spikes drift
+  hitter's arm sweep, a cyan/magenta trail, and the striped ball turning. The worst-timed spikes drift
   far enough past center to miss (`hit.mishitDrift`).
 
 ## Backlog
