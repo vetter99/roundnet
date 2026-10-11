@@ -49,7 +49,7 @@ export const DEFAULT_TUNING = {
   },
 
   player: {
-    maxSpeed: 6,
+    maxSpeed: 5.6,
     accel: 45,
     decel: 35,
     // Fraction of ground acceleration available mid-air.
@@ -222,7 +222,7 @@ export const DEFAULT_TUNING = {
     pitchDeg: 36,
     fov: 0.75,
     // How close it sits when the action is tight, and how far it may pull back.
-    minDistance: 12,
+    minDistance: 14,
     maxDistance: 26,
     // Fraction of the screen the action may fill (lower = more breathing room).
     margin: 0.78,

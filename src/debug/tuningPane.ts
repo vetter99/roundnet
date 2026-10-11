@@ -40,6 +40,9 @@ const RANGES: Record<string, Ranges> = {
 export function createTuningPane(t: Tuning): Pane {
   const pane = new Pane({ title: 'Tuning  ( ` to hide )' });
   pane.hidden = true;
+  // Sit below the Pause button in the top-right corner.
+  const container = pane.element.parentElement;
+  if (container) container.style.top = '76px';
 
   for (const [key, [min, max, step]] of Object.entries(RANGES.root)) {
     pane.addBinding(t, key as keyof Tuning, { min, max, step });

@@ -70,8 +70,14 @@ src/main.ts           wires it together; fixed 60Hz loop with render interpolati
   straight behind the (see-through) receiver until the return; human stick
   input follows the camera.
   `feedBall` (feeding the ball off the net) is only a test/practice helper.
+- Setting: a low-key Midwest park (`src/render/park.ts`): striped lawn,
+  families on picnic blankets, a few trees, a duck pond, split-rail fence,
+  cornfields all around, a water tower, late-afternoon light, a soft blue
+  sky, faint shadows, spray-painted court lines. The old stadium is still
+  available with `?stadium` in the URL.
 - All settings (mode, format, stats, seats and characters) live in the pause
   menu; the play screen only shows a Pause button (or Esc / P / controller Menu).
+  Show stats (or I) also shows the tuning panel.
 - Hits charge while the button is held and swing on release (`chargePower`).
 - Dives are automatic: swinging at a ball just out of reach dives for it
   (`autoDiveTarget` in `src/sim/hit.ts`). There is no dive button.

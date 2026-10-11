@@ -36,13 +36,16 @@ soundButton.addEventListener('click', () => {
   sfx.unlock();
   canvas.focus();
 });
-// The stats panel: hidden until you turn it on (the Stats button or I); the ×
-// hides it again. Remembered on this browser.
+// The tuning panel (` toggles it on its own).
+const tuningPane = createTuningPane(tuning);
+// The stats panel, and with it the tuning panel: hidden until you turn them
+// on (the Stats button or I); the × hides them again. Remembered on this browser.
 const statsPanel = document.querySelector('#hud .panel') as HTMLElement;
 const statsButton = document.getElementById('statsToggle') as HTMLButtonElement;
 const STATS_SHOWN_KEY = 'roundnet.statsShown';
 function setStatsHidden(hidden: boolean): void {
   statsPanel.classList.toggle('hidden', hidden);
+  tuningPane.hidden = hidden;
   statsButton.textContent = hidden ? '📊 Show stats' : '📊 Hide stats';
   try {
     localStorage.setItem(STATS_SHOWN_KEY, hidden ? '0' : '1');
@@ -74,7 +77,6 @@ window.addEventListener('keydown', (e) => {
 const chargeWasFull = [false, false, false, false];
 const input = new LocalInput(window);
 const world = createMatch(tuning, 'match', '2v2');
-createTuningPane(tuning);
 canvas.focus();
 
 let prev = snapshot(world);

@@ -43,17 +43,16 @@ and UX cards.
 - **Jumbotron:** placeholder game logo ("ROUNDNET") and a rally counter with
   a best-rally record. No game name yet.
 
-## Where things stand (2026-10-10)
+## Where things stand (2026-10-11)
 
-- 1v1 mechanics sandbox: you (Blue) vs. a CPU (Red). No scoring.
-- Hold to charge pass (A) / spike (B), release to swing; timing decides
-  quality. Spikes always target the net center; only passes are aimed.
-- Possession flips when the ball hits the net; the defender can't hit or
-  bump into the team with the ball. Press A to serve (a stand-in feed).
-- CPU usually passes to itself then spikes; misreads hard spikes more often.
-- Squirrel characters, timing-ring landing guide, ball shadow, net wobble,
-  synthesized SFX, chiptune music, dev stats panel, tuning panel (`).
-- Deployed on Cloudflare Workers from GitHub `main`.
+- 1v1 or 2v2 (2v2 match to 11 on load), any mix of humans and CPUs; seats,
+  characters, mode and stats live in the pause menu.
+- Serve: aim with the stick at the toss, pass tosses, spike hits with
+  timing; sideways stick while charging adds sidespin (serves and spikes).
+- Net bounce depends on the angle: flat spikes skip low, steep ones pop up.
+- 13 low-poly characters with distinct gaits; Midwest park setting
+  (cornfields, late-afternoon light); spray-painted court lines.
+- On-screen scoreboard, pause, sound mix; deployed on Cloudflare from `main`.
 
 ## Legend
 
@@ -78,6 +77,7 @@ and UX cards.
 | SHOT-04 | Spin shots → merged into SHOT-06 | – | – | |
 | SHOT-05 | Power sweet spot / overcharge risk (playtest) | P1 | M | |
 | SHOT-06 | Right-stick shot control, starting with placement (playtest) | P2 | L | |
+| SHOT-07 | Topspin and backspin (serves first) | P2 | M | |
 | RULE-01 | Real serving ✅ serve duel with spin | P0 | M | |
 | RULE-02 | Match mode ✅ to 11, winner serves, 3 touches | P0 | S | |
 | RULE-03 | 2v2 teams ✅ (seat buttons for now; join screen is INPUT-01) | P1 | L | RULE-02, INPUT-01 |
@@ -100,6 +100,7 @@ and UX cards.
 | UX-06 | Character select | P2 | M | ART-03 |
 | UX-07 | Timing guide ✅ kept as is; player circle removed | P0 | S | |
 | UX-08 | Teach the jump (dive is automatic now) | P1 | S | |
+| UX-09 | Teach the rules to new players (touch counter, net flow) | P1 | M | |
 | ART-01 | Court environment ✅ pitch, HD stands, 3D crowd | P1 | M | |
 | ART-02 | Ball and net ✅ yellow volleyball, webbed net | P2 | S | |
 | ART-03 | Character variety (13-character low-poly roster done 2026-10-11 incl. Chris P. Bacon, Doo Doo, Pesto, Capy, Tube Man, My Leg, Jalcon with distinct gaits; per-seat picker) | P2 | M | |
@@ -123,6 +124,7 @@ and UX cards.
 | TECH-08 | Performance: bundle size, FPS counter | P2 | S | |
 | TECH-09 | Accessibility basics | P2 | S | |
 | TECH-10 | Custom domain | P3 | S | |
+| TECH-11 | Online play (Steam Remote Play first; real netcode later) | P3 | L | |
 | BUG-01 | Timing guide assumes the player is on the ground (after MECH-02) | P2 | S | |
 | BUG-02 | Tail may hide the ball (tails shrunk; confirm in play) | P2 | S | |
 | BUG-03 | Ball can be lost far away during a rally | P2 | S | |
@@ -275,6 +277,14 @@ handling and tuning. Keyboard players would need an alternative.
 
 **Decided:** start with **placement (1)** on the right stick. Spike types
 and spin (2–3) come later, if placement plays well.
+
+### SHOT-07 · Topspin and backspin
+**P2 · M**
+
+Today the stick only adds sidespin (curve left/right). Forward/back stick
+while charging could add topspin (dips faster, skids low and fast off the
+net) or backspin (floats, pops up and checks off the net). Start with
+serves, then spikes. Needs a readable tell (arm path, ball rotation).
 
 ---
 
@@ -471,6 +481,23 @@ readable but not cluttered.
 (MECH-01), so this is mainly about jumping: short on-screen hints the first
 few times, until the tutorial (UX-05) exists.
 
+### UX-09 · Teach the rules to new players
+**P1 · M**
+
+People who don't know roundnet don't know the basic flow: the ball must go
+onto the net, your team gets up to 3 touches, and the other team plays it
+after it comes off the net. Make that obvious without a manual:
+
+- A clear touch counter near the ball or the hitter (1 · 2 · 3), and a
+  warning when the next touch must go onto the net.
+- A short callout when a rule decides a point ("3 touches used", "missed
+  the net", "it hit the ground").
+- First-time hints for the serve (toss, then hit) and passing to a partner.
+- Later: an optional 60-second guided tutorial (UX-05).
+
+**Done when:** someone who has never played understands why each point was
+won or lost after one game.
+
 ---
 
 ## ART: visuals
@@ -648,6 +675,18 @@ flashing text, readable font sizes.
 
 ### TECH-10 · Custom domain
 **P3 · S**
+
+---
+
+### TECH-11 · Online play
+**P3 · L**
+
+The game is local-only by design. Cheapest route to online: ship on Steam
+and use **Remote Play Together**, which streams a local-multiplayer game to
+friends with no netcode. Real online play later would build on the
+deterministic sim (same inputs, same result): rollback netcode exchanging
+only inputs, plus a small relay/matchmaking server. Big job; only worth it
+once the local game is proven fun.
 
 ---
 

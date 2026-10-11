@@ -25,6 +25,7 @@ import { addHaze, createBallMaterial, createLawn, createScenery, createShadows, 
 import { buildRoundnetSet } from './roundnetSet';
 import { SEAT_CHARACTERS, type CharacterKind } from './roster';
 import { createStadium, type Stadium } from './stadium';
+import { createPark, HORIZON, makeEvening } from './park';
 import type { ShadowGenerator } from '@babylonjs/core/Lights/Shadows/shadowGenerator';
 import { chargePower, diveRecoveryTicks, diveTicks } from '../sim/player';
 import { clamp, lerp, type Vec3 } from '../sim/vec';
@@ -40,6 +41,11 @@ const NET_DENT_MAX = 0.17;
 const NET_DENT_RADIUS = 0.24;
 const NET_DENT_LOCAL = 0.75;
 const NET_DENT_SETTLE = 1;
+// Spray-painted court lines: the painted strip is this many times wider than
+// the line's core (room for overspray), and the paint pattern repeats every
+// this many meters along it.
+const SPRAY_SPREAD = 3;
+const SPRAY_TILE = 2.5;
 // A ball that moves further than this (m) in one tick was teleported, not thrown.
 const BALL_JUMP = 1.5;
 // Saturated team colors, for the jerseys.
@@ -160,10 +166,19 @@ export class Renderer {
     sun.diffuse = new Color3(1, 0.95, 0.85);
     this.shadows = createShadows(sun);
 
+    // The park (default) or the stadium (add ?stadium to the URL).
+    const stadium = typeof location !== 'undefined' && new URLSearchParams(location.search).has('stadium');
     createLawn(scene);
-    createScenery(scene);
-    this.stadium = createStadium(scene);
-    addHaze(scene);
+    // Out in the country there's only a sparse tree line on the horizon.
+    createScenery(scene, stadium ? 70 : 12);
+    this.stadium = stadium ? createStadium(scene) : createPark(scene);
+    if (stadium) {
+      addHaze(scene);
+    } else {
+      // Evening in the country: you can see a long way across the flat land.
+      makeEvening(scene, sun, hemi, this.shadows);
+      addHaze(scene, HORIZON, 70, 650);
+    }
 
     // A soft dark disc under the ball; it shrinks and fades as the ball rises.
     this.ballShadow = MeshBuilder.CreateDisc('ballShadow', { radius: 1, tessellation: 32 }, scene);
@@ -552,38 +567,46 @@ export class Renderer {
     this.netSurface = set.net;
     this.netBase = null;
 
-    // Painted lines, measured out from the net's edge: the serve line and
-    // the no-spike zone line close to the net.
+    // Spray-painted lines, measured out from the net's edge: the serve line
+    // and the no-spike zone line close to the net.
     const lineMat = flatMaterial('courtLine', new Color3(1, 1, 1), scene);
     lineMat.emissiveColor = new Color3(0.35, 0.35, 0.35);
-    lineMat.alpha = 0.85;
+    lineMat.opacityTexture = sprayPaintTexture(scene);
     lineMat.backFaceCulling = false;
     const edge = radius + frameWidth;
     for (const [name, distance] of [
       ['serveLine', t.court.serveLineDistance],
       ['noSpikeLine', t.court.noSpikeZoneDistance],
     ] as const) {
-      const line = paintedRing(name, edge + distance, t.court.lineWidth, scene);
+      // The mesh is wider than the line itself, to leave room for overspray.
+      const r = edge + distance;
+      const line = paintedRing(name, r, t.court.lineWidth * SPRAY_SPREAD, scene, Math.round((Math.PI * 2 * r) / SPRAY_TILE));
       line.material = lineMat;
       line.parent = court;
     }
   }
 }
 
-/** A flat painted ring on the grass, centered on the net, `width` wide. */
-function paintedRing(name: string, radius: number, width: number, scene: Scene): Mesh {
+/**
+ * A flat ring on the grass, centered on the net, `width` wide. UVs: u runs
+ * around it (`repeats` times), v across it (0 inside, 1 outside).
+ */
+function paintedRing(name: string, radius: number, width: number, scene: Scene, repeats = 1): Mesh {
   const segments = 128;
   const inner = radius - width / 2;
   const outer = radius + width / 2;
   const positions: number[] = [];
   const indices: number[] = [];
   const normals: number[] = [];
+  const uvs: number[] = [];
   for (let i = 0; i <= segments; i++) {
     const a = (i / segments) * Math.PI * 2;
     const c = Math.cos(a);
     const s = Math.sin(a);
     positions.push(c * inner, 0.012, s * inner, c * outer, 0.012, s * outer);
     normals.push(0, 1, 0, 0, 1, 0);
+    const u = (i / segments) * repeats;
+    uvs.push(u, 0, u, 1);
     if (i < segments) {
       const k = i * 2;
       indices.push(k, k + 2, k + 1, k + 1, k + 2, k + 3);
@@ -594,9 +617,51 @@ function paintedRing(name: string, radius: number, width: number, scene: Scene):
   data.positions = positions;
   data.indices = indices;
   data.normals = normals;
+  data.uvs = uvs;
   data.applyToMesh(mesh);
   mesh.isPickable = false;
   return mesh;
+}
+
+/**
+ * Spray paint, as an opacity texture for a strip (u along it, v across): a
+ * soft-edged core that wanders a little and thins in places, speckled, with
+ * overspray dots fading out to either side. Tiles seamlessly along u.
+ */
+function sprayPaintTexture(scene: Scene): DynamicTexture {
+  const w = 512;
+  const h = 64;
+  const tex = new DynamicTexture('sprayPaint', { width: w, height: h }, scene, true);
+  tex.hasAlpha = true;
+  const ctx = tex.getContext() as CanvasRenderingContext2D;
+  const img = ctx.createImageData(w, h);
+  let seed = 99;
+  const rand = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+  // Smooth, tiling wobble of the core's center and density along the strip.
+  const wave = (x: number, f: number, p: number) => Math.sin(((x / w) * f + p) * Math.PI * 2);
+  for (let x = 0; x < w; x++) {
+    const center = h / 2 + (wave(x, 3, 0.1) * 0.5 + wave(x, 7, 0.6) * 0.3) * (h / SPRAY_SPREAD) * 0.35;
+    const density = 0.82 + wave(x, 5, 0.3) * 0.1 + wave(x, 11, 0.8) * 0.06;
+    const core = h / SPRAY_SPREAD / 2;
+    for (let y = 0; y < h; y++) {
+      const d = Math.abs(y - center) / core;
+      // Solid-ish core with a soft falloff, then a faint misty halo.
+      let a = d < 0.7 ? 1 : d < 1.3 ? 1 - (d - 0.7) / 0.6 : 0;
+      a = a * density + Math.max(0, 0.18 * (1 - d / 3));
+      // Speckle: paint droplets missing in the core, landing outside it.
+      const r = rand();
+      if (d < 1.2) a *= r < 0.12 ? 0.55 : 1;
+      else if (r < 0.06 * Math.max(0, 1 - (d - 1.2) / 2.2)) a = 0.5 + rand() * 0.5;
+      const i = (y * w + x) * 4;
+      img.data[i] = img.data[i + 1] = img.data[i + 2] = 255;
+      img.data[i + 3] = Math.round(Math.min(1, a) * 235);
+    }
+  }
+  ctx.putImageData(img, 0, 0);
+  tex.update();
+  tex.wrapU = DynamicTexture.WRAP_ADDRESSMODE;
+  tex.wrapV = DynamicTexture.CLAMP_ADDRESSMODE;
+  return tex;
 }
 
 const PERFECT_GREEN = new Color3(0.35, 1, 0.45);

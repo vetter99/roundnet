@@ -39,13 +39,13 @@ function material(scene: Scene, name: string, color: Color3): StandardMaterial {
   return mat;
 }
 
-/** Fog that fades the far edges of the park into the sky color. */
-export function addHaze(scene: Scene): void {
+/** Fog that fades the far edges of the park into the sky color (or `color`, from `start` to `end` m). */
+export function addHaze(scene: Scene, color = SKY, start = 40, end = 110): void {
   scene.fogMode = Scene.FOGMODE_LINEAR;
-  scene.fogColor = SKY;
-  // Clear inside the stadium; trees beyond the stands fade into the sky.
-  scene.fogStart = 40;
-  scene.fogEnd = 110;
+  scene.fogColor = color;
+  // By default: clear inside the stadium; trees beyond the stands fade into the sky.
+  scene.fogStart = start;
+  scene.fogEnd = end;
 }
 
 /** Soft shadows from the sun, for the players and the net. Add casters with `addShadowCaster`. */
@@ -105,7 +105,7 @@ export function createLawn(scene: Scene): Mesh {
  * Big trees outside the stadium bowl, tall enough to show over the stands, so
  * it still feels like a park. Nothing goes on the field itself.
  */
-export function createScenery(scene: Scene): void {
+export function createScenery(scene: Scene, treeCount = 70): void {
   const rand = seeded(42);
   // Trees get a soft dark patch underneath instead of real shadows, which
   // would stretch the shadow map over the whole park and blur the players'.
@@ -142,7 +142,7 @@ export function createScenery(scene: Scene): void {
     return inst;
   };
 
-  for (let i = 0; i < 70; i++) {
+  for (let i = 0; i < treeCount; i++) {
     const angle = rand() * Math.PI * 2;
     const r = STAND_OUTER_RADIUS + 4 + rand() * 18;
     const x = Math.cos(angle) * r;

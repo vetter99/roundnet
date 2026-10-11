@@ -18,6 +18,8 @@ export interface Seat {
   y: number;
   z: number;
   yaw: number;
+  // Size of the fan sitting here (1 = grown-up; smaller for kids).
+  scale?: number;
 }
 
 type EarShape = 'pointy' | 'round' | 'long' | 'none';
@@ -57,7 +59,8 @@ export interface Crowd {
   update(time: number): void;
 }
 
-export function createCrowd(scene: Scene, seats: Seat[]): Crowd {
+/** Fans in the seats: `fill` is the share of seats taken (the rest stay empty). */
+export function createCrowd(scene: Scene, seats: Seat[], fill = FILL): Crowd {
   let seed = 4242;
   const rand = () => ((seed = (seed * 1103515245 + 12345) % 2147483648) / 2147483648);
 
@@ -88,15 +91,16 @@ export function createCrowd(scene: Scene, seats: Seat[]): Crowd {
   const pending: Record<string, { m: Matrix; c: Color3; fan: number }[]> = {};
   for (const key of Object.keys(base)) pending[key] = [];
   const add = (key: string, fan: number, seat: Seat, local: Vector3, scale: Vector3, color: Color3, roll = 0) => {
+    const size = seat.scale ?? 1;
     const q = Quaternion.FromEulerAngles(0, seat.yaw, roll);
-    const offset = local.applyRotationQuaternion(Quaternion.FromEulerAngles(0, seat.yaw, 0));
-    const m = Matrix.Compose(scale, q, new Vector3(seat.x + offset.x, seat.y + offset.y, seat.z + offset.z));
+    const offset = local.scale(size).applyRotationQuaternion(Quaternion.FromEulerAngles(0, seat.yaw, 0));
+    const m = Matrix.Compose(scale.scale(size), q, new Vector3(seat.x + offset.x, seat.y + offset.y, seat.z + offset.z));
     pending[key].push({ m, c: color, fan });
   };
 
   let fans = 0;
   for (const seat of seats) {
-    if (rand() > FILL) continue;
+    if (rand() > fill) continue;
     const fan = fans++;
     const species = SPECIES[Math.floor(rand() * SPECIES.length)];
     const fur = Color3.FromHexString(species.fur);
