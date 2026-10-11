@@ -32,11 +32,12 @@ export interface Player {
   pos: Vec3;
   vel: Vec3;
   grounded: boolean;
-  // A hit button being held down, charging up power.
-  charge: { kind: HitKind; ticks: number } | null;
+  // A hit button being held down, charging up power. `spin` (-1..1) is the
+  // sidespin a spike will have, from the stick while charging (see stepHitButtons).
+  charge: { kind: HitKind; ticks: number; spin: number } | null;
   // A released swing that fires as soon as the ball is in reach. The world
   // turns it into a 'whiff' event when ticksLeft runs out. Power is 0..1.
-  hitBuffer: { kind: HitKind; ticksLeft: number; power: number } | null;
+  hitBuffer: { kind: HitKind; ticksLeft: number; power: number; spin: number } | null;
   cooldown: number;
   // An active dive: a short lunge (where you can still pass or spike with
   // extra reach), then lying on the ground recovering. `ticks` counts up from 0.
@@ -90,6 +91,8 @@ export function chargePower(ticks: number, t: Tuning): number {
 export interface Swing {
   kind: HitKind;
   power: number;
+  // Sidespin, -1..1: positive curves to the hitter's right as they face the net.
+  spin: number;
 }
 
 /** Advance a player one tick. Returns the swing released this tick, if any. */
@@ -175,6 +178,19 @@ function tickTimers(p: Player): null {
   return null;
 }
 
+/**
+ * The spin a spike gets from the stick: its sideways part, across the line
+ * from the player to the net (the net is at the origin). Positive is the
+ * player's right as they face the net.
+ */
+export function spikeSpin(p: Player, intent: Intent): number {
+  const d = Math.hypot(p.pos.x, p.pos.z);
+  if (d < 1e-6) return 0;
+  // Facing the net, (-x, -z)/d; the right-hand side is (-z, x)/d.
+  const stick = stickOf(intent);
+  return clamp((stick.x * -p.pos.z + stick.z * p.pos.x) / d, -1, 1);
+}
+
 /** Hold a hit button to charge; letting go (or switching buttons) releases the swing. */
 function stepHitButtons(p: Player, intent: Intent, t: Tuning): Swing | null {
   tickTimers(p);
@@ -182,15 +198,17 @@ function stepHitButtons(p: Player, intent: Intent, t: Tuning): Swing | null {
   const held: HitKind | null = intent.spike ? 'spike' : intent.pass ? 'pass' : null;
   if (p.charge && held === p.charge.kind) {
     p.charge.ticks++;
+    // Spin for a spike: the stick across the line from the player to the net.
+    if (held === 'spike') p.charge.spin = spikeSpin(p, intent);
     return null;
   }
   let swing: Swing | null = null;
   if (p.charge) {
-    swing = { kind: p.charge.kind, power: chargePower(p.charge.ticks, t) };
+    swing = { kind: p.charge.kind, power: chargePower(p.charge.ticks, t), spin: p.charge.spin };
     p.hitBuffer = { ...swing, ticksLeft: t.hit.inputBufferTicks };
     p.charge = null;
   }
-  if (held) p.charge = { kind: held, ticks: 0 };
+  if (held) p.charge = { kind: held, ticks: 0, spin: 0 };
   return swing;
 }
 

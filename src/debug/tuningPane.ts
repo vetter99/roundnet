@@ -10,14 +10,14 @@ const RANGES: Record<string, Ranges> = {
   ball: { radius: [0.05, 0.3], airDrag: [0, 0.5] },
   net: {
     radius: [0.3, 1.2], frameWidth: [0.02, 0.15], height: [0.1, 0.5], bounce: [0.3, 1.2],
-    horizontalKeep: [0.3, 1.2], minUpSpeed: [0, 8],
+    flatSteepness: [0, 1], steepSteepness: [0, 1], flatKeep: [0, 1.2], steepKeep: [0, 1.2], flatMinUp: [0, 10], steepMinUp: [0, 10],
   },
   player: {
     size: [0.5, 1.6], maxSpeed: [2, 12], accel: [5, 100], decel: [5, 100], airControl: [0, 1], jumpSpeed: [2, 10],
     contactHeight: [0.5, 2.5], reach: [0.3, 2], lowReach: [0, 2.5], highReach: [0, 1.5],
   },
   hit: {
-    spikeSpeedMin: [4, 25], spikeSpeedMax: [4, 30], chargeTime: [0.1, 2], chargeMoveFactor: [0, 1], minQualityPower: [0, 1], mishitDrift: [0, 3],
+    spikeSpeedMin: [4, 25], spikeSpeedMax: [4, 30], chargeTime: [0.1, 2], chargeMoveFactor: [0, 1], spikeSpinCurve: [0, 15], minQualityPower: [0, 1], mishitDrift: [0, 3],
     perfectWindow: [0, 0.6], qualityFalloff: [0.1, 2], passUpSpeedMin: [2, 15], passUpSpeedMax: [2, 18], passHorizontalSpeed: [0, 6],
     inputBufferTicks: [0, 20, 1], cooldownTicks: [0, 40, 1],
     dropShotMaxPower: [0, 0.6], dropSpeed: [1, 10], dropPastCenter: [0, 0.7], dropBounceUp: [0.5, 6], dropHorizontalKeep: [0, 1],

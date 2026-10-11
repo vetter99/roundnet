@@ -79,11 +79,11 @@ const SERVE_AIM_LEAN = 0.25;
 const HOLD_REACH = 0.33;
 // Arms hang straight down from the shoulder at rest.
 const HANG = new Vector3(0, -1, 0);
-// Serve spin: while charging, the hitting arm cocks out to one side (radians)
-// and the body twists with it; on release the arm sweeps across to the other
-// side, the direction the ball will curve.
-const SERVE_SPIN_ARM = 0.9;
-const SERVE_SPIN_TWIST = 0.35;
+// Spin (serves and spikes): while charging, the hitting arm cocks out to one
+// side (radians at full spin) and the body twists with it; on release the arm
+// sweeps hard across to the other side, the direction the ball will curve.
+const SPIN_ARM = 1.5;
+const SPIN_TWIST = 0.55;
 
 // Dive pose: how far the body pitches forward (radians) at full stretch.
 const DIVE_PITCH = 1.3;
@@ -160,19 +160,15 @@ export class Character {
     for (const mesh of this.root.getChildMeshes()) mesh.visibility = alpha;
   }
 
-  // The spin of a serve being swung right now (the arm sweeps across).
-  private serveSweep: number | null = null;
+  // The spin of a hit being swung right now (the arm sweeps across).
+  private spinSweep: number | null = null;
 
-  /** The serve swing: a spike that sweeps the arm across in the spin direction. */
-  playServe(spin: number): void {
-    // The swing event usually started the animation already this tick.
-    if (!this.swing) this.playSwing('spike');
-    this.serveSweep = spin;
-  }
-
-  /** Play the pass or spike animation; call whenever this player swings. */
-  playSwing(kind: ShotKind): void {
-    this.serveSweep = null;
+  /**
+   * Play the pass or spike animation; call whenever this player swings. With
+   * spin, the hitting arm also sweeps across in the spin direction.
+   */
+  playSwing(kind: ShotKind, spin = 0): void {
+    this.spinSweep = spin !== 0 ? spin : null;
     const anim = SWING_ANIMS[kind];
     const startPhase = this.heldPhase?.kind === kind ? this.heldPhase.phase : 0;
     this.swing = { anim, time: startPhase * anim.duration };
@@ -190,7 +186,7 @@ export class Character {
     dive: DiveView | null,
     faceNet = false,
     serveAim?: { x: number; z: number },
-    serveSpin = 0,
+    spin = 0,
     holdBall?: { x: number; y: number; z: number },
   ): void {
     this.root.position.set(x, y, z);
@@ -224,7 +220,7 @@ export class Character {
       anim = this.swing.anim;
       if (phase >= 1) {
         this.swing = null;
-        this.serveSweep = null;
+        this.spinSweep = null;
       }
     } else if (charge) {
       // Wind up quickly at first, then hold the pose as power builds.
@@ -302,18 +298,18 @@ export class Character {
       arm.rotation.z = p.grounded ? side * 0.15 : -side * 0.7;
     });
 
-    // Serve spin, read from the arm: cocked away from the spin while charging,
-    // then swept across through the hit. Positive = cocked to the server's left.
+    // Spin, read from the arm: cocked away from the spin while charging, then
+    // swept across through the hit. Positive = cocked to the hitter's left.
     let cock = 0;
-    if (this.serveSweep !== null) {
+    if (this.spinSweep !== null) {
       const u = clamp((phase - 0.3) / 0.35, 0, 1);
-      cock = this.serveSweep * (1 - 2 * u * u * (3 - 2 * u));
-    } else if (charge && serveAim) {
-      cock = serveSpin;
+      cock = this.spinSweep * (1 - 2 * u * u * (3 - 2 * u));
+    } else if (charge) {
+      cock = spin;
     }
     if (cock !== 0) {
-      this.arms[1].rotation.z += cock * SERVE_SPIN_ARM;
-      this.root.rotation.y -= cock * SERVE_SPIN_TWIST;
+      this.arms[1].rotation.z += cock * SPIN_ARM;
+      this.root.rotation.y -= cock * SPIN_TWIST;
     }
 
     this.holdBall(holdBall);

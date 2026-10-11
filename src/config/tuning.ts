@@ -30,11 +30,22 @@ export const DEFAULT_TUNING = {
     height: 0.25,
     // Vertical speed kept after a net bounce (1 = perfect trampoline).
     bounce: 0.8,
-    // Horizontal speed kept after a net bounce.
-    horizontalKeep: 0.5,
-    // Even a soft or flat hit pops up at least this fast. This is what gives
-    // the defender time to react; flat spikes otherwise skim off low and fast.
-    minUpSpeed: 5,
+    // The angle the ball comes in at changes the bounce. Steepness is the
+    // downward share of its speed (0 = skimming flat, 1 = straight down),
+    // mapped so flatSteepness and below count as fully flat and
+    // steepSteepness and above as fully steep:
+    // - flat (a low, well-timed spike) skips off like a stone on water:
+    //   it keeps more of its horizontal speed and pops up only a little;
+    // - steep (a spike hit from high up) pops up high and slow.
+    // (Spikes come in at about 0.3-0.6; serves at about 0.3.)
+    flatSteepness: 0.32,
+    steepSteepness: 0.6,
+    // Horizontal speed kept after the bounce, flat and steep.
+    flatKeep: 0.65,
+    steepKeep: 0.32,
+    // Every bounce pops up at least this fast (m/s), flat and steep.
+    flatMinUp: 3.8,
+    steepMinUp: 7.5,
   },
 
   player: {
@@ -113,6 +124,10 @@ export const DEFAULT_TUNING = {
     chargeTime: 0.6,
     // Movement speed multiplier while charging.
     chargeMoveFactor: 0.55,
+    // Spike sidespin: pushing the stick sideways while charging a spike
+    // curves it this hard (m/s² at full spin) and kicks it sideways off the
+    // net (by serve.spinKick), like a spun serve.
+    spikeSpinCurve: 5,
     // A hit released this many ticks early still fires when the ball arrives.
     inputBufferTicks: 8,
     cooldownTicks: 15,
@@ -174,11 +189,12 @@ export const DEFAULT_TUNING = {
     // Attempts per serve before it's lost.
     tries: 2,
     // Spin: sideways stick while charging sets sidespin; the serve curves this
-    // hard (m/s² at full spin; a slow serve bends ~0.7 m, a fast one ~0.2 m),
-    // and the net kicks it sideways by the curve times spinKick (s), so a
-    // full-spin serve ends up ~2 m to the side of a receiver who stands still.
-    spinCurve: 3.5,
-    spinKick: 0.4,
+    // hard (m/s² at full spin; a slow serve bends ~0.9 m, a fast one ~0.25 m),
+    // and the net kicks any spun ball (serve or spike) sideways by its curve
+    // times spinKick (s), so a full-spin serve ends up ~2.5 m to the side of a
+    // receiver who stands still.
+    spinCurve: 4.5,
+    spinKick: 0.45,
   },
 
   // Rally timing, and a ball fed off the net (a practice/test helper).

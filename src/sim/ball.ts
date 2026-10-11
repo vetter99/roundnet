@@ -1,6 +1,6 @@
 import type { Tuning } from '../config/tuning';
 import { DT } from './time';
-import { copyVec3, type Vec3 } from './vec';
+import { clamp, copyVec3, lerp, type Vec3 } from './vec';
 
 export type Touch = 'none' | 'feed' | 'player' | 'net';
 
@@ -19,7 +19,8 @@ export interface Ball {
 
 export type BallEvent =
   // speed: downward speed hitting the net; upSpeed: upward speed leaving it.
-  | { type: 'net'; at: Vec3; speed: number; upSpeed: number }
+  // steepness: how steeply it came in (0 flat .. 1 straight down), see `net` in tuning.
+  | { type: 'net'; at: Vec3; speed: number; upSpeed: number; steepness: number }
   | { type: 'ground'; at: Vec3 };
 
 export function createBall(): Ball {
@@ -95,9 +96,23 @@ function stepBallOnce(ball: Ball, dt: number, t: Tuning, events: BallEvent[]): v
   }
 }
 
+/** How steeply a ball is coming down: 0 skimming flat, 1 straight down. */
+function steepnessOf(vel: Vec3): number {
+  const down = Math.max(0, -vel.y);
+  const total = Math.hypot(vel.x, vel.y, vel.z);
+  return total > 1e-6 ? down / total : 0;
+}
+
+/** Steepness mapped onto the tuning's flat..steep range, 0..1. */
+function netSteepness(vel: Vec3, t: Tuning): number {
+  const range = Math.max(1e-6, t.net.steepSteepness - t.net.flatSteepness);
+  return clamp((steepnessOf(vel) - t.net.flatSteepness) / range, 0, 1);
+}
+
 function netBounce(ball: Ball, t: Tuning, events: BallEvent[]): void {
   const { vel } = ball;
   const inSpeed = -vel.y;
+  const incoming = { ...vel };
   if (ball.soft) {
     // Drop shots die on the net: a small pop and little carry.
     vel.y = t.hit.dropBounceUp;
@@ -105,9 +120,12 @@ function netBounce(ball: Ball, t: Tuning, events: BallEvent[]): void {
     vel.z *= t.hit.dropHorizontalKeep;
     ball.soft = false;
   } else {
-    vel.y = Math.max(inSpeed * t.net.bounce, t.net.minUpSpeed);
-    vel.x *= t.net.horizontalKeep;
-    vel.z *= t.net.horizontalKeep;
+    // Flat hits skip off low and fast; steep ones pop up high and slow.
+    const s = netSteepness(vel, t);
+    vel.y = Math.max(inSpeed * t.net.bounce, lerp(t.net.flatMinUp, t.net.steepMinUp, s));
+    const keep = lerp(t.net.flatKeep, t.net.steepKeep, s);
+    vel.x *= keep;
+    vel.z *= keep;
   }
   if (ball.curve) {
     // Spin kicks the ball sideways off the net.
@@ -116,7 +134,7 @@ function netBounce(ball: Ball, t: Tuning, events: BallEvent[]): void {
     ball.curve = undefined;
   }
   ball.lastTouch = 'net';
-  events.push({ type: 'net', at: copyVec3(ball.pos), speed: inSpeed, upSpeed: vel.y });
+  events.push({ type: 'net', at: copyVec3(ball.pos), speed: inSpeed, upSpeed: vel.y, steepness: steepnessOf(incoming) });
 }
 
 /**

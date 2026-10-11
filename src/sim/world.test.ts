@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { createTuning } from '../config/tuning';
-import { stepBall, type BallEvent } from './ball';
+import { stepBall, type Ball, type BallEvent } from './ball';
 import { autoDiveTarget, hitQuality, tryHit } from './hit';
 import { createPlayer, NEUTRAL_INTENT, startDive, stepPlayer, type Intent } from './player';
 import { serveHand, setNextReceiver, setUpServe } from './serve';
@@ -11,8 +11,8 @@ const t = createTuning();
 describe('hits', () => {
   function setup(ballHeightError: number) {
     const p = createPlayer(0, 0, 0, -2.5);
-    p.hitBuffer = { kind: 'spike', ticksLeft: 5, power: 0.5 };
-    const ball = {
+    p.hitBuffer = { kind: 'spike', ticksLeft: 5, power: 0.5, spin: 0 };
+    const ball: Ball = {
       pos: { x: 0, y: t.player.contactHeight + ballHeightError, z: -2.3 },
       vel: { x: 0, y: -1, z: 0 },
       alive: true,
@@ -20,6 +20,31 @@ describe('hits', () => {
     };
     return { p, ball };
   }
+
+  it('sideways stick while charging a spike sets its spin, and the spike curves that way', () => {
+    // Facing the net from -z, the player's right is +x.
+    const p = createPlayer(0, 0, 0, -2.5);
+    const charge = { ...NEUTRAL_INTENT, spike: true, moveX: 1 };
+    for (let i = 0; i < 10; i++) stepPlayer(p, charge, t);
+    // (The stick also moves the player a little, so it's nearly full spin.)
+    expect(p.charge?.spin).toBeGreaterThan(0.9);
+    const swing = stepPlayer(p, NEUTRAL_INTENT, t);
+    expect(swing?.kind).toBe('spike');
+    expect(swing?.spin).toBeGreaterThan(0.9);
+
+    const { ball } = setup(0);
+    p.pos = { x: 0, y: 0, z: -2.5 };
+    tryHit(p, ball, NEUTRAL_INTENT, t);
+    expect(ball.curve?.x).toBeGreaterThan(0);
+    // A pass takes no spin and clears any the ball had.
+    p.hitBuffer = { kind: 'pass', ticksLeft: 5, power: 0.5, spin: 1 };
+    p.cooldown = 0;
+    ball.pos = { x: 0, y: t.player.contactHeight, z: -2.3 };
+    ball.vel = { x: 0, y: -1, z: 0 };
+    ball.lastTouch = 'net';
+    tryHit(p, ball, NEUTRAL_INTENT, t);
+    expect(ball.curve).toBeUndefined();
+  });
 
   it('a perfectly timed spike has full quality and heads to the net', () => {
     const { p, ball } = setup(0);
@@ -279,7 +304,7 @@ describe('spike targeting', () => {
   /** Spike a ball at `height` with the stick pushed (`aimX`, `aimZ`); return where it lands first. */
   function spikeAt(height: number, aimX: number, aimZ: number) {
     const p = createPlayer(0, 0, 0, -2.4);
-    p.hitBuffer = { kind: 'spike', ticksLeft: 5, power: 0.5 };
+    p.hitBuffer = { kind: 'spike', ticksLeft: 5, power: 0.5, spin: 0 };
     const ball = { pos: { x: 0, y: height, z: -2.2 }, vel: { x: 0, y: -2, z: 0 }, alive: true, lastTouch: 'net' as const };
     const hit = tryHit(p, ball, { ...NEUTRAL_INTENT, moveX: aimX, moveZ: aimZ }, t)!;
     const events: BallEvent[] = [];
@@ -345,7 +370,7 @@ describe('dive', () => {
   it('can hit a ball out of normal reach while lunging, with less power', () => {
     const p = createPlayer(0, 0, 0, -2.5);
     dive(p, 1, 0);
-    p.hitBuffer = { kind: 'pass', ticksLeft: 5, power: 1 };
+    p.hitBuffer = { kind: 'pass', ticksLeft: 5, power: 1, spin: 0 };
     // Beyond standing reach, but within dive reach, at dive contact height.
     const hit = tryHit(p, ballAt(p.pos.x + t.player.reach + 0.3, t.player.dive.contactHeight, p.pos.z), NEUTRAL_INTENT, t)!;
     expect(hit).not.toBeNull();
@@ -356,7 +381,7 @@ describe('dive', () => {
   it('measures dive reach from the outstretched paws, ahead of the feet', () => {
     const p = createPlayer(0, 0, 0, -3);
     dive(p, 1, 0);
-    p.hitBuffer = { kind: 'pass', ticksLeft: 1, power: 1 };
+    p.hitBuffer = { kind: 'pass', ticksLeft: 1, power: 1, spin: 0 };
     const ahead = t.player.dive.reachOffset + t.player.reach + t.player.dive.reachBonus - 0.1;
     expect(tryHit(p, ballAt(p.pos.x + ahead, 1.2, p.pos.z), NEUTRAL_INTENT, t)).not.toBeNull();
   });
@@ -375,7 +400,7 @@ describe('dive', () => {
     const p = createPlayer(0, 0, 0, -2.5);
     dive(p, 1, 0);
     for (let i = 0; i < Math.round(t.player.dive.duration * 60) + 2; i++) stepPlayer(p, NEUTRAL_INTENT, t);
-    p.hitBuffer = { kind: 'pass', ticksLeft: 5, power: 1 };
+    p.hitBuffer = { kind: 'pass', ticksLeft: 5, power: 1, spin: 0 };
     expect(tryHit(p, ballAt(p.pos.x, t.player.contactHeight, p.pos.z), NEUTRAL_INTENT, t)).toBeNull();
   });
 });
@@ -383,7 +408,7 @@ describe('dive', () => {
 describe('automatic dive', () => {
   const swingingPlayer = () => {
     const p = createPlayer(0, 0, 0, -3);
-    p.hitBuffer = { kind: 'pass', ticksLeft: 8, power: 0.5 };
+    p.hitBuffer = { kind: 'pass', ticksLeft: 8, power: 0.5, spin: 0 };
     return p;
   };
   const ballAt = (x: number, y: number, z: number, vx = 0, vy = -1, vz = 0) => ({
@@ -444,7 +469,7 @@ describe('drop shot', () => {
   /** Hit a spike at `power` from 2.4 m out; return the shot kind and the ball's events until it lands. */
   function shoot(power: number) {
     const p = createPlayer(0, 0, 0, -2.4);
-    p.hitBuffer = { kind: 'spike', ticksLeft: 5, power };
+    p.hitBuffer = { kind: 'spike', ticksLeft: 5, power, spin: 0 };
     const ball = { pos: { x: 0, y: t.player.contactHeight, z: -2.2 }, vel: { x: 0, y: -1, z: 0 }, alive: true, lastTouch: 'net' as const };
     const hit = tryHit(p, ball, NEUTRAL_INTENT, t)!;
     const events: BallEvent[] = [];
@@ -468,7 +493,7 @@ describe('drop shot', () => {
 
   it('is safe even when badly timed', () => {
     const p = createPlayer(0, 0, 0, -2.4);
-    p.hitBuffer = { kind: 'spike', ticksLeft: 5, power: 0.05 };
+    p.hitBuffer = { kind: 'spike', ticksLeft: 5, power: 0.05, spin: 0 };
     const ball = { pos: { x: 0, y: t.player.contactHeight - 0.9, z: -2.2 }, vel: { x: 0, y: -1, z: 0 }, alive: true, lastTouch: 'net' as const };
     const hit = tryHit(p, ball, NEUTRAL_INTENT, t)!;
     expect(hit.quality).toBeLessThan(0.1);
@@ -562,7 +587,8 @@ describe('serve spin', () => {
     const world = createMatch(t);
     const red = (intent: Partial<Intent>): Intent[] => [NEUTRAL_INTENT, { ...NEUTRAL_INTENT, ...intent }];
     stepWorld(world, red({ spike: true }), t); // start charging: the aim locks
-    for (let i = 0; i < 3; i++) stepWorld(world, red({ spike: true, moveX: spinX }), t);
+    // A normal-strength serve (a tapped one with full spin curves right off the net).
+    for (let i = 0; i < 20; i++) stepWorld(world, red({ spike: true, moveX: spinX }), t);
     stepWorld(world, red({}), t); // release: the serve is in the air
     let net: SimEvent | undefined;
     for (let i = 0; i < 120 && !net; i++) {
@@ -576,9 +602,9 @@ describe('serve spin', () => {
     const straight = serveWithSpin(0);
     const right = serveWithSpin(1);
     const left = serveWithSpin(-1);
-    expect(Math.abs(straight.at!.x)).toBeLessThan(0.02);
-    expect(right.at!.x).toBeGreaterThan(0.05);
-    expect(left.at!.x).toBeLessThan(-0.05);
+    // (A charged serve wobbles a little, so compare against the straight one.)
+    expect(right.at!.x).toBeGreaterThan(straight.at!.x + 0.05);
+    expect(left.at!.x).toBeLessThan(straight.at!.x - 0.05);
   });
 
   it('kicks the ball sideways off the net in the spin direction', () => {

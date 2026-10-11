@@ -318,7 +318,7 @@ function onEvent(e: SimEvent): void {
   if (e.type === 'swing') {
     // A tapped spike is a drop shot: play the gentle push instead of the slam.
     const drop = e.kind === 'spike' && e.power < tuning.hit.dropShotMaxPower;
-    renderer.playSwing(e.playerId, drop ? 'drop' : e.kind);
+    renderer.playSwing(e.playerId, drop ? 'drop' : e.kind, drop ? 0 : e.spin);
     sfx.swing(e.power);
   } else if (e.type === 'whiff') {
     lastMiss = { team: world.players[e.playerId].team, reason: e.reason };
@@ -347,7 +347,6 @@ function onEvent(e: SimEvent): void {
   } else if (e.type === 'gameOver') {
     showFlash(`${TEAM_NAMES[e.winner]} wins ${Math.max(...world.score)}–${Math.min(...world.score)}!`, TEAM_CSS[e.winner], 3);
   } else if (e.type === 'serve') {
-    renderer.playServe(e.playerId, e.spin);
     const featured = isHuman(e.playerId) || !world.players.some((p) => isHuman(p.id));
     sfx.hit('spike', e.power, 1, featured ? 1 : tuning.audio.cpuHits);
   } else if (e.type === 'fault') {

@@ -31,6 +31,21 @@ describe('ball vs net', () => {
     expect(ball.vel.y).toBeGreaterThan(0);
   });
 
+  it('a flat hit skips off low and fast; a steep one pops up high and slow', () => {
+    // Same speed into the net center, from far out (flat) and from high up (steep).
+    const flat = ballAt(-3, 0.9, 0);
+    launchBallAt(flat, { x: 0, y: netContactHeight(t), z: 0 }, 12, t);
+    const steep = ballAt(-0.9, 2.6, 0);
+    launchBallAt(steep, { x: 0, y: netContactHeight(t), z: 0 }, 12, t);
+    const flatHit = firstEvent(flat);
+    const steepHit = firstEvent(steep);
+    expect(flatHit?.type === 'net' && steepHit?.type === 'net').toBe(true);
+    if (flatHit?.type !== 'net' || steepHit?.type !== 'net') return;
+    expect(flatHit.steepness).toBeLessThan(steepHit.steepness);
+    expect(flat.vel.y).toBeLessThan(steep.vel.y);
+    expect(Math.abs(flat.vel.x)).toBeGreaterThan(Math.abs(steep.vel.x));
+  });
+
   it('treats the frame as part of the net (no rim faults)', () => {
     const frameCenter = t.net.radius + t.net.frameWidth / 2;
     const ball = ballAt(frameCenter, 2, 0);

@@ -42,8 +42,9 @@ src/main.ts           wires it together; fixed 60Hz loop with render interpolati
 
 ## Game rules implemented so far
 
-- Ball bounces off the net surface (vertical speed scaled by `net.bounce`,
-  horizontal kept by `net.horizontalKeep`), so it skips across the net.
+- Ball bounces off the net surface, and the angle it comes in at matters
+  (`net` in tuning): flat hits (a low, well-timed spike) skip off low and
+  fast; steep hits (spiked from high up) pop up high and slow.
 - No rim faults for now: the frame bounces like the net.
 - The ball is only playable after it comes off the net or a player
   (`isPlayable` in `src/sim/hit.ts`).
@@ -98,8 +99,11 @@ src/main.ts           wires it together; fixed 60Hz loop with render interpolati
   the keyboard (whole, or split WASD / arrows for two).
 - Hit quality comes from timing: how close the ball is to the player's
   contact height at contact. Bad hits are weaker and drift off target.
-- Spikes always target the net center; the stick only aims passes. The worst-
-  timed spikes drift far enough past center to miss (`hit.mishitDrift`).
+- Spikes always target the net center; the stick aims passes, and on spikes
+  sideways stick while charging adds sidespin (`hit.spikeSpinCurve`), like the
+  serve. Spun balls curve, kick sideways off the net, and show it with the
+  hitter's arm sweep and a cyan/magenta trail. The worst-timed spikes drift
+  far enough past center to miss (`hit.mishitDrift`).
 
 ## Backlog
 

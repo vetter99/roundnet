@@ -76,7 +76,13 @@ const TRAIL_MIN_ALPHA = 0.25;
 // trail shows behind any spun ball.
 const SPIN_VISUAL = 8;
 const TRAIL_PLAIN = new Color3(1, 0.95, 0.7);
-const TRAIL_SPIN = new Color3(0.55, 0.85, 1);
+// A spun ball's trail turns cyan or magenta depending on which way it curves
+// (as seen along its flight), stronger with more spin: SPIN_FULL is the visual
+// spin rate (rad/s) that counts as full spin.
+const TRAIL_SPIN_LEFT = new Color3(0.15, 0.9, 1);
+const TRAIL_SPIN_RIGHT = new Color3(1, 0.3, 0.85);
+const SPIN_FULL = 30;
+const TRAIL_SPIN_ALPHA = 0.9;
 
 const METER_WIDTH = 0.5;
 const METER_HEIGHT = 0.07;
@@ -206,8 +212,9 @@ export class Renderer {
     const v = world.ball.vel;
     const fast = clamp((Math.hypot(v.x, v.y, v.z) - TRAIL_MIN_SPEED) / (TRAIL_FULL_SPEED - TRAIL_MIN_SPEED), 0, 1);
     const spin = this.updateBallSpin(world, frameSeconds);
-    this.trailMat.alpha = world.ball.alive ? Math.max(lerp(TRAIL_MIN_ALPHA, TRAIL_MAX_ALPHA, fast), spin * 0.4) : 0;
-    this.trailMat.emissiveColor = Color3.Lerp(TRAIL_PLAIN, TRAIL_SPIN, spin);
+    const spinAmount = Math.abs(spin);
+    this.trailMat.alpha = world.ball.alive ? Math.max(lerp(TRAIL_MIN_ALPHA, TRAIL_MAX_ALPHA, fast), spinAmount * TRAIL_SPIN_ALPHA) : 0;
+    this.trailMat.emissiveColor = Color3.Lerp(TRAIL_PLAIN, spin < 0 ? TRAIL_SPIN_LEFT : TRAIL_SPIN_RIGHT, Math.min(1, spinAmount * 1.5));
     this.updateBallShadow(this.ball.position, world.ball.alive, t);
     this.updateNetWobble(frameSeconds, t);
 
@@ -238,8 +245,8 @@ export class Renderer {
       const aiming = world.waitingForServe && world.winner === null && p.id === world.serve.serverId;
       const wobble = aiming ? serveWobble(world, p, t) : null;
       const aim = wobble ? { x: world.serve.aim.x + wobble.x, z: world.serve.aim.z + wobble.z } : undefined;
-      // Spin shows in the arm: cocked to one side while charging.
-      const spin = aiming ? world.serve.spin : 0;
+      // Spin shows in the arm: cocked to one side while charging a serve or spike.
+      const spin = aiming ? world.serve.spin : p.charge?.kind === 'spike' ? p.charge.spin : 0;
       view.character.update(p, x, y, z, t.player.size, frameSeconds, charge, dive, world.waitingForServe, aim, spin, aiming ? held : undefined);
       this.updateMeter(view.meter, charge?.power ?? null, x, y + 1.55 * t.player.size, z);
       // Reach rings are a debug aid only (they were confused with the timing rings).
@@ -257,7 +264,7 @@ export class Renderer {
    * Turn the ball to show its sidespin. While a spun serve curves, the spin
    * matches the curve's direction (the side of the ball moving backward is
    * the side it curves toward); afterwards it keeps spinning, slowly fading,
-   * until someone hits it. Returns how much spin is showing, 0..1.
+   * until someone hits it. Returns how much spin is showing, -1..1 (the sign is the curve direction).
    */
   private updateBallSpin(world: World, dt: number): number {
     const ball = world.ball;
@@ -271,7 +278,8 @@ export class Renderer {
       this.ballSpin *= Math.exp(-0.4 * dt);
     }
     this.ball.rotation.y += this.ballSpin * dt;
-    return clamp(Math.abs(this.ballSpin) / 12, 0, 1);
+    // Signed amount, -1..1: the sign says which way it curves.
+    return clamp(this.ballSpin / SPIN_FULL, -1, 1);
   }
 
   /** Make the net surface sag and spring back; call when the ball hits the net. */
@@ -320,13 +328,9 @@ export class Renderer {
   }
 
   /** Play the pass or spike animation for a player. */
-  /** The serve swing: the arm sweeps across in the spin direction (-1..1). */
-  playServe(playerId: number, spin: number): void {
-    this.players[playerId]?.character.playServe(spin);
-  }
-
-  playSwing(playerId: number, kind: ShotKind): void {
-    this.players[playerId]?.character.playSwing(kind);
+  /** A player swings; with spin (-1..1) the arm also sweeps across in that direction. */
+  playSwing(playerId: number, kind: ShotKind, spin = 0): void {
+    this.players[playerId]?.character.playSwing(kind, spin);
   }
 
   /** Ease toward the closest view that keeps the players, ball, landing spot and net on screen. */

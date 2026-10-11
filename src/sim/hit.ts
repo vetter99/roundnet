@@ -163,8 +163,11 @@ export function tryHit(p: Player, ball: Ball, intent: Intent, t: Tuning, turn?: 
   const aim = stickOf(intent);
 
   ball.soft = false;
+  // A new hit replaces any spin the ball had.
+  ball.curve = undefined;
   if (kind === 'spike') {
     spike(ball, quality, power, t);
+    if (p.hitBuffer.spin !== 0) addSpin(ball, p, p.hitBuffer.spin, t.hit.spikeSpinCurve);
   } else if (kind === 'drop') {
     dropShot(ball, t);
   } else {
@@ -176,6 +179,17 @@ export function tryHit(p: Player, ball: Ball, intent: Intent, t: Tuning, turn?: 
   ball.lastTouch = 'player';
   const launchSpeed = Math.hypot(ball.vel.x, ball.vel.y, ball.vel.z);
   return { playerId: p.id, kind, quality, power, heightError, launchSpeed };
+}
+
+/**
+ * Sidespin: a steady sideways pull on the ball (and a kick off the net, see
+ * netBounce), to the hitter's right for positive spin as they face the net.
+ */
+function addSpin(ball: Ball, p: Player, spin: number, curve: number): void {
+  const d = Math.hypot(p.pos.x, p.pos.z);
+  if (d < 1e-6) return;
+  const pull = spin * curve;
+  ball.curve = { x: (-p.pos.z / d) * pull, z: (p.pos.x / d) * pull };
 }
 
 function spike(ball: Ball, quality: number, power: number, t: Tuning): void {
