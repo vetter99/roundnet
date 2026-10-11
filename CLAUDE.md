@@ -94,7 +94,7 @@ src/main.ts           wires it together; fixed 60Hz loop with render interpolati
 - `src/ai/bot.ts` is a deterministic CPU player. In 2v2 the closer eligible
   teammate plays the ball, passes go to the partner, and the other supports
   or spreads out on defense. Seat buttons (Blue 1/2, Red 1/2) set each player
-  to human or CPU (all CPU, 2v2, on load); humans get gamepads in seat order, then
+  to human or CPU (all CPU, 2v2 match, on load); humans get gamepads in seat order, then
   the keyboard (whole, or split WASD / arrows for two).
 - Hit quality comes from timing: how close the ball is to the player's
   contact height at contact. Bad hits are weaker and drift off target.
