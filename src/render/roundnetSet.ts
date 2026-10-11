@@ -118,7 +118,8 @@ function saggingDisc(name: string, radius: number, scene: Scene): Mesh {
   data.indices = indices;
   data.normals = normals;
   data.uvs = uvs;
-  data.applyToMesh(mesh);
+  // Updatable: the renderer dents it where the ball hits.
+  data.applyToMesh(mesh, true);
   return mesh;
 }
 

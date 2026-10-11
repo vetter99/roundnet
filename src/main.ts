@@ -337,7 +337,7 @@ function onEvent(e: SimEvent): void {
       rally++;
       bestRally = Math.max(bestRally, rally);
     }
-    renderer.netImpact(e.speed);
+    renderer.netImpact(e.speed, e.at);
     sfx.net(e.speed);
   } else if (e.type === 'ground') {
     sfx.ground();

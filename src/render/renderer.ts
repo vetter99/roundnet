@@ -1,5 +1,6 @@
 // Deep imports keep the bundle small; importing from '@babylonjs/core' pulls in everything.
 import { UniversalCamera } from '@babylonjs/core/Cameras/universalCamera';
+import { VertexBuffer } from '@babylonjs/core/Buffers/buffer';
 import { Engine } from '@babylonjs/core/Engines/engine';
 import { DirectionalLight } from '@babylonjs/core/Lights/directionalLight';
 import { HemisphericLight } from '@babylonjs/core/Lights/hemisphericLight';
@@ -30,6 +31,15 @@ import { clamp, lerp, type Vec3 } from '../sim/vec';
 import type { World } from '../sim/world';
 import { serveHand, serveWobble } from '../sim/serve';
 
+// The net's trampoline dent: depth (m) per m/s of impact speed, within
+// [MIN, MAX]; how wide the dimple is (m); how much of the dent is the local
+// dimple vs. the whole net sagging; and when it has settled (s).
+const NET_DENT_PER_SPEED = 0.016;
+const NET_DENT_MIN = 0.025;
+const NET_DENT_MAX = 0.17;
+const NET_DENT_RADIUS = 0.24;
+const NET_DENT_LOCAL = 0.75;
+const NET_DENT_SETTLE = 1;
 // A ball that moves further than this (m) in one tick was teleported, not thrown.
 const BALL_JUMP = 1.5;
 // Saturated team colors, for the jerseys.
@@ -114,7 +124,10 @@ export class Renderer {
   private court: TransformNode | null = null;
   private netSurface: Mesh | null = null;
   // Trampoline wobble after the ball hits the net: a decaying spring.
-  private netWobble = { amplitude: 0, time: 0 };
+  // The net's trampoline bounce: a dent at (x, z) that springs back over time.
+  private netWobble = { amplitude: 0, time: 0, x: 0, z: 0 };
+  // The net surface's resting vertex positions, to dent from.
+  private netBase: Float32Array | null = null;
   private readonly shadows: ShadowGenerator;
   private readonly stadium: Stadium;
   private readonly ballShadow: Mesh;
@@ -284,18 +297,41 @@ export class Renderer {
     return clamp(this.ballSpin / SPIN_FULL, -1, 1);
   }
 
-  /** Make the net surface sag and spring back; call when the ball hits the net. */
-  netImpact(impactSpeed: number): void {
-    this.netWobble = { amplitude: clamp(impactSpeed * 0.012, 0.02, 0.1), time: 0 };
+  /**
+   * The ball hit the net at `at` (world x, z) this fast: dent the net there,
+   * deeper for harder hits, like a trampoline, then spring back.
+   */
+  netImpact(impactSpeed: number, at: { x: number; z: number }): void {
+    this.netWobble = { amplitude: clamp(impactSpeed * NET_DENT_PER_SPEED, NET_DENT_MIN, NET_DENT_MAX), time: 0, x: at.x, z: at.z };
   }
 
   private updateNetWobble(dt: number, t: Tuning): void {
-    if (!this.netSurface) return;
+    const net = this.netSurface;
+    if (!net) return;
+    if (!this.netBase) {
+      const base = net.getVerticesData(VertexBuffer.PositionKind);
+      if (!base) return;
+      this.netBase = new Float32Array(base);
+    }
     const w = this.netWobble;
     w.time += dt;
-    // Sags first, then bounces back with a few quick wobbles.
-    const offset = -w.amplitude * Math.exp(-7 * w.time) * Math.cos(26 * w.time);
-    this.netSurface.position.y = t.net.height + offset;
+    // Dips first, then bounces back with a few quick wobbles, then rests.
+    const depth = -w.amplitude * Math.exp(-7 * w.time) * Math.cos(26 * w.time);
+    if (w.time > NET_DENT_SETTLE && w.amplitude === 0) return;
+    if (w.time > NET_DENT_SETTLE) w.amplitude = 0;
+    const base = this.netBase;
+    const positions = new Float32Array(base);
+    const radius = t.net.radius;
+    for (let i = 0; i < positions.length; i += 3) {
+      const x = base[i];
+      const z = base[i + 2];
+      // Mostly a dimple around the impact, plus a little sag of the whole net.
+      const d2 = ((x - w.x) ** 2 + (z - w.z) ** 2) / (NET_DENT_RADIUS * NET_DENT_RADIUS);
+      const r2 = (x * x + z * z) / (radius * radius);
+      const shape = NET_DENT_LOCAL * Math.exp(-d2) + (1 - NET_DENT_LOCAL) * Math.max(0, 1 - r2);
+      positions[i + 1] = base[i + 1] + depth * shape;
+    }
+    net.updateVerticesData(VertexBuffer.PositionKind, positions);
   }
 
   private updateBallShadow(ballPos: Vector3, alive: boolean, t: Tuning): void {
@@ -514,6 +550,7 @@ export class Renderer {
     const set = buildRoundnetSet(scene, radius, frameWidth, height, this.shadows);
     set.root.parent = court;
     this.netSurface = set.net;
+    this.netBase = null;
 
     // Painted lines, measured out from the net's edge: the serve line and
     // the no-spike zone line close to the net.
