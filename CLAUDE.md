@@ -61,7 +61,7 @@ src/main.ts           wires it together; fixed 60Hz loop with render interpolati
   serve leaves from there. While charging, the aim locks and sideways stick sets
   spin (`serve.spin`): the arm cocks to one side and sweeps across on
   release, and the serve curves that way. No steering after release. The
-  receiver starts behind their serve line (`serve.receiverBack`). The
+  receiver starts 2 m behind their serve line (`serve.receiverBack`). The
   renderer shows a camera straight behind the (see-through) receiver until
   the return; human stick input follows the camera.
   `feedBall` (feeding the ball off the net) is only a test/practice helper.
