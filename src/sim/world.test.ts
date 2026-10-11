@@ -12,10 +12,11 @@ const t = createTuning();
  * Serve the real-roundnet way for whoever is serving: toss with pass, hold
  * spike, and release as the ball drops to the sweet spot (or `releaseAt` m
  * above / below it). `tap` holds spike only for the last moment (a soft
- * serve); `spinX` is sideways stick while charging. Runs until the serve is
+ * serve); `spinX` is sideways stick while charging; `aimX` is the stick held
+ * (along x) as the ball is tossed, which sets the aim. Runs until the serve is
  * hit (or the toss lands) and returns every event along the way.
  */
-function tossAndServe(world: World, tt = t, opts: { tap?: boolean; spinX?: number; releaseAt?: number } = {}): SimEvent[] {
+function tossAndServe(world: World, tt = t, opts: { tap?: boolean; spinX?: number; releaseAt?: number; aimX?: number } = {}): SimEvent[] {
   const idx = world.players.findIndex((p) => p.id === world.serve.serverId);
   const as = (i: Partial<Intent>) => world.players.map((_, k) => (k === idx ? { ...NEUTRAL_INTENT, ...i } : NEUTRAL_INTENT));
   const events: SimEvent[] = [];
@@ -23,7 +24,7 @@ function tossAndServe(world: World, tt = t, opts: { tap?: boolean; spinX?: numbe
     stepWorld(world, as(i), tt);
     events.push(...world.events);
   };
-  step({ pass: true });
+  step({ pass: true, moveX: opts.aimX ?? 0 });
   step({});
   const releaseHeight = tt.serve.contactHeight + (opts.releaseAt ?? 0);
   for (let i = 0; i < 120 && world.waitingForServe; i++) {
@@ -604,16 +605,24 @@ describe('serve duel', () => {
     const world = createMatch(t);
     const server = world.players[1];
     const center = serveHand(world, server, t);
-    // Red faces -z, so its right is -x: aiming to Red's right slides the paw that way.
-    world.serve.aim = { x: -t.net.radius, z: 0 };
+    // Red faces -z, so its right is -x: holding the stick that way leans the paw there.
+    stepWorld(world, red({ moveX: -1 }), t);
+    expect(world.serve.aim.x).toBeCloseTo(-t.net.radius * t.serve.aimLimit);
     const right = serveHand(world, server, t);
     expect(right.x).toBeLessThan(center.x - 0.2);
-    stepWorld(world, red({ pass: true }), t);
-    expect(world.ball.pos.x).toBeCloseTo(right.x, 2);
-    expect(world.ball.pos.z).toBeCloseTo(right.z, 2);
+    // Let go and the aim (and paw) go back to center.
+    stepWorld(world, red({}), t);
+    expect(world.serve.aim.x).toBeCloseTo(0);
+    // Toss while holding it: the ball goes up from the paw, drifting that way, and the aim locks.
+    stepWorld(world, red({ pass: true, moveX: -1 }), t);
+    expect(world.ball.pos.x).toBeCloseTo(right.x, 1);
+    expect(world.ball.pos.z).toBeCloseTo(right.z, 1);
+    expect(world.ball.vel.x).toBeLessThan(0);
+    stepWorld(world, red({ moveX: 1 }), t);
+    expect(world.serve.aim.x).toBeCloseTo(-t.net.radius * t.serve.aimLimit);
   });
 
-  it("the server's stick moves the aim, not the server", () => {
+  it("the server's stick sets the aim, not the server's position", () => {
     const world = createMatch(t);
     const server = world.players[1];
     const spot = { ...server.pos };
@@ -625,9 +634,8 @@ describe('serve duel', () => {
 
   it('a serve aimed at the net lands on it, near the aim', () => {
     const world = createMatch(t);
-    for (let i = 0; i < 10; i++) stepWorld(world, red({ moveX: 1 }), t);
-    const aim = { ...world.serve.aim };
-    tossAndServe(world, t, { tap: true });
+    tossAndServe(world, t, { tap: true, aimX: 0.4 });
+    const aim = { x: 0.4 * t.net.radius * t.serve.aimLimit, z: 0 };
     let net: SimEvent | undefined;
     for (let i = 0; i < 120 && !net; i++) {
       stepWorld(world, [], t);
@@ -644,8 +652,9 @@ describe('serve duel', () => {
     loose.serve.aimLimit = 10;
     const world = createMatch(loose);
     const serveOffNet = () => {
-      world.serve.aim = { x: 3, z: 0 };
-      const faults: SimEvent[] = tossAndServe(world, loose, { tap: true }).filter((e) => e.type === 'fault');
+      // Aim 3 m out (the loose limit is 10 net radii).
+      const aimX = 3 / (loose.net.radius * loose.serve.aimLimit);
+      const faults: SimEvent[] = tossAndServe(world, loose, { tap: true, aimX }).filter((e) => e.type === 'fault');
       for (let i = 0; i < 240 && !world.waitingForServe; i++) {
         stepWorld(world, [], loose);
         faults.push(...world.events.filter((e) => e.type === 'fault'));
@@ -747,8 +756,7 @@ describe('match mode', () => {
     loose.serve.aimLimit = 10;
     const world = createMatch(loose, 'match');
     for (let attempt = 0; attempt < 2; attempt++) {
-      world.serve.aim = { x: 3, z: 0 };
-      tossAndServe(world, loose, { tap: true });
+      tossAndServe(world, loose, { tap: true, aimX: 3 / (loose.net.radius * loose.serve.aimLimit) });
       for (let i = 0; i < 240 && !world.waitingForServe; i++) stepWorld(world, [], loose);
     }
     expect(world.score).toEqual([1, 0]);

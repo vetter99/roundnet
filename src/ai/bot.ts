@@ -115,12 +115,11 @@ export function botIntent(world: World, index: number, t: Tuning): Intent {
   const intent: Intent = { ...NEUTRAL_INTENT };
 
   if (world.waitingForServe && world.winner === null && world.serve.serverId === me.id) {
-    // Steer the aim to one side (alternating serve to serve), then charge and release.
+    // Hold the stick toward one side (alternating serve to serve) to aim
+    // there, toss, then charge and time the hit.
     const side = world.serveReadyTick % 2 === 0 ? 1 : -1;
-    const dx = side * SERVE_AIM_SIDE * t.net.radius - world.serve.aim.x;
-    const dz = -world.serve.aim.z;
-    intent.moveX = Math.max(-1, Math.min(1, dx * 6));
-    intent.moveZ = Math.max(-1, Math.min(1, dz * 6));
+    intent.moveX = (side * SERVE_AIM_SIDE) / t.serve.aimLimit;
+    intent.moveZ = 0;
     const elapsed = world.tick - world.serveReadyTick;
     if (!world.serve.tossed) {
       intent.pass = elapsed >= SERVE_DELAY_TICKS;

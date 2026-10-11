@@ -1,9 +1,11 @@
 // The serve duel: the server stands at a fixed spot behind the serve line
 // with the receiver opposite. Like real roundnet, the serve is a toss and a
 // hit:
-// 1. Aim: the stick slides the ball, held out in the off paw, toward a spot
-//    on the net (no marker; the receiver reads the paw).
-// 2. Toss: pass tosses the ball a short way up out of the paw.
+// 1. Aim: hold the stick toward where on the net to serve; the ball, held
+//    out in the off paw, leans that way as a preview (no marker; the
+//    receiver reads the paw).
+// 2. Toss: pass tosses the ball a short way up, drifting a little in the held
+//    direction, and locks the aim.
 // 3. Hit: hold spike to charge while it's in the air (sideways stick sets
 //    spin: the arm cocks, then sweeps across), and release to hit. Timing is
 //    like a rally hit: at the sweet spot (`serve.contactHeight`) it goes where
@@ -17,7 +19,6 @@ import type { Tuning } from '../config/tuning';
 import { launchBallAt, netContactHeight, netOuterRadius } from './ball';
 import { hitQuality } from './hit';
 import { chargePower, stickOf, type Intent, type Player } from './player';
-import { DT } from './time';
 import { clamp, lerp } from './vec';
 import { otherTeam, serverTeam, teamPlayers, type Team, type World } from './world';
 
@@ -131,9 +132,10 @@ function serveSide(world: World, server: Player, t: Tuning): { x: number; z: num
 }
 
 /**
- * Before the toss, the stick moves the aim. After it the aim is locked, and
- * while charging the hit, sideways stick sets the spin. The server stays on
- * their spot.
+ * Before the toss, the aim follows the stick (full stick = the edge of the
+ * aim range; let go and it's the net center). After the toss the aim is
+ * locked, and while charging the hit, sideways stick sets the spin. The
+ * server stays on their spot.
  */
 export function stepServeAim(world: World, server: Player, intent: Intent, t: Tuning): void {
   const stick = stickOf(intent);
@@ -145,15 +147,10 @@ export function stepServeAim(world: World, server: Player, intent: Intent, t: Tu
       world.serve.spin = clamp(stick.x * side.x + stick.z * side.z, -1, 1);
     }
   } else {
-    const aim = world.serve.aim;
-    aim.x += stick.x * t.serve.aimSpeed * DT;
-    aim.z += stick.z * t.serve.aimSpeed * DT;
     const limit = t.net.radius * t.serve.aimLimit;
-    const r = Math.hypot(aim.x, aim.z);
-    if (r > limit) {
-      aim.x *= limit / r;
-      aim.z *= limit / r;
-    }
+    const r = Math.hypot(stick.x, stick.z);
+    const scale = r > 1 ? limit / r : limit;
+    world.serve.aim = { x: stick.x * scale, z: stick.z * scale };
     world.serve.spin = 0;
   }
   pinServer(server, t);
@@ -199,7 +196,9 @@ export function serveWobble(world: World, server: Player, t: Tuning): { x: numbe
 export function tossServe(world: World, server: Player, t: Tuning): void {
   const ball = world.ball;
   ball.pos = serveHand(world, server, t);
-  ball.vel = { x: 0, y: t.serve.tossSpeed, z: 0 };
+  // A little drift toward the aim, so the toss goes the way the stick is held.
+  const limit = t.net.radius * t.serve.aimLimit || 1;
+  ball.vel = { x: (world.serve.aim.x / limit) * t.serve.tossDrift, y: t.serve.tossSpeed, z: (world.serve.aim.z / limit) * t.serve.tossDrift };
   ball.alive = true;
   ball.soft = false;
   ball.curve = undefined;

@@ -155,6 +155,9 @@ export function createScenery(scene: Scene): void {
   }
 }
 
+// Half-width of the ball's two navy stripes (as sin of the angle from their center line).
+const BALL_STRIPE_WIDTH = 0.16;
+
 /**
  * A yellow ball with volleyball-style panels: each of the six sides of a cube
  * wrapped onto the sphere is split into three strips, with neighboring sides'
@@ -184,7 +187,11 @@ export function createBallMaterial(scene: Scene): StandardMaterial {
       let r: number;
       let g: number;
       let b: number;
-      if (nearStripEdge || nearSideEdge) {
+      // Two bold navy stripes pole to pole, so the ball's spin is easy to see.
+      const stripe = Math.min(Math.abs(Math.sin(lon)), 1) < BALL_STRIPE_WIDTH;
+      if (stripe) {
+        [r, g, b] = [30, 50, 130];
+      } else if (nearStripEdge || nearSideEdge) {
         [r, g, b] = [176, 142, 52];
       } else if (strip === 1) {
         [r, g, b] = [232, 218, 132];

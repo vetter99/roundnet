@@ -82,6 +82,10 @@ const TRAIL_PLAIN = new Color3(1, 0.95, 0.7);
 const TRAIL_SPIN_LEFT = new Color3(0.15, 0.9, 1);
 const TRAIL_SPIN_RIGHT = new Color3(1, 0.3, 0.85);
 const SPIN_FULL = 30;
+// The corkscrew: how far out from the ball's path the trail orbits at full
+// spin (m), and how fast it turns around the path (rad/s).
+const SPIRAL_RADIUS = 0.22;
+const SPIRAL_TURNS = 22;
 const TRAIL_SPIN_ALPHA = 0.9;
 
 const METER_WIDTH = 0.5;
@@ -101,6 +105,10 @@ export class Renderer {
   // The ball's visible sidespin (rad/s about the vertical axis). It keeps
   // turning after the net bounce, so the returner can read the kick.
   private ballSpin = 0;
+  // The trail follows this point, which orbits the ball's path while it
+  // spins, so a spun ball leaves a corkscrew.
+  private readonly trailEmitter: TransformNode;
+  private spiralAngle = 0;
   // Landing spot + timing guide: a fixed target ring and an approach ring
   // that shrinks onto it as the ball nears the PERFECT moment.
   private readonly marker: TransformNode;
@@ -162,8 +170,9 @@ export class Renderer {
 
     this.ball = MeshBuilder.CreateSphere('ball', { diameter: 1, segments: 20 }, scene);
     this.ball.material = createBallMaterial(scene);
-    // A faint streak behind fast spikes.
-    const trail = new TrailMesh('ballTrail', this.ball, scene, { diameter: 0.3, length: 14, sections: 8, autoStart: true });
+    // The ball's trail, drawn from a point that corkscrews around the ball when it spins.
+    this.trailEmitter = new TransformNode('trailEmitter', scene);
+    const trail = new TrailMesh('ballTrail', this.trailEmitter, scene, { diameter: 0.3, length: 14, sections: 8, autoStart: true });
     this.trailMat = flatMaterial('ballTrail', new Color3(1, 0.95, 0.7), scene);
     this.trailMat.disableLighting = true;
     this.trailMat.emissiveColor = new Color3(1, 0.95, 0.7);
@@ -215,6 +224,7 @@ export class Renderer {
     const fast = clamp((Math.hypot(v.x, v.y, v.z) - TRAIL_MIN_SPEED) / (TRAIL_FULL_SPEED - TRAIL_MIN_SPEED), 0, 1);
     const spin = this.updateBallSpin(world, frameSeconds);
     const spinAmount = Math.abs(spin);
+    this.updateTrailEmitter(world, spin, frameSeconds);
     this.trailMat.alpha = world.ball.alive ? Math.max(lerp(TRAIL_MIN_ALPHA, TRAIL_MAX_ALPHA, fast), spinAmount * TRAIL_SPIN_ALPHA) : 0;
     this.trailMat.emissiveColor = Color3.Lerp(TRAIL_PLAIN, spin < 0 ? TRAIL_SPIN_LEFT : TRAIL_SPIN_RIGHT, Math.min(1, spinAmount * 1.5));
     this.updateBallShadow(this.ball.position, world.ball.alive, t);
@@ -282,6 +292,31 @@ export class Renderer {
     this.ball.rotation.y += this.ballSpin * dt;
     // Signed amount, -1..1: the sign says which way it curves.
     return clamp(this.ballSpin / SPIN_FULL, -1, 1);
+  }
+
+  /**
+   * Move the trail's emitter: on the ball, or (while it spins) orbiting its
+   * path at a radius that grows with the spin, turning the way it spins.
+   */
+  private updateTrailEmitter(world: World, spin: number, dt: number): void {
+    const v = world.ball.vel;
+    const speed = Math.hypot(v.x, v.y, v.z);
+    this.spiralAngle += Math.sign(spin) * SPIRAL_TURNS * dt;
+    const radius = SPIRAL_RADIUS * Math.abs(spin);
+    const pos = this.ball.position;
+    if (speed < 1e-3 || radius < 1e-3) {
+      this.trailEmitter.position.copyFrom(pos);
+      return;
+    }
+    // Two directions across the path, to orbit in.
+    const dir = new Vector3(v.x / speed, v.y / speed, v.z / speed);
+    let across = Vector3.Cross(dir, Vector3.Up());
+    if (across.lengthSquared() < 1e-6) across = new Vector3(1, 0, 0);
+    across.normalize();
+    const over = Vector3.Cross(across, dir).normalize();
+    const c = Math.cos(this.spiralAngle) * radius;
+    const s = Math.sin(this.spiralAngle) * radius;
+    this.trailEmitter.position.set(pos.x + across.x * c + over.x * s, pos.y + across.y * c + over.y * s, pos.z + across.z * c + over.z * s);
   }
 
   /** Make the net surface sag and spring back; call when the ball hits the net. */

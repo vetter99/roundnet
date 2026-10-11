@@ -58,8 +58,9 @@ src/main.ts           wires it together; fixed 60Hz loop with render interpolati
   the ball land loses the point; the winner serves; `match.maxTouches`; a
   double fault gives the receiver the point).
 - Serving is a duel (`src/sim/serve.ts`), toss then hit like real roundnet:
-  the stick aims (the ball held out in the off paw slides toward the aim,
-  `serveHand`; no marker), pass tosses the ball a short way up, then hold
+  hold the stick toward where to aim (the ball held out in the off paw leans
+  that way, `serveHand`; no marker), pass tosses the ball a short way up,
+  drifting that way and locking the aim, then hold
   spike to charge (sideways stick = spin; the arm cocks and sweeps) and
   release to hit. Timing works like a rally hit: at `serve.contactHeight` it
   goes where aimed at full power; early it goes long, late short and slower.
@@ -105,7 +106,8 @@ src/main.ts           wires it together; fixed 60Hz loop with render interpolati
 - Spikes always target the net center; the stick aims passes, and on spikes
   sideways stick while charging adds sidespin (`hit.spikeSpinCurve`), like the
   serve. Spun balls curve, kick sideways off the net, and show it with the
-  hitter's arm sweep and a cyan/magenta trail. The worst-timed spikes drift
+  hitter's arm sweep, a cyan/magenta corkscrew trail, and the striped ball
+  turning. The worst-timed spikes drift
   far enough past center to miss (`hit.mishitDrift`).
 
 ## Backlog
