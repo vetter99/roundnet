@@ -54,6 +54,8 @@
                       background: #ffffffe0; color: #1d2b1f; font-family: 'Russo One', system-ui, sans-serif; font-size: 14px;
                       box-shadow: 0 2px 8px #0005; }
       #seats button:hover { background: #fff; }
+      #seats .seatRow { display: flex; gap: 6px; }
+      #seats .pick { background: #ffffffb0; font-size: 12px; padding: 7px 10px; }
       #help { position: fixed; bottom: 10px; left: 16px; right: 16px; color: #fffd; font-size: 13px; text-shadow: 0 1px 2px #000a; pointer-events: none; }
     </style>
   </head>
@@ -74,10 +76,10 @@
     <div id="seats">
       <button id="mode">🎯 Practice</button>
       <button id="format">👤 1v1</button>
-      <button id="seat0"></button>
-      <button id="seat1"></button>
-      <button id="seat2"></button>
-      <button id="seat3"></button>
+      <div class="seatRow"><button class="pick" id="pick0"></button><button id="seat0"></button></div>
+      <div class="seatRow"><button class="pick" id="pick1"></button><button id="seat1"></button></div>
+      <div class="seatRow"><button class="pick" id="pick2"></button><button id="seat2"></button></div>
+      <div class="seatRow"><button class="pick" id="pick3"></button><button id="seat3"></button></div>
     </div>
     <button id="sound">🔇 Click here to turn on sound</button>
     <script type="module" src="/src/main.ts"></script>

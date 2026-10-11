@@ -4,6 +4,7 @@ import { tuning } from './config/tuning';
 import { createTuningPane } from './debug/tuningPane';
 import { LocalInput, PASS_KEY_LABEL, type InputFrame, type KeyboardScheme } from './input/localInput';
 import { Renderer, snapshot } from './render/renderer';
+import { CHARACTERS, SEAT_CHARACTERS, type CharacterKind } from './render/roster';
 import type { MissReason } from './sim/hit';
 import { chargePower, isDiving, type Player } from './sim/player';
 import { DT } from './sim/time';
@@ -18,6 +19,8 @@ const soundButton = document.getElementById('sound') as HTMLButtonElement;
 const prompt = document.getElementById('prompt') as HTMLElement;
 // Seats: Blue 1, Blue 2, Red 1, Red 2 (the 2s only in 2v2).
 const seatButtons = [0, 1, 2, 3].map((i) => document.getElementById(`seat${i}`)) as HTMLButtonElement[];
+// Next to each seat: which character plays it (click to cycle).
+const pickButtons = [0, 1, 2, 3].map((i) => document.getElementById(`pick${i}`)) as HTMLButtonElement[];
 const modeButton = document.getElementById('mode') as HTMLButtonElement;
 const formatButton = document.getElementById('format') as HTMLButtonElement;
 
@@ -115,12 +118,45 @@ function playerSpan(p: Player): string {
   return `<span style="color:${TEAM_CSS[p.team]}">${playerName(p)}</span>`;
 }
 
+// The character in each seat; remembered on this browser.
+const CHARACTERS_KEY = 'roundnet.characters';
+const seatCharacters: CharacterKind[] = [...SEAT_CHARACTERS];
+try {
+  const saved = JSON.parse(localStorage.getItem(CHARACTERS_KEY) ?? 'null') as unknown;
+  if (Array.isArray(saved)) {
+    saved.forEach((kind, seat) => {
+      if (seat < 4 && CHARACTERS.some((c) => c.kind === kind)) seatCharacters[seat] = kind as CharacterKind;
+    });
+  }
+} catch {
+  // Defaults it is.
+}
+renderer.setSeatCharacters(seatCharacters);
+pickButtons.forEach((button, seat) => {
+  button.addEventListener('click', () => {
+    const i = CHARACTERS.findIndex((c) => c.kind === seatCharacters[seat]);
+    seatCharacters[seat] = CHARACTERS[(i + 1) % CHARACTERS.length].kind;
+    renderer.setSeatCharacters(seatCharacters);
+    try {
+      localStorage.setItem(CHARACTERS_KEY, JSON.stringify(seatCharacters));
+    } catch {
+      // Not remembered; still works for this visit.
+    }
+    refreshSeats();
+    button.blur();
+    canvas.focus();
+  });
+});
+
 function refreshSeats(): void {
   seatButtons.forEach((button, seat) => {
     const team = seat < 2 ? 0 : 1;
     const slot = seat % 2;
     const used = world.format === '2v2' || slot === 0;
-    button.style.display = used ? '' : 'none';
+    (button.parentElement as HTMLElement).style.display = used ? '' : 'none';
+    const character = CHARACTERS.find((c) => c.kind === seatCharacters[seat]);
+    pickButtons[seat].textContent = `${character?.name ?? ''} ▸`;
+    pickButtons[seat].title = 'Click to change character';
     const name = world.format === '2v2' ? `${TEAM_NAMES[team]} ${slot + 1}` : TEAM_NAMES[team];
     button.textContent = human[seat] ? `🎮 ${name}: Human` : `🤖 ${name}: CPU`;
   });

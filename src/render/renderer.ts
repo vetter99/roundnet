@@ -22,7 +22,7 @@ import { cameraPosition, frame, type Framing } from './cameraFraming';
 import { Character } from './character';
 import { addHaze, createBallMaterial, createLawn, createScenery, createShadows, SKY } from './environment';
 import { buildRoundnetSet } from './roundnetSet';
-import { SEAT_CHARACTERS } from './roster';
+import { SEAT_CHARACTERS, type CharacterKind } from './roster';
 import { createStadium, type Stadium } from './stadium';
 import type { ShadowGenerator } from '@babylonjs/core/Lights/Shadows/shadowGenerator';
 import { chargePower, diveRecoveryTicks, diveTicks } from '../sim/player';
@@ -48,9 +48,10 @@ export function snapshot(world: World): Snapshot {
 }
 
 interface PlayerView {
-  // Which team and slot the view was built for (rebuilt if the player changes, e.g. 1v1 → 2v2).
+  // Which team, slot and character the view was built for (rebuilt if any changes, e.g. 1v1 → 2v2).
   team: 0 | 1;
   slot: number;
+  kind: CharacterKind;
   character: Character;
   reachRing: Mesh;
   meter: ChargeMeter;
@@ -101,6 +102,8 @@ export class Renderer {
   private readonly targetRing: Mesh;
   private readonly targetMat: StandardMaterial;
   private readonly players: PlayerView[] = [];
+  // The character in each seat (Blue 1, Blue 2, Red 1, Red 2).
+  private seatCharacters: CharacterKind[] = [...SEAT_CHARACTERS];
   private court: TransformNode | null = null;
   private netSurface: Mesh | null = null;
   // Trampoline wobble after the ball hits the net: a decaying spring.
@@ -211,12 +214,13 @@ export class Renderer {
     for (const view of this.players.splice(world.players.length)) this.disposePlayerView(view);
     world.players.forEach((p, i) => {
       const slot = world.players.filter((q) => q.team === p.team).indexOf(p);
+      const kind = this.seatCharacters[p.team * 2 + slot];
       let view: PlayerView | undefined = this.players[i];
-      if (view && (view.team !== p.team || view.slot !== slot)) {
+      if (view && (view.team !== p.team || view.slot !== slot || view.kind !== kind)) {
         this.disposePlayerView(view);
         view = undefined;
       }
-      view ??= this.players[i] = this.createPlayerView(p.team, slot);
+      view ??= this.players[i] = this.createPlayerView(p.team, slot, kind);
       const from = prev.players[i] ?? p.pos;
       const x = lerp(from.x, p.pos.x, alpha);
       const z = lerp(from.z, p.pos.z, alpha);
@@ -437,10 +441,15 @@ export class Renderer {
     }
   }
 
-  private createPlayerView(team: 0 | 1, slot: number): PlayerView {
+  /** Choose the character for each seat (Blue 1, Blue 2, Red 1, Red 2); players are rebuilt as needed. */
+  setSeatCharacters(kinds: CharacterKind[]): void {
+    this.seatCharacters = [...kinds];
+  }
+
+  private createPlayerView(team: 0 | 1, slot: number, kind: CharacterKind): PlayerView {
     const scene = this.scene;
-    // Each seat has its own character; teammates wear numbers 1 and 2.
-    const character = new Character(scene, TEAM_COLORS[team], SEAT_CHARACTERS[team * 2 + slot], slot + 1);
+    // Teammates wear numbers 1 and 2.
+    const character = new Character(scene, TEAM_COLORS[team], kind, slot + 1);
     for (const mesh of character.root.getChildMeshes()) this.shadows.addShadowCaster(mesh);
 
     const reachRing = MeshBuilder.CreateTorus('reach', { diameter: 2, thickness: 0.04, tessellation: 48 }, scene);
@@ -450,7 +459,7 @@ export class Renderer {
     reachMat.emissiveColor = TEAM_COLORS[team];
     reachRing.material = reachMat;
 
-    return { team, slot, character, reachRing, meter: this.createMeter() };
+    return { team, slot, kind, character, reachRing, meter: this.createMeter() };
   }
 
   private disposePlayerView(view: PlayerView): void {
