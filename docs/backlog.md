@@ -80,10 +80,10 @@ and UX cards.
 | SHOT-06 | Right-stick shot control, starting with placement (playtest) | P2 | L | |
 | RULE-01 | Real serving ✅ serve duel with spin | P0 | M | |
 | RULE-02 | Match mode ✅ to 11, winner serves, 3 touches | P0 | S | |
-| RULE-03 | 2v2 teams | P1 | L | RULE-02, INPUT-01 |
+| RULE-03 | 2v2 teams ✅ (seat buttons for now; join screen is INPUT-01) | P1 | L | RULE-02, INPUT-01 |
 | RULE-04 | Serve rotation and side switching | P2 | S | RULE-03 |
 | AI-01 | CPU difficulty levels | P1 | M | |
-| AI-02 | CPU teammate | P1 | L | RULE-03 |
+| AI-02 | CPU teammate (basic version done with RULE-03) | P1 | L | RULE-03 |
 | AI-03 | Smarter defensive positioning | P1 | S | |
 | AI-04 | CPU personalities | P3 | M | AI-01 |
 | INPUT-01 | Join screen, up to 4 controllers | P1 | M | |

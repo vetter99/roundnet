@@ -5,9 +5,9 @@ import { createTuningPane } from './debug/tuningPane';
 import { LocalInput, PASS_KEY_LABEL, type InputFrame, type KeyboardScheme } from './input/localInput';
 import { Renderer, snapshot } from './render/renderer';
 import type { MissReason } from './sim/hit';
-import { chargePower, isDiving } from './sim/player';
+import { chargePower, isDiving, type Player } from './sim/player';
 import { DT } from './sim/time';
-import { createMatch, resetRally, restartGame, serverTeam, stepWorld, type SimEvent, type Team } from './sim/world';
+import { createMatch, resetRally, restartGame, stepWorld, type SimEvent, type Team } from './sim/world';
 
 const canvas = document.getElementById('game') as HTMLCanvasElement;
 const stats = document.querySelector('#hud .stats') as HTMLElement;
@@ -16,8 +16,10 @@ const flash = document.getElementById('flash') as HTMLElement;
 const help = document.getElementById('help') as HTMLElement;
 const soundButton = document.getElementById('sound') as HTMLButtonElement;
 const prompt = document.getElementById('prompt') as HTMLElement;
-const seatButtons = [document.getElementById('blueSeat'), document.getElementById('redSeat')] as HTMLButtonElement[];
+// Seats: Blue 1, Blue 2, Red 1, Red 2 (the 2s only in 2v2).
+const seatButtons = [0, 1, 2, 3].map((i) => document.getElementById(`seat${i}`)) as HTMLButtonElement[];
 const modeButton = document.getElementById('mode') as HTMLButtonElement;
+const formatButton = document.getElementById('format') as HTMLButtonElement;
 
 const TEAM_NAMES = ['Blue', 'Red'];
 const TEAM_CSS = ['#5b8cff', '#ff6b5b'];
@@ -35,7 +37,7 @@ window.addEventListener('keydown', (e) => {
   if (e.code === 'KeyM' && !e.repeat) sfx.muted = !sfx.muted;
 });
 // Per player: whether their charge was already full, to ding once on reaching it.
-const chargeWasFull = [false, false];
+const chargeWasFull = [false, false, false, false];
 const input = new LocalInput(window);
 const world = createMatch(tuning);
 createTuningPane(tuning);
@@ -56,46 +58,84 @@ modeButton.addEventListener('click', () => {
   modeButton.blur();
   canvas.focus();
 });
+// 1v1 or 2v2, toggled on screen (restarts the game).
+formatButton.addEventListener('click', () => {
+  restartGame(world, tuning, world.mode, world.format === '2v2' ? '1v1' : '2v2');
+  rally = 0;
+  refreshSeats();
+  formatButton.blur();
+  canvas.focus();
+});
 // Ticks since the game ended; with no humans playing, the CPUs rematch on their own.
 let gameOverTicks = 0;
 
-// Who plays each side: a human or the CPU, toggled with the on-screen buttons.
-// Default: both CPU (watch AI vs AI) until someone takes a seat.
-const human = [false, false];
-const SEAT_LABELS = [
-  ['🤖 Blue: CPU', '🎮 Blue: You'],
-  ['🤖 Red: CPU', '🎮 Red: Player 2'],
-];
-seatButtons.forEach((button, i) => {
-  const refresh = () => (button.textContent = SEAT_LABELS[i][human[i] ? 1 : 0]);
-  refresh();
+// Who plays each seat (Blue 1, Blue 2, Red 1, Red 2): a human or the CPU,
+// toggled with the on-screen buttons. Default: all CPU (watch AI vs AI)
+// until someone takes a seat. In 1v1 only the "1" seats are used.
+const human = [false, false, false, false];
+
+/** A player's seat: Blue 1, Blue 2, Red 1, Red 2 = 0..3. */
+function seatOf(p: Player): number {
+  return p.team * 2 + world.players.filter((q) => q.team === p.team).indexOf(p);
+}
+
+function isHuman(playerId: number): boolean {
+  const p = world.players[playerId];
+  return p !== undefined && human[seatOf(p)];
+}
+
+/** A player's name: "Blue", or "Blue 1" / "Blue 2" in 2v2. */
+function playerName(p: Player): string {
+  const slot = seatOf(p) % 2;
+  return world.format === '2v2' ? `${TEAM_NAMES[p.team]} ${slot + 1}` : TEAM_NAMES[p.team];
+}
+
+function playerSpan(p: Player): string {
+  return `<span style="color:${TEAM_CSS[p.team]}">${playerName(p)}</span>`;
+}
+
+function refreshSeats(): void {
+  seatButtons.forEach((button, seat) => {
+    const team = seat < 2 ? 0 : 1;
+    const slot = seat % 2;
+    const used = world.format === '2v2' || slot === 0;
+    button.style.display = used ? '' : 'none';
+    const name = world.format === '2v2' ? `${TEAM_NAMES[team]} ${slot + 1}` : TEAM_NAMES[team];
+    button.textContent = human[seat] ? `🎮 ${name}: Human` : `🤖 ${name}: CPU`;
+  });
+  formatButton.textContent = world.format === '2v2' ? '👥 2v2' : '👤 1v1';
+}
+seatButtons.forEach((button, seat) => {
   button.addEventListener('click', () => {
-    human[i] = !human[i];
-    refresh();
+    human[seat] = !human[seat];
+    refreshSeats();
     button.blur();
     canvas.focus();
   });
 });
+refreshSeats();
 
 /**
- * Decide which device drives each player: [Blue, Red]. Human players get
- * controllers in order; any human left over gets the keyboard (the whole
- * keyboard for one, or a WASD half and an arrow-keys half for two). Players
- * not set to human are the CPU.
+ * Decide which device drives each player (by player index). Humans get
+ * controllers in seat order; any human left over gets the keyboard (the
+ * whole keyboard for one, or a WASD half and an arrow-keys half for two).
+ * Players not set to human, and humans beyond the two keyboard halves when
+ * there aren't enough controllers, are the CPU.
  */
-function assignDevices(): [Device, Device] {
+function assignDevices(): Device[] {
   const pads = input.gamepads();
-  const devices: Device[] = ['cpu', 'cpu'];
+  const devices: Device[] = world.players.map(() => 'cpu');
   const needKeyboard: number[] = [];
   let nextPad = 0;
-  human.forEach((isHuman, i) => {
-    if (!isHuman) return;
-    if (nextPad < pads.length) devices[i] = pads[nextPad++];
-    else needKeyboard.push(i);
-  });
+  const bySeat = [...world.players].sort((a, b) => seatOf(a) - seatOf(b));
+  for (const p of bySeat) {
+    if (!human[seatOf(p)]) continue;
+    if (nextPad < pads.length) devices[p.id] = pads[nextPad++];
+    else needKeyboard.push(p.id);
+  }
   if (needKeyboard.length === 1) devices[needKeyboard[0]] = 'all';
-  if (needKeyboard.length === 2) [devices[0], devices[1]] = ['left', 'right'];
-  return [devices[0], devices[1]];
+  if (needKeyboard.length >= 2) [devices[needKeyboard[0]], devices[needKeyboard[1]]] = ['left', 'right'];
+  return devices;
 }
 
 /** Turn a human's stick from screen directions into world directions: up is always away from the camera. */
@@ -191,7 +231,7 @@ function onEvent(e: SimEvent): void {
     lastMiss = null;
     const mine = world.players[e.playerId].team === 0;
     // A human's hits (or everyone's, when no one is playing) at full volume.
-    const featured = human[e.playerId] || !human.some(Boolean);
+    const featured = isHuman(e.playerId) || !world.players.some((p) => isHuman(p.id));
     sfx.hit(e.kind, e.power, e.quality, featured ? 1 : tuning.audio.cpuHits);
     if (mine && e.quality >= 1) showFlash('Perfect', '#5ee07a', 0.45);
   } else if (e.type === 'net') {
@@ -212,7 +252,8 @@ function onEvent(e: SimEvent): void {
     showFlash(`${TEAM_NAMES[e.winner]} wins ${Math.max(...world.score)}–${Math.min(...world.score)}!`, TEAM_CSS[e.winner], 3);
   } else if (e.type === 'serve') {
     renderer.playServe(e.playerId, e.spin);
-    sfx.hit('spike', e.power, 1, human[e.playerId] || !human.some(Boolean) ? 1 : tuning.audio.cpuHits);
+    const featured = isHuman(e.playerId) || !world.players.some((p) => isHuman(p.id));
+    sfx.hit('spike', e.power, 1, featured ? 1 : tuning.audio.cpuHits);
   } else if (e.type === 'fault') {
     sfx.ground();
     showFlash(e.lost ? `Double fault: serve goes to ${TEAM_NAMES[1 - e.team]}` : 'Fault: 2nd serve', '#ffd84a', 1.2);
@@ -234,6 +275,7 @@ const MISS_MESSAGES: Record<MissReason, string> = {
   notYet: 'too early, wait for the ball to come off the net',
   notYourBall: "not your ball, it's the other player's turn",
   noTouchesLeft: 'out of touches, it had to go on the net',
+  doubleTouch: "you just touched it, your partner has to play it next",
   tooFar: 'too far away, get closer to the ball',
   tooHigh: 'ball too high, jump to reach it',
   tooLow: 'ball too low, get under it sooner',
@@ -263,7 +305,7 @@ function hitSection(): string {
   const contact = cm === 0 ? 'ideal height' : `${Math.abs(cm)} cm ${cm > 0 ? 'high' : 'low'}`;
   return section(
     'Last hit',
-    row('Player', `${teamSpan(world.players[h.playerId].team)} ${h.kind}`) +
+    row('Player', `${playerSpan(world.players[h.playerId])} ${h.kind}`) +
       row('Timing', timingHtml(h.quality)) +
       row('Contact', contact) +
       row('Power', `${percentBar(h.power, '#ff9a3d')} ${Math.round(h.power * 100)}%`) +
@@ -279,7 +321,7 @@ function netSection(): string {
   );
 }
 
-function liveSection(devices: [Device, Device]): string {
+function liveSection(devices: Device[]): string {
   const b = world.ball;
   const ballSpeed = Math.hypot(b.vel.x, b.vel.y, b.vel.z);
   let body = row('Ball', `${ballSpeed.toFixed(1)} m/s · ${b.pos.y.toFixed(2)} m up`);
@@ -287,7 +329,7 @@ function liveSection(devices: [Device, Device]): string {
     const speed = Math.hypot(p.vel.x, p.vel.z);
     const air = p.grounded ? '' : ` · air ${p.pos.y.toFixed(2)} m`;
     const dive = !p.dive ? '' : isDiving(p, tuning) ? ' · diving' : ' · getting up';
-    body += row(`${teamSpan(p.team)} <small>${deviceName(devices[i])}</small>`, `${speed.toFixed(1)} m/s${air}${dive}`);
+    body += row(`${playerSpan(p)} <small>${deviceName(devices[i])}</small>`, `${speed.toFixed(1)} m/s${air}${dive}`);
     if (p.charge) {
       const power = chargePower(p.charge.ticks, tuning);
       body += row(`&nbsp;&nbsp;charging ${p.charge.kind}`, `${percentBar(power, '#ff9a3d')} ${Math.round(power * 100)}%`);
@@ -296,10 +338,11 @@ function liveSection(devices: [Device, Device]): string {
   return section('Live', body);
 }
 
-function updateHud(frameSeconds: number, devices: [Device, Device]): void {
+function updateHud(frameSeconds: number, devices: Device[]): void {
   const team: Team = world.possession;
-  const server = serverTeam(world);
-  const serverDevice = devices[world.players.findIndex((p) => p.team === server)];
+  const serverPlayer = world.players[world.serve.serverId] ?? world.players[0];
+  const receiverPlayer = world.players[world.serve.receiverId] ?? world.players[0];
+  const serverDevice = devices[serverPlayer.id];
   const showServePrompt = world.waitingForServe && world.winner === null;
   prompt.style.display = showServePrompt ? 'block' : 'none';
   if (showServePrompt) {
@@ -307,8 +350,8 @@ function updateHud(frameSeconds: number, devices: [Device, Device]): void {
     const second = world.serve.faults > 0 ? ' <small>(2nd serve)</small>' : '';
     prompt.innerHTML =
       serverDevice === 'cpu'
-        ? `${teamSpan(server)} is serving…${second}`
-        : `${teamSpan(server)}: stick aims · hold <b>${key}</b> to charge (stick ←→ while holding = spin) · release to serve${second}`;
+        ? `${playerSpan(serverPlayer)} is serving…${second}`
+        : `${playerSpan(serverPlayer)}: stick aims · hold <b>${key}</b> to charge (stick ←→ while holding = spin) · release to serve${second}`;
   }
   const match = world.mode === 'match';
   const touches = match && world.ball.alive && world.ball.lastTouch !== 'feed' ? ` · touch ${world.touches} of ${tuning.match.maxTouches}` : '';
@@ -316,7 +359,7 @@ function updateHud(frameSeconds: number, devices: [Device, Device]): void {
     world.winner !== null
       ? `${teamSpan(world.winner)} wins! Press A / J for a rematch`
       : world.waitingForServe
-        ? `${teamSpan(server)} serves to ${teamSpan(world.nextReceiver)}`
+        ? `${playerSpan(serverPlayer)} serves to ${playerSpan(receiverPlayer)}`
         : world.ball.lastTouch === 'feed'
           ? `${teamSpan(team)} serves to ${teamSpan(team === 0 ? 1 : 0)}`
           : world.ball.alive
@@ -335,8 +378,10 @@ function updateHud(frameSeconds: number, devices: [Device, Device]): void {
 
   soundButton.style.display = sfx.locked ? 'block' : 'none';
   const sound = sfx.muted ? 'Sound muted (M)' : 'M mute';
-  const [blue, red] = devices;
-  const side = (name: string, d: Device) => (d === 'cpu' ? `${name}: CPU` : `${name} (${deviceName(d)}): ${controlsHelp(d)}`);
+  const side = (p: Player) => {
+    const d = devices[p.id];
+    return d === 'cpu' ? `${playerName(p)}: CPU` : `${playerName(p)} (${deviceName(d)}): ${controlsHelp(d)}`;
+  };
   help.textContent =
-    `${sound} · \` tuning · swing at a ball just out of reach to dive   |   ${side('Blue', blue)}   |   ${side('Red', red)}`;
+    `${sound} · \` tuning · swing at a ball just out of reach to dive   |   ${world.players.map(side).join('   |   ')}`;
 }

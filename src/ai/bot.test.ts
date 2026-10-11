@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { createTuning } from '../config/tuning';
-import { createWorld, stepWorld } from '../sim/world';
+import { createMatch, createWorld, stepWorld } from '../sim/world';
 import { botIntent } from './bot';
 
 const t = createTuning();
@@ -72,5 +72,37 @@ describe('bot touch play', () => {
     }
     expect(drops).toBeGreaterThan(5);
     expect(returned / drops).toBeGreaterThan(0.5);
+  });
+});
+
+describe('bot 2v2', () => {
+  it('four CPUs play real rallies, trading touches between teammates', () => {
+    const world = createMatch(t, 'practice', '2v2');
+    let returns = 0;
+    let serves = 0;
+    let hitters: number[] = [];
+    let alternating = 0;
+    let multiTouch = 0;
+    for (let i = 0; i < 60 * 240; i++) {
+      stepWorld(world, world.players.map((_, k) => botIntent(world, k, t)), t);
+      for (const e of world.events) {
+        if (e.type === 'serve') serves++;
+        if (e.type === 'hit') hitters.push(e.playerId);
+        if (e.type === 'net' && world.lastHitKind !== null) returns++;
+        if (e.type === 'net' || e.type === 'ground') {
+          if (hitters.length > 1) {
+            multiTouch++;
+            if (hitters.every((h, k) => k === 0 || h !== hitters[k - 1])) alternating++;
+          }
+          hitters = [];
+        }
+      }
+    }
+    expect(serves).toBeGreaterThan(5);
+    // Several returns per serve on average: real rallies.
+    expect(returns / serves).toBeGreaterThan(2);
+    // Teammates trade touches, never the same player twice in a row.
+    expect(multiTouch).toBeGreaterThan(10);
+    expect(alternating).toBe(multiTouch);
   });
 });

@@ -3,8 +3,8 @@ import { createTuning } from '../config/tuning';
 import { stepBall, type BallEvent } from './ball';
 import { autoDiveTarget, hitQuality, tryHit } from './hit';
 import { createPlayer, NEUTRAL_INTENT, startDive, stepPlayer, type Intent } from './player';
-import { serveHand } from './serve';
-import { createMatch, createWorld, feedBall, stepWorld, type SimEvent, type World } from './world';
+import { serveHand, setNextReceiver, setUpServe } from './serve';
+import { createMatch, createWorld, feedBall, otherTeam, stepWorld, type SimEvent, type World } from './world';
 
 const t = createTuning();
 
@@ -673,5 +673,117 @@ describe('match mode', () => {
     feedBall(world, 0, t);
     runUntil(world, 'ground');
     expect(world.score).toEqual([0, 0]);
+  });
+});
+
+describe('2v2', () => {
+  const passing = (id: number): Intent[] => [0, 1, 2, 3].map((k) => (k === id ? { ...NEUTRAL_INTENT, pass: true } : NEUTRAL_INTENT));
+
+  /** A 2v2 world where Blue has the ball off the net, at contact height next to `id`. */
+  function blueBallAt(id: number) {
+    const world = createMatch(t, 'practice', '2v2');
+    feedBall(world, 0, t);
+    const p = world.players[id];
+    world.possession = 0;
+    world.ball.pos = { x: p.pos.x, y: t.player.contactHeight, z: p.pos.z + 0.2 };
+    world.ball.vel = { x: 0, y: 0, z: 0 };
+    world.ball.lastTouch = 'net';
+    return world;
+  }
+
+  /** Hold pass for a tick, release, and run until the player hits or whiffs. */
+  function swing(world: World, id: number) {
+    stepWorld(world, passing(id), t);
+    for (let i = 0; i < 20; i++) {
+      stepWorld(world, [], t);
+      const e = world.events.find((ev) => (ev.type === 'hit' || ev.type === 'whiff') && ev.playerId === id);
+      if (e) return e;
+    }
+    return undefined;
+  }
+
+  it('has two players a side, at the four compass points for the serve', () => {
+    const world = createMatch(t, 'practice', '2v2');
+    expect(world.players.map((p) => p.team)).toEqual([0, 0, 1, 1]);
+    // Red 1 serves to Blue 1, straight across; the partners stand to the sides.
+    expect(world.serve.serverId).toBe(2);
+    expect(world.serve.receiverId).toBe(0);
+    const [blue1, blue2, red1, red2] = world.players;
+    expect(blue1.pos.x).toBeCloseTo(0);
+    expect(red1.pos.x).toBeCloseTo(0);
+    expect(Math.sign(blue1.pos.z)).toBe(-Math.sign(red1.pos.z));
+    expect(blue2.pos.z).toBeCloseTo(0);
+    expect(red2.pos.z).toBeCloseTo(0);
+    expect(Math.sign(blue2.pos.x)).toBe(-Math.sign(red2.pos.x));
+  });
+
+  it('no player may touch the ball twice in a row; the partner can', () => {
+    const world = blueBallAt(0);
+    expect(swing(world, 0)).toMatchObject({ type: 'hit', playerId: 0 });
+    // Blue 1 again: refused.
+    world.ball.pos = { ...world.players[0].pos, y: t.player.contactHeight };
+    world.ball.vel = { x: 0, y: 0, z: 0 };
+    world.players[0].cooldown = 0;
+    expect(swing(world, 0)).toMatchObject({ type: 'whiff', reason: 'doubleTouch' });
+    // Blue 2 may.
+    const blue2 = world.players[1];
+    world.ball.pos = { x: blue2.pos.x, y: t.player.contactHeight, z: blue2.pos.z + 0.2 };
+    world.ball.vel = { x: 0, y: 0, z: 0 };
+    expect(swing(world, 1)).toMatchObject({ type: 'hit', playerId: 1 });
+  });
+
+  it('1v1 still lets a player pass to themselves', () => {
+    const world = createMatch(t);
+    feedBall(world, 0, t);
+    world.possession = 0;
+    const p = world.players[0];
+    const at = () => {
+      world.ball.pos = { x: p.pos.x, y: t.player.contactHeight, z: p.pos.z + 0.2 };
+      world.ball.vel = { x: 0, y: 0, z: 0 };
+      world.ball.lastTouch = 'net';
+    };
+    at();
+    const press = () => stepWorld(world, [{ ...NEUTRAL_INTENT, pass: true }], t);
+    press();
+    for (let i = 0; i < 20 && !world.events.some((e) => e.type === 'hit'); i++) stepWorld(world, [], t);
+    at();
+    world.ball.lastTouch = 'player';
+    p.cooldown = 0;
+    press();
+    let hit = false;
+    for (let i = 0; i < 20 && !hit; i++) {
+      stepWorld(world, [], t);
+      hit = world.events.some((e) => e.type === 'hit');
+    }
+    expect(hit).toBe(true);
+  });
+
+  it('a team rotates its server each time it wins the serve back', () => {
+    const world = createMatch(t, 'practice', '2v2');
+    const servers: number[] = [];
+    for (let rally = 0; rally < 4; rally++) {
+      servers.push(world.serve.serverId);
+      // Practice: the serve alternates every rally.
+      setNextReceiver(world, otherTeam(world.nextReceiver));
+      setUpServe(world, t);
+    }
+    // Red 1, Blue 1, Red 2, Blue 2.
+    expect(servers).toEqual([2, 0, 3, 1]);
+  });
+
+  it('is deterministic in 2v2 too', () => {
+    const script = (tick: number): Intent => ({
+      moveX: Math.sin(tick / 20),
+      moveZ: Math.cos(tick / 33),
+      jump: tick % 45 === 0,
+      spike: tick % 17 < 4,
+      pass: tick % 29 < 6,
+    });
+    const run = () => {
+      const w = createMatch(t, 'match', '2v2');
+      for (let i = 0; i < 1500; i++) stepWorld(w, w.players.map((_, k) => script(i + k * 5)), t);
+      return JSON.stringify(w);
+    };
+    expect(run()).toBe(run());
   });
 });

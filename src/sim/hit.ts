@@ -62,6 +62,7 @@ export type MissReason =
   | 'notYet'
   | 'notYourBall'
   | 'noTouchesLeft'
+  | 'doubleTouch'
   | 'tooFar'
   | 'tooHigh'
   | 'tooLow';
@@ -71,6 +72,10 @@ export interface Turn {
   possession: 0 | 1;
   touches?: number;
   maxTouches?: number;
+  // 2v2: the player who touched the ball last can't touch it again until
+  // someone else (or the net) has.
+  lastHitterId?: number | null;
+  noDoubleTouch?: boolean;
 }
 
 /** Horizontal reach right now: longer while lunging in a dive. */
@@ -136,6 +141,7 @@ export function missReason(p: Player, ball: Ball, t: Tuning, turn?: Turn): MissR
   if (!isPlayable(ball)) return 'notYet';
   if (turn && turn.possession !== p.team) return 'notYourBall';
   if (turn?.maxTouches !== undefined && (turn.touches ?? 0) >= turn.maxTouches) return 'noTouchesLeft';
+  if (turn?.noDoubleTouch && turn.lastHitterId === p.id) return 'doubleTouch';
   const from = reachCenterOf(p, t);
   if (Math.hypot(ball.pos.x - from.x, ball.pos.z - from.z) > reachOf(p, t)) return 'tooFar';
   const heightError = ball.pos.y - (p.pos.y + contactHeightOf(p, t));

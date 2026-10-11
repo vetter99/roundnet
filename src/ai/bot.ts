@@ -2,16 +2,19 @@ import type { Tuning } from '../config/tuning';
 import { predictDescentTo } from '../sim/hit';
 import { NEUTRAL_INTENT, type HitKind, type Intent, type Player } from '../sim/player';
 import type { Vec3 } from '../sim/vec';
-import { serverTeam, type World } from '../sim/world';
+import type { World } from '../sim/world';
 
 // A simple computer player. It's deterministic (no randomness) like the sim,
 // and deliberately imperfect: it reacts a little late, and mistimes its swings
 // by a varying amount each possession.
 //
-// Most of the time it plays three touches like a real roundnet player: it
-// passes the ball up to itself twice, then spikes the third touch onto the
-// net. Passes often drift to one side to set up a different spike angle, and
-// the passes buy time, so the spike is usually more charged.
+// Most of the time it plays three touches like a real roundnet player. In
+// 1v1 it passes the ball up to itself twice, then spikes the third touch onto
+// the net; passes often drift to one side to set up a different spike angle,
+// and buy time, so the spike is usually more charged. In 2v2 the teammates
+// trade touches (no one may touch twice in a row): pass to the partner, set
+// back, spike. Whoever is closer plays the ball; the other moves to support,
+// and on defense the two spread out to cover both sides.
 
 // Reacts this many ticks after the ball comes off the net, plus up to
 // REACTION_SLOP_TICKS more depending on the possession.
@@ -56,6 +59,16 @@ const ARRIVE_SLACK_TICKS = 4;
 const DROP_REACTION_TICKS = 3;
 const DROP_FOOLED_CHANCE = 0.2;
 const WAIT_DISTANCE = 2.3;
+// 2v2: on defense the two teammates stand this far (radians) to either side
+// of the spot across from the attacker.
+const DEFEND_SPREAD = 0.6;
+// 2v2: while the partner plays the ball, stand this far from the net, about
+// a quarter turn around it from where the ball is, ready for the pass.
+const SUPPORT_DISTANCE = 2.2;
+const SUPPORT_ANGLE = 1.5;
+// 2v2: a pass to the partner uses full stick at this distance (m) or more,
+// less when the partner is closer.
+const PASS_TO_PARTNER_REACH = 3.5;
 // Serving: the CPU aims a little to one side of the net center, then after a
 // pause charges for SERVE_CHARGE_TICKS (about two-thirds power) and releases.
 const SERVE_DELAY_TICKS = 50;
@@ -78,9 +91,9 @@ function misreads(world: World): boolean {
   return roll(world) < MISREAD_BASE + MISREAD_FROM_POWER * power * power;
 }
 
-/** Whether this possession's spike should be a drop shot (opponent far back, some of the time). */
-function playsDrop(world: World, opponent: Player | undefined): boolean {
-  if (!opponent || Math.hypot(opponent.pos.x, opponent.pos.z) < DROP_WHEN_OPPONENT_BEYOND) return false;
+/** Whether this possession's spike should be a drop shot (opponents all far back, some of the time). */
+function playsDrop(world: World, opponents: Player[]): boolean {
+  if (opponents.length === 0 || opponents.some((o) => Math.hypot(o.pos.x, o.pos.z) < DROP_WHEN_OPPONENT_BEYOND)) return false;
   return (world.possessionTick * 92821 + world.possession * 7) % 10 < DROP_OUT_OF_10;
 }
 
@@ -93,11 +106,12 @@ function plannedTouches(world: World, t: Tuning): number {
 
 export function botIntent(world: World, index: number, t: Tuning): Intent {
   const me = world.players[index];
-  const opponent = world.players.find((p) => p.team !== me.team);
+  const opponents = world.players.filter((p) => p.team !== me.team);
+  const partner = world.players.find((p) => p.team === me.team && p.id !== me.id);
   const ball = world.ball;
   const intent: Intent = { ...NEUTRAL_INTENT };
 
-  if (world.waitingForServe && world.winner === null && serverTeam(world) === me.team) {
+  if (world.waitingForServe && world.winner === null && world.serve.serverId === me.id) {
     // Steer the aim to one side (alternating serve to serve), then charge and release.
     const side = world.serveReadyTick % 2 === 0 ? 1 : -1;
     const dx = side * SERVE_AIM_SIDE * t.net.radius - world.serve.aim.x;
@@ -119,13 +133,16 @@ export function botIntent(world: World, index: number, t: Tuning): Intent {
     }
     return intent;
   }
+  // Everyone else holds their spot until the serve is in the air.
+  if (world.waitingForServe) return intent;
 
-
-  const myLastHit = ball.lastTouch === 'player' && world.lastHitTeam === me.team;
-  // A ball we passed to ourselves is ours to play again; one we spiked is on its way to the net.
-  const followUp = myLastHit && world.lastHitKind === 'pass';
-  const waitingForNet = myLastHit && (world.lastHitKind === 'spike' || world.lastHitKind === 'drop');
-  const myBall = world.possession === me.team && ball.alive && !waitingForNet;
+  const ourLastHit = ball.lastTouch === 'player' && world.lastHitTeam === me.team;
+  // A ball our side passed is ours to play again; one we spiked is on its way to the net.
+  const followUp = ourLastHit && world.lastHitKind === 'pass';
+  const waitingForNet = ourLastHit && (world.lastHitKind === 'spike' || world.lastHitKind === 'drop');
+  const ourBall = world.possession === me.team && ball.alive && !waitingForNet;
+  // In 2v2 only one teammate goes for the ball; the other supports.
+  const myBall = ourBall && chaser(world, me, t) === me.id;
   const dropIncoming =
     world.lastHitTeam !== me.team && world.lastHitKind === 'drop' && roll(world, 1) >= DROP_FOOLED_CHANCE;
   const reaction = dropIncoming
@@ -133,14 +150,18 @@ export function botIntent(world: World, index: number, t: Tuning): Intent {
     : REACTION_TICKS + Math.round(Math.abs(slop(world, 0)) * REACTION_SLOP_TICKS) + (misreads(world) ? MISREAD_EXTRA_TICKS : 0);
 
   if (!myBall || (!followUp && world.tick - world.possessionTick < reaction)) {
-    if (dropIncoming && ball.alive && ball.lastTouch === 'player') {
+    const dropChaser = !partner || closestTo([me, partner], dropLanding(world, t)) === me.id;
+    if (dropIncoming && ball.alive && ball.lastTouch === 'player' && dropChaser) {
       // The opponent tapped a drop shot: start running in to where it will die.
       const plan = playablePlan(world, me, t);
       if (plan) moveToward(intent, me, plan.point);
-    } else if (opponent && world.possession !== me.team) {
-      // Wait across the net from the opponent, where their shots tend to go.
-      const d = Math.hypot(opponent.pos.x, opponent.pos.z) || 1;
-      moveToward(intent, me, { x: (-opponent.pos.x / d) * WAIT_DISTANCE, y: 0, z: (-opponent.pos.z / d) * WAIT_DISTANCE });
+    } else if (ourBall && partner && !myBall) {
+      // The partner is playing it: get open for the pass.
+      moveToward(intent, me, supportSpot(world, me, t));
+    } else if (opponents.length > 0 && world.possession !== me.team) {
+      // Wait across the net from the attacker, where their shots tend to go
+      // (in 2v2, spread out with the partner to cover both sides).
+      moveToward(intent, me, defendSpot(world, me, partner, opponents));
     }
     return intent;
   }
@@ -151,7 +172,7 @@ export function botIntent(world: World, index: number, t: Tuning): Intent {
 
   const touch = world.touches + 1;
   const kind: HitKind = touch < plannedTouches(world, t) ? 'pass' : 'spike';
-  const drop = kind === 'spike' && playsDrop(world, opponent);
+  const drop = kind === 'spike' && playsDrop(world, opponents);
   // A drop shot is a quick tap: press just before contact so it barely charges.
   const lead = drop ? 1 : kind === 'pass' ? PASS_LEAD_TICKS : followUp ? SET_SPIKE_LEAD_TICKS : SPIKE_LEAD_TICKS;
   const distance = Math.hypot(plan.point.x - me.pos.x, plan.point.z - me.pos.z);
@@ -164,11 +185,89 @@ export function botIntent(world: World, index: number, t: Tuning): Intent {
     const error = drop ? 0.2 : (me.charge.kind === 'pass' ? PASS_TIMING_ERROR : SPIKE_TIMING_ERROR) * slop(world, touch);
     const release = ball.vel.y < 0 && ball.pos.y <= plan.height + error;
     intent[me.charge.kind] = !release;
-    if (release && me.charge.kind === 'pass') aimPass(intent, me, world, touch);
+    if (release && me.charge.kind === 'pass') {
+      if (partner) aimPassTo(intent, me, partner);
+      else aimPass(intent, me, world, touch);
+    }
   } else if (inReach && plan.ticks <= lead && plan.ticks > 0) {
     intent[kind] = true;
   }
   return intent;
+}
+
+/** Where the ball first falls to contact height (or lower), for deciding who goes for it. */
+function dropLanding(world: World, t: Tuning): Vec3 {
+  for (const height of [t.player.contactHeight, ...LOW_HEIGHTS]) {
+    const descent = predictDescentTo(world.ball, height, t);
+    if (descent) return descent.point;
+  }
+  return world.ball.pos;
+}
+
+/** Of these players, the id of the one closest (along the ground) to `point`; ties go to the lower id. */
+function closestTo(players: Player[], point: Vec3): number {
+  let best = players[0];
+  let bestDist = Infinity;
+  for (const p of players) {
+    const d = Math.hypot(point.x - p.pos.x, point.z - p.pos.z);
+    if (d < bestDist - 1e-6) {
+      best = p;
+      bestDist = d;
+    }
+  }
+  return best.id;
+}
+
+/**
+ * Which player on my team should go for the ball: in 1v1 always me; in 2v2
+ * the closer teammate who is allowed to touch it (not the last hitter).
+ */
+function chaser(world: World, me: Player, t: Tuning): number {
+  const team = world.players.filter((p) => p.team === me.team && !(world.format === '2v2' && p.id === world.lastHitterId));
+  if (team.length === 0) return -1;
+  return closestTo(team, dropLanding(world, t));
+}
+
+/** 2v2 support: a quarter turn around the net from where the ball comes down, on my side of it. */
+function supportSpot(world: World, me: Player, t: Tuning): Vec3 {
+  const at = dropLanding(world, t);
+  const ballAngle = Math.atan2(at.z, at.x);
+  const myAngle = Math.atan2(me.pos.z, me.pos.x);
+  const side = Math.sin(myAngle - ballAngle) >= 0 ? 1 : -1;
+  const a = ballAngle + side * SUPPORT_ANGLE;
+  return { x: Math.cos(a) * SUPPORT_DISTANCE, y: 0, z: Math.sin(a) * SUPPORT_DISTANCE };
+}
+
+/**
+ * Defense: across the net from the attacker (the opponent nearest the ball).
+ * With a partner, the two spread to either side of that spot, each taking
+ * the side they're already on.
+ */
+function defendSpot(world: World, me: Player, partner: Player | undefined, opponents: Player[]): Vec3 {
+  const ball = world.ball.alive ? world.ball.pos : { x: 0, y: 0, z: 0 };
+  const attacker = opponents.find((o) => o.id === closestTo(opponents, ball)) ?? opponents[0];
+  const base = Math.atan2(-attacker.pos.z, -attacker.pos.x);
+  let a = base;
+  if (partner) {
+    // Whoever is further counterclockwise from the base spot takes that side.
+    const offset = (p: Player) => Math.sin(Math.atan2(p.pos.z, p.pos.x) - base);
+    const mine = offset(me);
+    const theirs = offset(partner);
+    const ccw = mine > theirs || (mine === theirs && me.id < partner.id);
+    a = base + (ccw ? DEFEND_SPREAD : -DEFEND_SPREAD);
+  }
+  return { x: Math.cos(a) * WAIT_DISTANCE, y: 0, z: Math.sin(a) * WAIT_DISTANCE };
+}
+
+/** 2v2: pass toward the partner (full stick when they're far, less when close). */
+function aimPassTo(intent: Intent, me: Player, partner: Player): void {
+  const dx = partner.pos.x - me.pos.x;
+  const dz = partner.pos.z - me.pos.z;
+  const d = Math.hypot(dx, dz);
+  if (d < 1e-3) return;
+  const amount = Math.min(1, d / PASS_TO_PARTNER_REACH);
+  intent.moveX = (dx / d) * amount;
+  intent.moveZ = (dz / d) * amount;
 }
 
 interface Plan {

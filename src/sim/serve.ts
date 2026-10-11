@@ -12,9 +12,13 @@ import { launchBallAt, netContactHeight, netOuterRadius } from './ball';
 import { chargePower, stickOf, type Intent, type Player } from './player';
 import { DT } from './time';
 import { clamp, lerp } from './vec';
-import { otherTeam, serverTeam, type Team, type World } from './world';
+import { otherTeam, serverTeam, teamPlayers, type Team, type World } from './world';
 
 export interface ServeState {
+  // Who serves and who receives this serve (player ids). In 2v2 the serve
+  // goes to the opponent straight across; the partners stand to the sides.
+  serverId: number;
+  receiverId: number;
   // Where on the net the server is aiming (x, z; the net is centered at 0).
   aim: { x: number; z: number };
   // Sidespin chosen while charging, -1..1: positive curves to the server's
@@ -30,7 +34,7 @@ export interface ServeState {
 }
 
 export function createServeState(): ServeState {
-  return { aim: { x: 0, z: 0 }, spin: 0, faults: 0, inFlight: false, returnPending: false };
+  return { serverId: 1, receiverId: 0, aim: { x: 0, z: 0 }, spin: 0, faults: 0, inFlight: false, returnPending: false };
 }
 
 /** Which side of the net (along z) a team serves from: Blue from -z, Red from +z. */
@@ -48,9 +52,37 @@ export function receiverSpot(team: Team, t: Tuning): { x: number; z: number } {
   return { x: 0, z: sideOf(team) * (netOuterRadius(t) + t.court.serveLineDistance + t.serve.receiverBack) };
 }
 
-/** Get ready for a serve: place server and receiver, reset the aim. */
+/**
+ * Where a server's or receiver's partner starts in 2v2: out to the side, so
+ * the four players stand at the compass points around the net (the server's
+ * partner on one side, the receiver's partner on the other).
+ */
+export function partnerSpot(serving: boolean, t: Tuning): { x: number; z: number } {
+  const r = netOuterRadius(t) + t.court.serveLineDistance + t.serve.receiverBack;
+  return { x: serving ? r : -r, z: 0 };
+}
+
+/**
+ * Hand the serve to the other side, or keep it, so `receiver` receives next.
+ * A team that wins the serve back rotates its server (in 2v2 the two
+ * teammates take turns).
+ */
+export function setNextReceiver(world: World, receiver: Team): void {
+  if (receiver === world.nextReceiver) return;
+  world.nextReceiver = receiver;
+  const servingTeam = otherTeam(receiver);
+  world.serveOrder[servingTeam] = (world.serveOrder[servingTeam] + 1) % teamPlayers(world, servingTeam).length;
+}
+
+/** Get ready for a serve: pick and place server and receiver (and partners), reset the aim. */
 export function setUpServe(world: World, t: Tuning): void {
   const server = serverTeam(world);
+  const servers = teamPlayers(world, server);
+  const receivers = teamPlayers(world, world.nextReceiver);
+  const slot = world.serveOrder[server] % servers.length;
+  world.serve.serverId = servers[slot].id;
+  world.serve.receiverId = receivers[slot % receivers.length].id;
+  world.lastHitterId = null;
   world.waitingForServe = true;
   world.serveReadyTick = world.tick;
   world.serve.aim = { x: 0, z: 0 };
@@ -59,7 +91,12 @@ export function setUpServe(world: World, t: Tuning): void {
   world.serve.returnPending = false;
   world.touches = 0;
   for (const p of world.players) {
-    const spot = p.team === server ? serverSpot(server, t) : receiverSpot(p.team, t);
+    const spot =
+      p.id === world.serve.serverId
+        ? serverSpot(server, t)
+        : p.id === world.serve.receiverId
+          ? receiverSpot(p.team, t)
+          : partnerSpot(p.team === server, t);
     p.pos = { x: spot.x, y: 0, z: spot.z };
     p.vel = { x: 0, y: 0, z: 0 };
     p.grounded = true;
@@ -185,6 +222,6 @@ export function faultServe(world: World, t: Tuning): boolean {
   world.serve.faults++;
   if (world.serve.faults < t.serve.tries) return false;
   world.serve.faults = 0;
-  world.nextReceiver = otherTeam(world.nextReceiver);
+  setNextReceiver(world, otherTeam(world.nextReceiver));
   return true;
 }

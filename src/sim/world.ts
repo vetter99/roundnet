@@ -8,6 +8,7 @@ import {
   launchServe,
   serverIntent,
   serveWobble,
+  setNextReceiver,
   setUpServe,
   stepServeAim,
   type ServeState,
@@ -37,9 +38,11 @@ export type SimEvent =
 
 /** Practice: endless rallies, serve alternates. Match: scored games (see `match` in tuning). */
 export type Mode = 'practice' | 'match';
+/** One player per side, or two (where no player may touch the ball twice in a row). */
+export type Format = '1v1' | '2v2';
 
 /**
- * The whole game state: 1v1 rallies. When the ball comes off the net, the
+ * The whole game state: 1v1 or 2v2 rallies. When the ball comes off the net, the
  * other team has possession and must put it back on the net. Each rally
  * starts with a serve duel (serve.ts). In practice mode there's no score and
  * the serve alternates; in match mode the side that lets the ball land (or
@@ -73,18 +76,37 @@ export interface World {
   // The team that receives the next serve; the other team serves it.
   nextReceiver: Team;
   mode: Mode;
+  format: Format;
+  // Per team, which teammate (index within the team) serves when it next has the serve.
+  serveOrder: [number, number];
+  // Who touched the ball last (null after the net or a serve): in 2v2 they
+  // can't touch it again until someone else has.
+  lastHitterId: number | null;
   score: [number, number];
   winner: Team | null;
   // Touches the team in possession has used (the limit applies in matches).
   touches: number;
 }
 
-export function createWorld(): World {
+/**
+ * The players for a format, ids in order. 1v1: Blue (0), Red (1). 2v2: Blue
+ * 1 and 2 (ids 0, 1), Red 1 and 2 (ids 2, 3). Blue starts on the camera side.
+ */
+function createPlayers(format: Format): Player[] {
+  if (format === '1v1') return [createPlayer(0, 0, -1.8, -1.8), createPlayer(1, 1, 1.8, 1.8)];
+  return [createPlayer(0, 0, -1.8, -1.8), createPlayer(1, 0, 1.8, -1.8), createPlayer(2, 1, 1.8, 1.8), createPlayer(3, 1, -1.8, 1.8)];
+}
+
+/** A team's players, in id order. */
+export function teamPlayers(world: World, team: Team): Player[] {
+  return world.players.filter((p) => p.team === team);
+}
+
+export function createWorld(format: Format = '1v1'): World {
   const world: World = {
     tick: 0,
     ball: createBall(),
-    // Blue starts on the camera side, red across the net.
-    players: [createPlayer(0, 0, -1.8, -1.8), createPlayer(1, 1, 1.8, 1.8)],
+    players: createPlayers(format),
     events: [],
     possession: 0,
     possessionTick: 0,
@@ -97,6 +119,10 @@ export function createWorld(): World {
     serveReadyTick: 0,
     nextReceiver: 0,
     mode: 'practice',
+    format,
+    // Red serves first; Blue's first serve (when it wins the serve) rotates to its slot 0.
+    serveOrder: [format === '2v2' ? 1 : 0, 0],
+    lastHitterId: null,
     score: [0, 0],
     winner: null,
     touches: 0,
@@ -105,16 +131,21 @@ export function createWorld(): World {
 }
 
 /** A new world, set up for the first serve (Red serves to Blue). */
-export function createMatch(t: Tuning, mode: Mode = 'practice'): World {
-  const world = createWorld();
+export function createMatch(t: Tuning, mode: Mode = 'practice', format: Format = '1v1'): World {
+  const world = createWorld(format);
   world.mode = mode;
   setUpServe(world, t);
   return world;
 }
 
-/** Start over: zero the score and set up the first serve (Red to Blue). */
-export function restartGame(world: World, t: Tuning, mode: Mode = world.mode): void {
+/** Start over (optionally in a new mode or format): zero the score and set up the first serve (Red to Blue). */
+export function restartGame(world: World, t: Tuning, mode: Mode = world.mode, format: Format = world.format): void {
   world.mode = mode;
+  if (format !== world.format) {
+    world.format = format;
+    world.players = createPlayers(format);
+  }
+  world.serveOrder = [format === '2v2' ? 1 : 0, 0];
   world.score = [0, 0];
   world.winner = null;
   world.nextReceiver = 0;
@@ -156,7 +187,7 @@ export function stepWorld(world: World, intents: readonly Intent[], t: Tuning): 
   world.players.forEach((p, i) => {
     const intent = intents[i] ?? NEUTRAL_INTENT;
     // No serving once the game is over (waiting for a rematch).
-    const serving = world.waitingForServe && world.winner === null && p.team === serverTeam(world);
+    const serving = world.waitingForServe && world.winner === null && p.id === world.serve.serverId;
     // Read the wobble before stepping, so a release this tick uses where the aim was.
     const wobble = serving ? serveWobble(world, p, t) : null;
     // Aim (or, while charging, spin) from the stick before the release is processed.
@@ -180,6 +211,8 @@ export function stepWorld(world: World, intents: readonly Intent[], t: Tuning): 
     possession: world.possession,
     touches: world.touches,
     maxTouches: world.mode === 'match' ? t.match.maxTouches : undefined,
+    lastHitterId: world.lastHitterId,
+    noDoubleTouch: world.format === '2v2',
   };
   world.players.forEach((p, i) => {
     // A swing at a ball just out of reach turns into a dive automatically.
@@ -195,6 +228,8 @@ export function stepWorld(world: World, intents: readonly Intent[], t: Tuning): 
       // The duel ends once the receiving side plays the ball.
       if (p.team !== world.lastHitTeam) world.serve.returnPending = false;
       world.lastHitTeam = p.team;
+      world.lastHitterId = p.id;
+      turn.lastHitterId = p.id;
       world.lastHitKind = hit.kind;
       world.lastHitPower = hit.power;
     } else if (p.hitBuffer && p.hitBuffer.ticksLeft <= 0) {
@@ -213,6 +248,7 @@ export function stepWorld(world: World, intents: readonly Intent[], t: Tuning): 
       world.possession = otherTeam(world.lastHitTeam);
       world.possessionTick = world.tick;
       world.touches = 0;
+      world.lastHitterId = null;
       world.serve.inFlight = false;
       world.serve.faults = 0;
       world.events.push({ type: 'possession', team: world.possession });
@@ -231,10 +267,10 @@ export function stepWorld(world: World, intents: readonly Intent[], t: Tuning): 
           // The side that should have played it loses the rally; the winner serves.
           const loser = world.possession;
           scorePoint(world, otherTeam(loser), t);
-          world.nextReceiver = loser;
+          setNextReceiver(world, loser);
         } else {
           // Practice: the serve alternates sides.
-          world.nextReceiver = otherTeam(world.nextReceiver);
+          setNextReceiver(world, otherTeam(world.nextReceiver));
         }
       }
     }

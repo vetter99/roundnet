@@ -26,9 +26,11 @@ import { createStadium, type Stadium } from './stadium';
 import type { ShadowGenerator } from '@babylonjs/core/Lights/Shadows/shadowGenerator';
 import { chargePower, diveRecoveryTicks, diveTicks } from '../sim/player';
 import { clamp, lerp, type Vec3 } from '../sim/vec';
-import { serverTeam, type World } from '../sim/world';
+import type { World } from '../sim/world';
 import { serveHand, serveWobble } from '../sim/serve';
 
+// How much lighter (toward white) a team's second player's shirt is in 2v2.
+const SECOND_SHIRT_LIGHTEN = 0.4;
 // A ball that moves further than this (m) in one tick was teleported, not thrown.
 const BALL_JUMP = 1.5;
 const TEAM_COLORS = [new Color3(0.2, 0.45, 0.95), new Color3(0.95, 0.3, 0.25)];
@@ -47,6 +49,9 @@ export function snapshot(world: World): Snapshot {
 }
 
 interface PlayerView {
+  // Which team and slot the view was built for (rebuilt if the player changes, e.g. 1v1 → 2v2).
+  team: 0 | 1;
+  slot: number;
   character: Character;
   reachRing: Mesh;
   meter: ChargeMeter;
@@ -191,7 +196,7 @@ export class Renderer {
     this.ball.position.set(lerp(prev.ball.x, b.x, a), lerp(prev.ball.y, b.y, a), lerp(prev.ball.z, b.z, a));
     this.ball.scaling.setAll(t.ball.radius * 2);
     // Waiting for the serve, the ball sits in the server's paw (none once the game is over).
-    const holder = world.waitingForServe && world.winner === null ? world.players.find((p) => p.team === serverTeam(world)) : undefined;
+    const holder = world.waitingForServe && world.winner === null ? world.players.find((p) => p.id === world.serve.serverId) : undefined;
     const held = holder ? serveHand(world, holder, t) : undefined;
     if (held) this.ball.position.set(held.x, held.y, held.z);
     this.ball.isVisible = !world.waitingForServe || held !== undefined;
@@ -203,8 +208,16 @@ export class Renderer {
     this.updateBallShadow(this.ball.position, world.ball.alive, t);
     this.updateNetWobble(frameSeconds, t);
 
+    // Views for players that no longer exist (e.g. after switching 2v2 → 1v1) go away.
+    for (const view of this.players.splice(world.players.length)) this.disposePlayerView(view);
     world.players.forEach((p, i) => {
-      const view = this.players[i] ?? (this.players[i] = this.createPlayerView(p.team));
+      const slot = world.players.filter((q) => q.team === p.team).indexOf(p);
+      let view: PlayerView | undefined = this.players[i];
+      if (view && (view.team !== p.team || view.slot !== slot)) {
+        this.disposePlayerView(view);
+        view = undefined;
+      }
+      view ??= this.players[i] = this.createPlayerView(p.team, slot);
       const from = prev.players[i] ?? p.pos;
       const x = lerp(from.x, p.pos.x, alpha);
       const z = lerp(from.z, p.pos.z, alpha);
@@ -218,7 +231,7 @@ export class Renderer {
         : null;
       // The server shows their aim only through their body (no marker): they
       // face and lean toward it, swaying with the charge wobble.
-      const aiming = world.waitingForServe && world.winner === null && p.team === serverTeam(world);
+      const aiming = world.waitingForServe && world.winner === null && p.id === world.serve.serverId;
       const wobble = aiming ? serveWobble(world, p, t) : null;
       const aim = wobble ? { x: world.serve.aim.x + wobble.x, z: world.serve.aim.z + wobble.z } : undefined;
       // Spin shows in the arm: cocked to one side while charging.
@@ -353,8 +366,8 @@ export class Renderer {
     // the server, from setup until the receiving side plays the ball.
     const duel = world.waitingForServe || world.serve.returnPending;
     this.duelBlend += ((duel ? 1 : 0) - this.duelBlend) * (1 - Math.exp(-c.duelBlendSpeed * dt));
-    const receiver = world.players.find((p) => p.team === world.nextReceiver) ?? world.players[0];
-    const server = world.players.find((p) => p.team !== world.nextReceiver) ?? world.players[0];
+    const receiver = world.players.find((p) => p.id === world.serve.receiverId) ?? world.players[0];
+    const server = world.players.find((p) => p.id === world.serve.serverId) ?? world.players[0];
     const away = Math.hypot(receiver.pos.x, receiver.pos.z) || 1;
     const ux = receiver.pos.x / away;
     const uz = receiver.pos.z / away;
@@ -379,7 +392,7 @@ export class Renderer {
     this.camera.fov = lerp(c.fov, c.duelFov, b);
     // The camera is almost inside the receiver, so make them see-through.
     world.players.forEach((p, i) => {
-      const receiving = p.team === world.nextReceiver;
+      const receiving = p.id === world.serve.receiverId;
       this.players[i]?.character.setOpacity(receiving ? lerp(1, c.duelReceiverOpacity, b) : 1);
     });
     this.yaw = Math.atan2(target.x - pos.x, target.z - pos.z);
@@ -425,9 +438,11 @@ export class Renderer {
     }
   }
 
-  private createPlayerView(team: 0 | 1): PlayerView {
+  private createPlayerView(team: 0 | 1, slot: number): PlayerView {
     const scene = this.scene;
-    const character = new Character(scene, TEAM_COLORS[team], team === 0 ? 'squirrel' : 'raccoon');
+    // A team's second player wears a lighter shirt so teammates can be told apart.
+    const shirt = slot === 0 ? TEAM_COLORS[team] : Color3.Lerp(TEAM_COLORS[team], new Color3(1, 1, 1), SECOND_SHIRT_LIGHTEN);
+    const character = new Character(scene, shirt, team === 0 ? 'squirrel' : 'raccoon');
     for (const mesh of character.root.getChildMeshes()) this.shadows.addShadowCaster(mesh);
 
     const reachRing = MeshBuilder.CreateTorus('reach', { diameter: 2, thickness: 0.04, tessellation: 48 }, scene);
@@ -437,7 +452,13 @@ export class Renderer {
     reachMat.emissiveColor = TEAM_COLORS[team];
     reachRing.material = reachMat;
 
-    return { character, reachRing, meter: this.createMeter() };
+    return { team, slot, character, reachRing, meter: this.createMeter() };
+  }
+
+  private disposePlayerView(view: PlayerView): void {
+    view.character.root.dispose();
+    view.reachRing.dispose();
+    view.meter.root.dispose();
   }
 
   private createMeter(): ChargeMeter {
