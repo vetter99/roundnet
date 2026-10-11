@@ -1154,75 +1154,71 @@ function buildPig(kit: Kit, rig: Rig, team: Color3, number: number): void {
 }
 
 // ---------------------------------------------------------------------------
-// 8. Doo Doo, a baby shark (an original one: soft gray-blue, not the song's
-//    yellow shark), out of water: lying flat and wiggling across the ground
-//    like a beached shark, his body swaying side to side in a wave from head
-//    to tail (gently at rest, frantically on the move). Baby look: a big
-//    round head on a small chubby body, huge shiny eyes, a short rounded
-//    snout, rosy cheeks, a gummy smile with two tiny teeth, a pacifier, and
-//    tiny fins. Jersey around his middle, number on his back. No arms: his
-//    hits are a lunge of the whole body.
+// 8. Doo Doo, a baby shark (an original one: baby blue, not the song's yellow
+//    shark), out of water: lying on his belly and scooting across the ground
+//    on two big front flippers, which paddle alternately as he moves, while
+//    his tail swishes side to side. Unmistakably a shark: a big dorsal fin, a
+//    smooth torpedo body and a crescent tail fin. Baby-cute: a big round head
+//    blended into his body, huge sparkly eyes, rosy cheeks, a happy smile and
+//    a little pacifier. Jersey around his middle, number on his back. No
+//    arms: his hits are a lunge of the whole body.
 
 function buildShark(kit: Kit, rig: Rig, team: Color3, number: number): void {
   rig.gait = 'glide';
-  const skin = kit.mat('sharkSkin', new Color3(0.52, 0.68, 0.84), 0.2);
-  const belly = kit.mat('belly', new Color3(0.97, 0.96, 0.93), 0.1);
-  const blush = kit.mat('blush', new Color3(1, 0.62, 0.68), 0.1);
-  const mouth = kit.mat('mouth', new Color3(0.4, 0.12, 0.18), 0.2);
+  const skin = kit.mat('sharkSkin', new Color3(0.45, 0.7, 0.96), 0.2);
+  const belly = kit.mat('belly', new Color3(0.99, 0.97, 0.92), 0.1);
+  const blush = kit.mat('blush', new Color3(1, 0.55, 0.65), 0.1);
   const b = rig.bounce;
 
-  // The body chain: a middle piece, then two tail pieces behind it, each
-  // swaying a little later than the one before, so the wiggle travels back.
-  const middle = kit.node(b, [0, 0.2, 0]);
-  rig.wobblers.push({ node: middle, axis: 'y', amp: 0.05, run: 0.25, freq: 7, phase: 0 });
-  kit.sphere(middle, 0.34, skin, [0, 0, 0], [1, 0.85, 1.3]);
-  kit.sphere(middle, 0.3, belly, [0, -0.06, 0.02], [0.95, 0.6, 1.2]);
-  const torso = jersey(kit, rig, team, number, 0.2, 0.36, [1.02, 1.3, 0.9]);
-  torso.parent = middle;
-  torso.position.set(0, 0.01, 0);
+  // The body: one smooth torpedo, swaying gently side to side.
+  const body = kit.node(b, [0, 0.21, 0]);
+  rig.wobblers.push({ node: body, axis: 'y', amp: 0.04, run: 0.12, freq: 7, phase: 0 });
+  kit.sphere(body, 0.36, skin, [0, 0, -0.02], [1, 0.85, 1.5]);
+  kit.sphere(body, 0.32, belly, [0, -0.07, 0.0], [0.95, 0.55, 1.4]);
+  const torso = jersey(kit, rig, team, number, 0.21, 0.38, [1.02, 1.15, 0.9]);
+  torso.parent = body;
+  torso.position.set(0, 0.01, 0.02);
   torso.rotation.set(-Math.PI / 2, Math.PI, 0);
+  // The big dorsal fin, standing tall behind the number and swept back.
+  kit.cylinder(body, 0.24, 0.01, 0.2, skin, [0, 0.24, -0.15], [-0.45, 0, 0], [1, 1, 0.32]);
 
-  let tailParent: TransformNode = middle;
-  for (let k = 0; k < 2; k++) {
-    const seg = kit.node(tailParent, [0, 0, k === 0 ? -0.18 : -0.14]);
-    rig.wobblers.push({ node: seg, axis: 'y', amp: 0.1 + k * 0.05, run: 0.35 + k * 0.15, freq: 7, phase: -(k + 1) * 0.9 });
-    kit.sphere(seg, 0.24 - k * 0.07, skin, [0, 0, -0.04], [1, 0.85, 1.4]);
-    kit.sphere(seg, 0.2 - k * 0.06, belly, [0, -0.04, -0.04], [0.9, 0.5, 1.3]);
-    // A little dorsal fin just behind the jersey.
-    if (k === 0) kit.cylinder(seg, 0.14, 0, 0.12, skin, [0, 0.13, -0.02], [-0.5, 0, 0], [1, 1, 0.35]);
-    tailParent = seg;
-  }
-  // The tail fin, standing up at the end: two little blades in a crescent.
-  kit.cylinder(tailParent, 0.16, 0, 0.1, skin, [0, 0.07, -0.13], [-0.8, 0, 0], [0.35, 1, 1]);
-  kit.cylinder(tailParent, 0.12, 0, 0.08, skin, [0, -0.04, -0.12], [-2.4, 0, 0], [0.35, 1, 1]);
+  // The tail: a tapering cone swishing side to side, then a big crescent fin swishing harder.
+  const tail = kit.node(body, [0, 0, -0.26]);
+  rig.wobblers.push({ node: tail, axis: 'y', amp: 0.12, run: 0.4, freq: 7, phase: -1.2 });
+  kit.cylinder(tail, 0.3, 0.05, 0.22, skin, [0, 0, -0.12], [-Math.PI / 2, 0, 0], [1, 0.85, 1]);
+  const fin = kit.node(tail, [0, 0, -0.26]);
+  rig.wobblers.push({ node: fin, axis: 'y', amp: 0.15, run: 0.45, freq: 7, phase: -2.2 });
+  kit.cylinder(fin, 0.26, 0, 0.16, skin, [0, 0.1, -0.04], [-0.75, 0, 0], [0.3, 1, 1]);
+  kit.cylinder(fin, 0.2, 0, 0.13, skin, [0, -0.06, -0.04], [-2.45, 0, 0], [0.3, 1, 1]);
 
-  // The big baby head out front (it wiggles with the body).
+  // The big baby head, blended into the front of the body.
   const h = rig.head;
-  h.parent = middle;
-  h.position.set(0, 0.08, 0.27);
-  kit.sphere(h, 0.42, skin, [0, 0, 0], [1, 0.95, 1]);
-  kit.sphere(h, 0.26, skin, [0, -0.05, 0.16], [1, 0.8, 0.9]);
-  kit.sphere(h, 0.32, belly, [0, -0.1, 0.06], [1, 0.55, 1.05]);
-  // Huge shiny eyes, rosy cheeks.
+  h.parent = body;
+  h.position.set(0, 0.07, 0.25);
+  kit.sphere(h, 0.44, skin, [0, 0, 0], [1.05, 0.95, 1]);
+  kit.sphere(h, 0.34, belly, [0, -0.1, 0.07], [1, 0.55, 1.05]);
+  // Huge sparkly eyes (two highlights each) and big rosy cheeks.
+  const sparkle = kit.glow('sparkle', new Color3(1, 1, 1));
   for (const side of [-1, 1]) {
-    eye(kit, h, [side * 0.1, 0.06, 0.17], { size: 0.11, iris: kit.mat('iris', new Color3(0.1, 0.12, 0.2), 0.4), look: [0, 0.2] });
-    kit.sphere(h, 0.07, blush, [side * 0.13, -0.05, 0.16], [1, 0.6, 0.4]);
+    eye(kit, h, [side * 0.1, 0.06, 0.17], { size: 0.13, iris: kit.mat('iris', new Color3(0.08, 0.1, 0.22), 0.4), look: [0, 0.1] });
+    kit.sphere(h, 0.015, sparkle, [side * 0.1 - 0.025, 0.035, 0.215]);
+    kit.sphere(h, 0.09, blush, [side * 0.15, -0.05, 0.15], [1, 0.6, 0.4]);
   }
-  // A gummy smile with two tiny teeth, and a pacifier.
-  kit.capsule(h, 0.12, 0.016, mouth, [0, -0.09, 0.24], [0, 0, Math.PI / 2]);
-  for (const side of [-1, 1]) kit.cylinder(h, 0.025, 0, 0.022, kit.mat('tooth', WHITE), [side * 0.025, -0.1, 0.25], [Math.PI, 0, 0]);
-  const paci = kit.node(h, [0.07, -0.08, 0.26], [0, 0.3, 0.2]);
-  kit.cylinder(paci, 0.015, 0.1, 0.1, kit.mat('shield', new Color3(0.55, 0.85, 0.95), 0.3), [0, 0, 0], [Math.PI / 2, 0, 0]);
-  kit.torus(paci, 0.06, 0.015, kit.mat('paciRing', new Color3(1, 0.85, 0.2), 0.3), [0, 0, 0.03], [Math.PI / 2, 0, 0]);
-  // A tiny dorsal-fin tuft on top of his head, like a baby curl.
-  kit.cylinder(h, 0.08, 0, 0.06, skin, [0, 0.2, -0.03], [-0.6, 0, 0], [1, 1, 0.4]);
+  // A happy little open smile, and a pastel pacifier hanging off one corner.
+  kit.sphere(h, 0.08, kit.mat('mouth', new Color3(0.45, 0.12, 0.2), 0.2), [0, -0.09, 0.2], [1.3, 0.55, 0.6]);
+  kit.sphere(h, 0.045, kit.mat('tongue', new Color3(1, 0.5, 0.6), 0.1), [0, -0.1, 0.215], [1.2, 0.5, 0.6]);
+  const paci = kit.node(h, [0.09, -0.11, 0.2], [0.3, 0.5, 0.5]);
+  kit.cylinder(paci, 0.012, 0.07, 0.07, kit.mat('shield', new Color3(0.75, 0.9, 1), 0.3), [0, 0, 0], [Math.PI / 2, 0, 0]);
+  kit.torus(paci, 0.045, 0.012, kit.mat('paciRing', new Color3(1, 0.75, 0.85), 0.3), [0, 0, 0.02], [Math.PI / 2, 0, 0]);
 
-  // Tiny pectoral fins at his sides, flapping with his swings.
+  // Big front flippers he scoots on: they reach down to the ground and paddle
+  // forward and back (the rig swings them like arms while he moves).
   rig.arms.forEach((pivot, i) => {
     const side = i === 0 ? -1 : 1;
-    pivot.parent = middle;
-    pivot.position.set(side * 0.15, -0.04, 0.08);
-    kit.cylinder(pivot, 0.12, 0.015, 0.09, skin, [side * 0.05, -0.04, -0.02], [0.4, 0, side * 0.9], [1, 1, 0.35]);
+    pivot.parent = body;
+    pivot.position.set(side * 0.16, -0.02, 0.1);
+    const flipper = kit.node(pivot, [0, 0, 0], [0.5, 0, side * 0.55]);
+    kit.sphere(flipper, 0.28, skin, [0, -0.12, 0], [0.65, 1, 0.28]);
   });
 }
 
