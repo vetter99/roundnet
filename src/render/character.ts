@@ -1,13 +1,10 @@
-import { Color3 } from '@babylonjs/core/Maths/math.color';
+import type { Color3 } from '@babylonjs/core/Maths/math.color';
 import { Matrix, Quaternion, Vector3 } from '@babylonjs/core/Maths/math.vector';
-import type { Mesh } from '@babylonjs/core/Meshes/mesh';
 import { TransformNode } from '@babylonjs/core/Meshes/transformNode';
-// Registers mesh.renderOutline (the cartoon outline).
-import '@babylonjs/core/Rendering/outlineRenderer';
 import type { Scene } from '@babylonjs/core/scene';
 import type { Player, ShotKind } from '../sim/player';
 import { clamp, lerp } from '../sim/vec';
-import { buildCharacter, type CharacterKind } from './roster';
+import { buildCharacter, type CharacterKind, type Spinner } from './roster';
 
 // The shared rig, about 1.2m tall at size 1. Heights are from the feet; the
 // face points +z and the tail -z. Each character's look is built onto it in
@@ -16,14 +13,8 @@ const HIP_Y = 0.24;
 const SHOULDER_Y = 0.6;
 const SHOULDER_X = 0.23;
 const HEAD_Y = 0.93;
-// Heads are drawn this much bigger than built, for the big-headed mascot look.
-const HEAD_SCALE = 1.18;
-// The cartoon outline on each character's main shapes.
-const OUTLINE_COLOR = new Color3(0.09, 0.06, 0.1);
-const OUTLINE_WIDTH = 0.011;
-// Propellers and the like spin this fast (rad/s) standing, plus this much at a full run.
-const SPIN_IDLE = 5;
-const SPIN_RUN = 25;
+// Heads are drawn this much bigger than built, for the big-headed toy look.
+const HEAD_SCALE = 1.15;
 const LAND_SQUASH_TIME = 0.18;
 
 // Swing animations as keyframes over normalized time 0..1.
@@ -121,8 +112,7 @@ export class Character {
   private heldPhase: { kind: ShotKind; phase: number } | null = null;
   private landTimer = 0;
   private wasGrounded = true;
-  private readonly spinners: TransformNode[];
-  private readonly outlined: Mesh[];
+  private readonly spinners: Spinner[];
 
   constructor(scene: Scene, teamColor: Color3, kind: CharacterKind, jerseyNumber: number) {
     this.root = new TransformNode('player', scene);
@@ -150,15 +140,9 @@ export class Character {
       pivot.position.set(side * 0.1, HIP_Y, 0);
       return pivot;
     });
-    const rig = { scene, bounce: this.bounce, head, tail: this.tail, arms: this.arms, legs: this.legs, spinners: [] as TransformNode[], outlined: [] as Mesh[] };
+    const rig = { scene, bounce: this.bounce, head, tail: this.tail, arms: this.arms, legs: this.legs, spinners: [] as Spinner[] };
     buildCharacter(rig, kind, teamColor, jerseyNumber);
     this.spinners = rig.spinners;
-    this.outlined = rig.outlined;
-    for (const mesh of this.outlined) {
-      mesh.outlineColor = OUTLINE_COLOR;
-      mesh.outlineWidth = OUTLINE_WIDTH;
-      mesh.renderOutline = true;
-    }
   }
 
   private opacity = 1;
@@ -168,8 +152,6 @@ export class Character {
     if (Math.abs(alpha - this.opacity) < 0.005) return;
     this.opacity = alpha;
     for (const mesh of this.root.getChildMeshes()) mesh.visibility = alpha;
-    // The outline doesn't fade with the mesh, so drop it while see-through.
-    for (const mesh of this.outlined) mesh.renderOutline = alpha >= 0.99;
   }
 
   // The spin of a serve being swung right now (the arm sweeps across).
@@ -266,7 +248,7 @@ export class Character {
 
     // Tail swishes side to side while running, lifts when airborne.
     this.tail.rotation.y = Math.sin(this.walkPhase * 0.5) * (0.15 + run * 0.35);
-    for (const spinner of this.spinners) spinner.rotation.y += (SPIN_IDLE + run * SPIN_RUN) * dt;
+    for (const s of this.spinners) s.node.rotation[s.axis] += (s.idle + run * s.run) * dt;
     this.tail.rotation.x = p.grounded ? -run * 0.25 : clamp(-p.vel.y * 0.06, -0.3, 0.35);
 
     // Running: legs swing opposite each other and arms opposite the legs.
