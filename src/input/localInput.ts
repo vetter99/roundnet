@@ -7,6 +7,25 @@ export interface InputFrame extends Intent {
 
 const STICK_DEADZONE = 0.2;
 
+/** A menu control: a direction, confirm (A / J / ,) or back (B / K / .). */
+export type MenuAction = 'up' | 'down' | 'left' | 'right' | 'confirm' | 'back';
+/** Which device pressed it: a gamepad index, or a keyboard half. */
+export type MenuDevice = number | 'left' | 'right';
+export interface MenuPress {
+  device: MenuDevice;
+  action: MenuAction;
+}
+
+// Menu keys per keyboard half.
+const MENU_KEYS: Record<'left' | 'right', Partial<Record<string, MenuAction>>> = {
+  left: { KeyW: 'up', KeyS: 'down', KeyA: 'left', KeyD: 'right', KeyJ: 'confirm', KeyK: 'back' },
+  right: { ArrowUp: 'up', ArrowDown: 'down', ArrowLeft: 'left', ArrowRight: 'right', Comma: 'confirm', Enter: 'confirm', Period: 'back', Backspace: 'back' },
+};
+// Standard-layout d-pad buttons.
+const DPAD: [number, MenuAction][] = [[12, 'up'], [13, 'down'], [14, 'left'], [15, 'right']];
+// How far the stick must be pushed to count as a menu direction.
+const MENU_STICK = 0.6;
+
 type ButtonLayout = Record<'A' | 'B' | 'X' | 'Y' | 'LB' | 'RB' | 'LT' | 'RT' | 'VIEW' | 'MENU', number>;
 
 // Standard gamepad layout (Xbox naming; PlayStation/Switch map to the same slots).
@@ -83,6 +102,9 @@ export class LocalInput {
   // for pads driving a player).
   private pauseKeyPressed = false;
   private readonly prevPauseButton = new Map<number, boolean>();
+  // Menu presses since the last pollMenu, and each pad's menu state last time.
+  private readonly menuPresses: MenuPress[] = [];
+  private readonly prevMenuPad = new Map<number, Set<MenuAction>>();
 
   constructor(target: Window) {
     target.addEventListener('keydown', (e) => {
@@ -90,6 +112,12 @@ export class LocalInput {
       if (CAPTURED_KEYS.has(e.code)) e.preventDefault();
       if (!e.repeat) this.pressed.add(e.code);
       if (!e.repeat && PAUSE_KEYS.has(e.code)) this.pauseKeyPressed = true;
+      if (!e.repeat) {
+        for (const half of ['left', 'right'] as const) {
+          const action = MENU_KEYS[half][e.code];
+          if (action) this.menuPresses.push({ device: half, action });
+        }
+      }
       this.held.add(e.code);
     });
     target.addEventListener('keyup', (e) => this.held.delete(e.code));
@@ -130,9 +158,36 @@ export class LocalInput {
     return pressed;
   }
 
+  /**
+   * Menu presses since the last call, from the keyboard halves and every
+   * gamepad (d-pad or left stick, A, B), each tagged with its device.
+   */
+  pollMenu(): MenuPress[] {
+    const presses = this.menuPresses.splice(0);
+    for (const pad of this.gamepads()) {
+      const layout = layoutFor(pad);
+      const down = new Set<MenuAction>();
+      const isDown = (i: number) => i >= 0 && (pad.buttons[i]?.pressed ?? false);
+      if (isDown(layout.A)) down.add('confirm');
+      if (isDown(layout.B)) down.add('back');
+      if (pad.mapping === 'standard') for (const [i, action] of DPAD) if (isDown(i)) down.add(action);
+      const x = pad.axes[0] ?? 0;
+      const y = pad.axes[1] ?? 0;
+      if (x < -MENU_STICK) down.add('left');
+      if (x > MENU_STICK) down.add('right');
+      if (y < -MENU_STICK) down.add('up');
+      if (y > MENU_STICK) down.add('down');
+      const prev = this.prevMenuPad.get(pad.index) ?? new Set();
+      for (const action of down) if (!prev.has(action)) presses.push({ device: pad.index, action });
+      this.prevMenuPad.set(pad.index, down);
+    }
+    return presses;
+  }
+
   /** Forget key presses made while the game wasn't reading them (e.g. while paused). */
   clearPresses(): void {
     this.pressed.clear();
+    this.menuPresses.length = 0;
   }
 
   /** Connected gamepads in the order the browser lists them. */

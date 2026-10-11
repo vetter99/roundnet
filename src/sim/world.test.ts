@@ -739,9 +739,33 @@ describe('match mode', () => {
 
   it('the side that lets the ball land gives up the point, and the winner serves', () => {
     const world = blueHasBallInMatch();
-    expect(runUntil(world, 'point')).toEqual({ type: 'point', team: 1 });
+    // Blue had it off the net and never touched it.
+    expect(runUntil(world, 'point')).toEqual({ type: 'point', team: 1, reason: 'notReached', loser: 0 });
     expect(world.score).toEqual([0, 1]);
     expect(world.nextReceiver).toBe(0); // Red won it, so Red serves to Blue
+  });
+
+  it('says why a point ended: missed the net, out of touches, dropped, ace, double fault', () => {
+    const reasonAfter = (setup: (world: World) => void) => {
+      const world = blueHasBallInMatch();
+      setup(world);
+      const e = runUntil(world, 'point');
+      return e?.type === 'point' ? e.reason : undefined;
+    };
+    const blueTouched = (kind: 'spike' | 'pass', touches: number) => (world: World) => {
+      world.ball.lastTouch = 'player';
+      world.lastHitTeam = 0;
+      world.lastHitKind = kind;
+      world.touches = touches;
+    };
+    expect(reasonAfter(blueTouched('spike', 1))).toBe('missedNet');
+    expect(reasonAfter(blueTouched('pass', t.match.maxTouches))).toBe('outOfTouches');
+    expect(reasonAfter(blueTouched('pass', 1))).toBe('dropped');
+    expect(
+      reasonAfter((world) => {
+        world.serve.returnPending = true;
+      }),
+    ).toBe('ace');
   });
 
   it('refuses a touch beyond the limit', () => {
@@ -760,6 +784,21 @@ describe('match mode', () => {
       for (let i = 0; i < 240 && !world.waitingForServe; i++) stepWorld(world, [], loose);
     }
     expect(world.score).toEqual([1, 0]);
+  });
+
+  it('a double fault is reported as the reason', () => {
+    const loose = createTuning();
+    loose.serve.aimLimit = 10;
+    const world = createMatch(loose, 'match');
+    const events: SimEvent[] = [];
+    for (let attempt = 0; attempt < 2; attempt++) {
+      events.push(...tossAndServe(world, loose, { tap: true, aimX: 3 / (loose.net.radius * loose.serve.aimLimit) }));
+      for (let i = 0; i < 240 && !world.waitingForServe; i++) {
+        stepWorld(world, [], loose);
+        events.push(...world.events);
+      }
+    }
+    expect(events).toContainEqual({ type: 'point', team: 0, reason: 'doubleFault', loser: 1 });
   });
 
   it('a game ends at the target score, win by 2', () => {

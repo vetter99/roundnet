@@ -77,6 +77,11 @@ src/main.ts           wires it together; fixed 60Hz loop with render interpolati
   available with `?stadium` in the URL.
 - All settings (mode, format, stats, seats and characters) live in the pause
   menu; the play screen only shows a Pause button (or Esc / P / controller Menu).
+  The menu is navigable by controller or keyboard (stick / d-pad / arrows,
+  A / J / Enter, B / K). Its join screen lets each controller or keyboard
+  half claim a seat (`seatBinding` in main.ts). Controllers rumble on hits.
+- Match HUD: the scoreboard, a touch counter under it, and a quiet line at
+  the bottom saying why each point ended (`PointReason` on the point event).
   Show stats (or I) also shows the tuning panel.
 - Hits charge while the button is held and swing on release (`chargePower`).
 - Dives are automatic: swinging at a ball just out of reach dives for it

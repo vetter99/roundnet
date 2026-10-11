@@ -86,21 +86,21 @@ and UX cards.
 | AI-02 | CPU teammate (basic version done with RULE-03) | P1 | L | RULE-03 |
 | AI-03 | Smarter defensive positioning | P1 | S | |
 | AI-04 | CPU personalities | P3 | M | AI-01 |
-| INPUT-01 | Join screen, up to 4 controllers | P1 | M | |
-| INPUT-02 | Controller rumble | P1 | S | |
+| INPUT-01 | Join screen ✅ from the pause menu; controller/keyboard halves claim seats | P1 | M | |
+| INPUT-02 | Controller rumble ✅ hits, serves, dive landings | P1 | S | |
 | INPUT-03 | Button remapping | P2 | M | UX-03 |
 | INPUT-04 | Split keyboard ✅ via the 2 Player toggle | P2 | S | |
 | INPUT-05 | Touch controls for phones | P3 | L | |
 | INPUT-06 | Triggers as the main hit buttons (playtest) | P1 | S | |
 | UX-01 | Title screen | P1 | M | |
-| UX-02 | Pause menu (basic pause done: button, Esc/P, controller Menu; freezes and mutes) | P1 | S | |
+| UX-02 | Pause menu ✅ freezes and mutes; holds all settings; controller/keyboard navigable | P1 | S | |
 | UX-03 | Settings screen | P1 | M | UX-02 |
 | UX-04 | Hide dev panels for players ✅ (stats hidden on load; Show stats button, I key or × toggle it; remembered) | P0 | S | |
 | UX-05 | How-to-play / tutorial | P2 | M | UX-01 |
 | UX-06 | Character select | P2 | M | ART-03 |
 | UX-07 | Timing guide ✅ kept as is; player circle removed | P0 | S | |
 | UX-08 | Teach the jump (dive is automatic now) | P1 | S | |
-| UX-09 | Teach the rules to new players (touch counter, net flow) | P1 | M | |
+| UX-09 | Teach the rules to new players (touch counter + point reasons done; tutorial later) | P1 | M | |
 | ART-01 | Court environment ✅ pitch, HD stands, 3D crowd | P1 | M | |
 | ART-02 | Ball and net ✅ yellow volleyball, webbed net | P2 | S | |
 | ART-03 | Character variety (13-character low-poly roster done 2026-10-11 incl. Chris P. Bacon, Doo Doo, Pesto, Capy, Tube Man, My Leg, Jalcon with distinct gaits; per-seat picker) | P2 | M | |

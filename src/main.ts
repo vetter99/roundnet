@@ -2,13 +2,21 @@ import { botIntent } from './ai/bot';
 import { Sfx } from './audio/sfx';
 import { tuning } from './config/tuning';
 import { createTuningPane } from './debug/tuningPane';
-import { LocalInput, PASS_KEY_LABEL, SPIKE_KEY_LABEL, type InputFrame, type KeyboardScheme } from './input/localInput';
+import {
+  LocalInput,
+  PASS_KEY_LABEL,
+  SPIKE_KEY_LABEL,
+  type InputFrame,
+  type KeyboardScheme,
+  type MenuDevice,
+  type MenuPress,
+} from './input/localInput';
 import { Renderer, snapshot } from './render/renderer';
 import { CHARACTERS, SEAT_CHARACTERS, type CharacterKind } from './render/roster';
 import type { MissReason } from './sim/hit';
 import { chargePower, isDiving, type Player } from './sim/player';
 import { DT } from './sim/time';
-import { createMatch, otherTeam, resetRally, restartGame, stepWorld, type SimEvent, type Team } from './sim/world';
+import { createMatch, otherTeam, resetRally, restartGame, stepWorld, type PointReason, type SimEvent, type Team } from './sim/world';
 
 const canvas = document.getElementById('game') as HTMLCanvasElement;
 const stats = document.querySelector('#hud .stats') as HTMLElement;
@@ -85,6 +93,17 @@ let lastTime = performance.now();
 let flashTimer = 0;
 // A device is a keyboard scheme, the CPU, or a gamepad.
 type Device = KeyboardScheme | 'cpu' | Gamepad;
+// Who drives each player right now (for rumble).
+let currentDevices: Device[] = [];
+
+/** Rumble a player's controller, if they're on one: `strong` / `weak` motors 0..1, for `ms`. */
+function rumble(playerId: number, strong: number, weak: number, ms: number): void {
+  const d = currentDevices[playerId];
+  if (!d || typeof d === 'string') return;
+  const pad = navigator.getGamepads?.()[d.index];
+  const actuator = pad?.vibrationActuator as { playEffect?: (type: string, params: object) => Promise<unknown> } | null | undefined;
+  void actuator?.playEffect?.('dual-rumble', { duration: ms, strongMagnitude: strong, weakMagnitude: weak })?.catch(() => {});
+}
 
 // Practice (endless rallies) or Match (scored games), toggled on screen.
 modeButton.addEventListener('click', () => {
@@ -174,9 +193,14 @@ function refreshSeats(): void {
   });
   formatButton.textContent = world.format === '2v2' ? '👥 2v2' : '👤 1v1';
 }
+// Which device claimed each seat on the join screen (null: none; the seat's
+// human/CPU toggle then decides, and humans get devices in seat order).
+const seatBinding: (MenuDevice | null)[] = [null, null, null, null];
+
 seatButtons.forEach((button, seat) => {
   button.addEventListener('click', () => {
     human[seat] = !human[seat];
+    seatBinding[seat] = null;
     refreshSeats();
     button.blur();
     canvas.focus();
@@ -194,16 +218,44 @@ refreshSeats();
 function assignDevices(): Device[] {
   const pads = input.gamepads();
   const devices: Device[] = world.players.map(() => 'cpu');
-  const needKeyboard: number[] = [];
-  let nextPad = 0;
   const bySeat = [...world.players].sort((a, b) => seatOf(a) - seatOf(b));
+  // Seats claimed on the join screen use the device that claimed them. A
+  // lone keyboard player gets the whole keyboard.
+  const keyboardJoined = bySeat.filter((p) => human[seatOf(p)] && typeof seatBinding[seatOf(p)] === 'string').length;
+  const takenPads = new Set(seatBinding.filter((b): b is number => typeof b === 'number'));
+  const needKeyboard: number[] = [];
+  const freePads = pads.filter((pad) => !takenPads.has(pad.index));
+  let nextPad = 0;
   for (const p of bySeat) {
-    if (!human[seatOf(p)]) continue;
-    if (nextPad < pads.length) devices[p.id] = pads[nextPad++];
-    else needKeyboard.push(p.id);
+    const seat = seatOf(p);
+    if (!human[seat]) continue;
+    const bound = seatBinding[seat];
+    if (typeof bound === 'number') {
+      const pad = pads.find((pd) => pd.index === bound);
+      if (pad) devices[p.id] = pad;
+    } else if (bound === 'left' || bound === 'right') {
+      devices[p.id] = bound;
+    } else if (nextPad < freePads.length) {
+      // Seats set to human from the menu: controllers in seat order, then the keyboard.
+      devices[p.id] = freePads[nextPad++];
+    } else {
+      needKeyboard.push(p.id);
+    }
   }
-  if (needKeyboard.length === 1) devices[needKeyboard[0]] = 'all';
-  if (needKeyboard.length >= 2) [devices[needKeyboard[0]], devices[needKeyboard[1]]] = ['left', 'right'];
+  if (keyboardJoined === 1) {
+    // One keyboard joiner: the whole keyboard, unless another human needs
+    // it, who then gets the other half.
+    const joiner = bySeat.find((p) => human[seatOf(p)] && typeof seatBinding[seatOf(p)] === 'string');
+    const half = joiner ? devices[joiner.id] : 'left';
+    if (needKeyboard.length === 0 && joiner) devices[joiner.id] = 'all';
+    else if (needKeyboard.length > 0) devices[needKeyboard[0]] = half === 'left' ? 'right' : 'left';
+  } else if (keyboardJoined > 1) {
+    // Both halves are taken.
+  } else if (needKeyboard.length === 1) {
+    devices[needKeyboard[0]] = 'all';
+  } else if (needKeyboard.length >= 2) {
+    [devices[needKeyboard[0]], devices[needKeyboard[1]]] = ['left', 'right'];
+  }
   return devices;
 }
 
@@ -241,8 +293,14 @@ function setPaused(on: boolean): void {
   sfx.setPaused(on);
   pauseOverlay.style.display = on ? 'flex' : 'none';
   pauseButton.textContent = on ? '▶ Resume' : '⏸ Pause';
-  // Ignore keys pressed while paused.
-  if (!on) input.clearPresses();
+  if (on) {
+    setFocus(document.getElementById('resume') as HTMLButtonElement);
+  } else {
+    if (joinOpen) closeJoin();
+    setFocus(null);
+    // Ignore keys pressed while paused.
+    input.clearPresses();
+  }
 }
 pauseButton.addEventListener('click', () => {
   setPaused(!paused);
@@ -254,13 +312,152 @@ pauseButton.addEventListener('click', () => {
   canvas.focus();
 });
 
+// Driving the pause menu with a controller or the keyboard: a highlighted
+// button moves with the stick / d-pad / arrows / WASD; A (J, Enter) presses it;
+// B (K) resumes.
+let focused: HTMLButtonElement | null = null;
+function menuButtons(): HTMLButtonElement[] {
+  return [...pauseOverlay.querySelectorAll('button')].filter((b) => b.offsetParent !== null) as HTMLButtonElement[];
+}
+function setFocus(button: HTMLButtonElement | null): void {
+  focused?.classList.remove('focus');
+  focused = button;
+  focused?.classList.add('focus');
+}
+/** Move the highlight to the nearest button in a direction. */
+function moveFocus(dir: 'up' | 'down' | 'left' | 'right'): void {
+  const buttons = menuButtons();
+  if (!focused || !buttons.includes(focused)) return setFocus(buttons[0] ?? null);
+  const from = focused.getBoundingClientRect();
+  const fx = from.left + from.width / 2;
+  const fy = from.top + from.height / 2;
+  let best: HTMLButtonElement | null = null;
+  let bestScore = Infinity;
+  for (const b of buttons) {
+    if (b === focused) continue;
+    const r = b.getBoundingClientRect();
+    const dx = r.left + r.width / 2 - fx;
+    const dy = r.top + r.height / 2 - fy;
+    const along = dir === 'up' ? -dy : dir === 'down' ? dy : dir === 'left' ? -dx : dx;
+    if (along <= 4) continue;
+    // Left / right stay within the row.
+    if ((dir === 'left' || dir === 'right') && Math.abs(dy) > r.height / 2) continue;
+    const across = dir === 'up' || dir === 'down' ? Math.abs(dx) : Math.abs(dy);
+    const score = along + across * 2;
+    if (score < bestScore) {
+      bestScore = score;
+      best = b;
+    }
+  }
+  if (best) setFocus(best);
+}
+
+// The join screen (from the pause menu): each controller or keyboard half
+// presses A / J / , to claim a seat, moves between free seats with left /
+// right, and leaves with B / K / .
+const pauseMenu = pauseOverlay.querySelector('.menu') as HTMLElement;
+const joinView = document.getElementById('join') as HTMLElement;
+const joinSeats = joinView.querySelector('.joinSeats') as HTMLElement;
+let joinOpen = false;
+function openJoin(): void {
+  joinOpen = true;
+  pauseMenu.style.display = 'none';
+  joinView.style.display = '';
+  setFocus(null);
+  renderJoin();
+}
+function closeJoin(): void {
+  joinOpen = false;
+  pauseMenu.style.display = '';
+  joinView.style.display = 'none';
+  refreshSeats();
+  setFocus(document.getElementById('openJoin') as HTMLButtonElement);
+}
+(document.getElementById('openJoin') as HTMLButtonElement).addEventListener('click', openJoin);
+(document.getElementById('closeJoin') as HTMLButtonElement).addEventListener('click', closeJoin);
+
+function seatsInPlay(): number[] {
+  return [0, 1, 2, 3].filter((s) => world.format === '2v2' || s % 2 === 0);
+}
+function deviceLabel(d: MenuDevice): string {
+  if (typeof d === 'number') return `Controller ${d + 1}`;
+  const keyboards = seatBinding.filter((b) => b === 'left' || b === 'right').length;
+  if (keyboards <= 1) return 'Keyboard';
+  return d === 'left' ? 'Keyboard (WASD + J / K)' : 'Keyboard (arrows + , / .)';
+}
+function renderJoin(): void {
+  joinSeats.innerHTML = seatsInPlay()
+    .map((seat) => {
+      const team = seat < 2 ? 0 : 1;
+      const name = world.format === '2v2' ? `${TEAM_NAMES[team]} ${(seat % 2) + 1}` : TEAM_NAMES[team];
+      const character = CHARACTERS.find((c) => c.kind === seatCharacters[seat])?.name ?? '';
+      const bound = seatBinding[seat];
+      const who = bound !== null ? `🎮 ${deviceLabel(bound)}` : human[seat] ? '🎮 Human' : '🤖 CPU · press A to join';
+      return `<div class="seat${bound !== null ? ' taken' : ''}" style="--team:${TEAM_CSS[team]}"><b style="color:${TEAM_CSS[team]}">${name}</b> · ${character}<div class="who">${who}</div></div>`;
+    })
+    .join('');
+}
+function handleJoin(press: MenuPress): void {
+  const seats = seatsInPlay();
+  const mine = seats.find((s) => seatBinding[s] === press.device);
+  const free = (s: number) => seatBinding[s] === null;
+  if (press.action === 'confirm' && mine === undefined) {
+    const seat = seats.find(free);
+    if (seat !== undefined) {
+      seatBinding[seat] = press.device;
+      human[seat] = true;
+    }
+  } else if ((press.action === 'left' || press.action === 'right') && mine !== undefined) {
+    const step = press.action === 'right' ? 1 : -1;
+    const at = seats.indexOf(mine);
+    for (let k = 1; k < seats.length; k++) {
+      const next = seats[(at + step * k + seats.length * 4) % seats.length];
+      if (!free(next)) continue;
+      seatBinding[next] = press.device;
+      human[next] = true;
+      seatBinding[mine] = null;
+      human[mine] = false;
+      break;
+    }
+  } else if (press.action === 'back') {
+    if (mine === undefined) return closeJoin();
+    seatBinding[mine] = null;
+    human[mine] = false;
+  }
+  renderJoin();
+}
+
+function handleMenu(presses: MenuPress[]): void {
+  for (const press of presses) {
+    if (joinOpen) {
+      handleJoin(press);
+      continue;
+    }
+    if (press.action === 'confirm') {
+      if (focused && menuButtons().includes(focused)) focused.click();
+      else setFocus(menuButtons()[0] ?? null);
+    } else if (press.action === 'back') {
+      setPaused(false);
+    } else {
+      moveFocus(press.action);
+    }
+  }
+}
+
 renderer.engine.runRenderLoop(() => {
   const now = performance.now();
   // Cap catch-up time so a background tab doesn't fast-forward the game.
   const frameSeconds = Math.min((now - lastTime) / 1000, 0.25);
   lastTime = now;
-  if (input.pollPause()) setPaused(!paused);
+  // The pause key closes the join screen first, then resumes.
+  if (input.pollPause()) {
+    if (joinOpen) closeJoin();
+    else setPaused(!paused);
+  }
+  const menuPresses = input.pollMenu();
+  if (paused) handleMenu(menuPresses);
   const devices = assignDevices();
+  currentDevices = devices;
   if (paused) {
     // Frozen: keep drawing the same moment, with no time passing.
     renderer.sync(world, prev, accumulator / DT, tuning, 0);
@@ -327,6 +524,9 @@ function onEvent(e: SimEvent): void {
   } else if (e.type === 'hit') {
     lastHit = e;
     lastMiss = null;
+    // A light buzz for passes and drops, a thump for spikes.
+    if (e.kind === 'spike') rumble(e.playerId, 0.3 + 0.6 * e.power, 0.4, 90);
+    else rumble(e.playerId, 0.05, 0.35, 60);
     const mine = world.players[e.playerId].team === 0;
     // A human's hits (or everyone's, when no one is playing) at full volume.
     const featured = isHuman(e.playerId) || !world.players.some((p) => isHuman(p.id));
@@ -346,6 +546,7 @@ function onEvent(e: SimEvent): void {
     rally = 0;
   } else if (e.type === 'point') {
     showFlash(`Point ${TEAM_NAMES[e.team]}`, TEAM_CSS[e.team], 1);
+    showReason(e.team, POINT_REASONS[e.reason](teamSpan(e.loser)));
   } else if (e.type === 'gameOver') {
     showFlash(`${TEAM_NAMES[e.winner]} wins ${Math.max(...world.score)}–${Math.min(...world.score)}!`, TEAM_CSS[e.winner], 3);
   } else if (e.type === 'toss') {
@@ -353,6 +554,7 @@ function onEvent(e: SimEvent): void {
     renderer.playSwing(e.playerId, 'drop');
     sfx.swing(0.2);
   } else if (e.type === 'serve') {
+    rumble(e.playerId, 0.3 + 0.5 * e.power, 0.4, 90);
     const featured = isHuman(e.playerId) || !world.players.some((p) => isHuman(p.id));
     sfx.hit('spike', e.power, e.quality, featured ? 1 : tuning.audio.cpuHits);
   } else if (e.type === 'fault') {
@@ -362,6 +564,7 @@ function onEvent(e: SimEvent): void {
     sfx.swing(1);
   } else if (e.type === 'diveLand') {
     sfx.diveLand();
+    rumble(e.playerId, 0.5, 0.2, 80);
   }
 }
 
@@ -439,6 +642,47 @@ function liveSection(devices: Device[]): string {
   return section('Live', body);
 }
 
+// Why a point ended, shown quietly near the bottom for a few seconds.
+const reasonEl = document.getElementById('reason') as HTMLElement;
+let reasonTimer: ReturnType<typeof setTimeout> | undefined;
+const POINT_REASONS: Record<PointReason, (loser: string) => string> = {
+  doubleFault: (l) => `${l} double faulted`,
+  ace: (l) => `Ace: ${l} couldn't return the serve`,
+  notReached: (l) => `${l} didn't get to the ball`,
+  missedNet: (l) => `${l}'s shot missed the net`,
+  outOfTouches: (l) => `${l} used all ${tuning.match.maxTouches} touches without hitting the net`,
+  dropped: (l) => `${l} let the ball drop`,
+};
+function showReason(winner: Team, text: string): void {
+  reasonEl.innerHTML = `${teamSpan(winner)} point · ${text}`;
+  reasonEl.style.opacity = '1';
+  clearTimeout(reasonTimer);
+  reasonTimer = setTimeout(() => (reasonEl.style.opacity = '0'), 3500);
+}
+
+// Touches used by the team with the ball (match mode, while it's in play).
+const touchesEl = document.getElementById('touches') as HTMLElement;
+const touchDots = [...touchesEl.querySelectorAll('.dot')] as HTMLElement[];
+const touchWho = touchesEl.querySelector('.who') as HTMLElement;
+const touchNote = touchesEl.querySelector('.note') as HTMLElement;
+function updateTouches(): void {
+  const max = tuning.match.maxTouches;
+  const inPlay = world.mode === 'match' && world.ball.alive && !world.waitingForServe && !world.serve.inFlight;
+  touchesEl.style.display = inPlay ? 'flex' : 'none';
+  if (!inPlay) return;
+  const team = world.possession;
+  touchesEl.style.setProperty('--team', TEAM_CSS[team]);
+  touchWho.innerHTML = `${teamSpan(team)} TOUCHES`;
+  const used = world.touches;
+  touchDots.forEach((dot, i) => {
+    dot.style.display = i < max ? '' : 'none';
+    dot.classList.toggle('used', i < used);
+    // The last touch left: it has to go onto the net.
+    dot.classList.toggle('last', i === max - 1 && used === max - 1);
+  });
+  touchNote.textContent = used === max - 1 ? 'LAST · ONTO THE NET' : used >= max ? 'NONE LEFT' : '';
+}
+
 // The match scoreboard (top center), shown in match mode only.
 const scoreboard = document.getElementById('scoreboard') as HTMLElement;
 const scoreEls = [...scoreboard.querySelectorAll('.pts')] as HTMLElement[];
@@ -496,7 +740,6 @@ function updateHud(frameSeconds: number, devices: Device[]): void {
           : `${playerSpan(serverPlayer)}: stick aims · <b>${tossKey}</b> to toss${second}`;
   }
   const match = world.mode === 'match';
-  const touches = match && world.ball.alive && world.ball.lastTouch !== 'feed' ? ` · touch ${world.touches} of ${tuning.match.maxTouches}` : '';
   const status =
     world.winner !== null
       ? `${teamSpan(world.winner)} wins! Press A / J for a rematch`
@@ -505,10 +748,11 @@ function updateHud(frameSeconds: number, devices: Device[]): void {
         : world.ball.lastTouch === 'feed'
           ? `${teamSpan(team)} serves to ${teamSpan(team === 0 ? 1 : 0)}`
           : world.ball.alive
-            ? `${teamSpan(team)}'s ball${touches}`
+            ? `${teamSpan(team)}'s ball`
             : 'Ball down, next serve coming';
   stats.innerHTML = status;
   updateScoreboard();
+  updateTouches();
   renderer.setJumbotron(
     match ? `${world.score[0]} – ${world.score[1]}` : `RALLY ${rally}`,
     match ? (world.winner !== null ? `${TEAM_NAMES[world.winner].toUpperCase()} WINS` : `FIRST TO ${tuning.match.pointsToWin}`) : `BEST ${bestRally}`,

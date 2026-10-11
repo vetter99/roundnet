@@ -33,11 +33,23 @@ export type SimEvent =
   | { type: 'serve'; playerId: number; power: number; spin: number; quality: number }
   | { type: 'fault'; team: Team; lost: boolean }
   // Match mode: a point scored, and the end of a game.
-  | { type: 'point'; team: Team }
+  // Why: see PointReason. `loser` is the team that gave the point away.
+  | { type: 'point'; team: Team; reason: PointReason; loser: Team }
   | { type: 'gameOver'; winner: Team }
   // A player started a dive, and later hit the ground at the end of the lunge.
   | { type: 'dive'; playerId: number }
   | { type: 'diveLand'; playerId: number };
+
+/**
+ * Why a point ended, from the losing team's side:
+ * - doubleFault: both serves missed the net (or the tosses were dropped)
+ * - ace: the serve came off the net and they never touched it
+ * - notReached: the ball came off the net and they never got a touch on it
+ * - missedNet: their spike or drop missed the net
+ * - outOfTouches: they used all their touches without getting it onto the net
+ * - dropped: they touched it but let it fall before playing it onto the net
+ */
+export type PointReason = 'doubleFault' | 'ace' | 'notReached' | 'missedNet' | 'outOfTouches' | 'dropped';
 
 /** Practice: endless rallies, serve alternates. Match: scored games (see `match` in tuning). */
 export type Mode = 'practice' | 'match';
@@ -157,14 +169,23 @@ export function restartGame(world: World, t: Tuning, mode: Mode = world.mode, fo
   setUpServe(world, t);
 }
 
-function scorePoint(world: World, team: Team, t: Tuning): void {
+function scorePoint(world: World, team: Team, reason: PointReason, t: Tuning): void {
   world.score[team]++;
-  world.events.push({ type: 'point', team });
+  world.events.push({ type: 'point', team, reason, loser: otherTeam(team) });
   const [a, b] = world.score;
   if (Math.max(a, b) >= t.match.pointsToWin && Math.abs(a - b) >= 2) {
     world.winner = a > b ? 0 : 1;
     world.events.push({ type: 'gameOver', winner: world.winner });
   }
+}
+
+/** Why the team in possession lost the rally when the ball landed (see PointReason). */
+function rallyLossReason(world: World, t: Tuning): PointReason {
+  const loser = world.possession;
+  const theyTouchedIt = world.ball.lastTouch === 'player' && world.lastHitTeam === loser;
+  if (!theyTouchedIt) return world.serve.returnPending ? 'ace' : 'notReached';
+  if (world.lastHitKind === 'spike' || world.lastHitKind === 'drop') return 'missedNet';
+  return world.mode === 'match' && world.touches >= t.match.maxTouches ? 'outOfTouches' : 'dropped';
 }
 
 /** The team that serves next. */
@@ -274,13 +295,14 @@ export function stepWorld(world: World, intents: readonly Intent[], t: Tuning): 
         const receiver = world.nextReceiver;
         const lost = faultServe(world, t);
         world.events.push({ type: 'fault', team: server, lost });
-        if (lost && world.mode === 'match') scorePoint(world, receiver, t);
+        if (lost && world.mode === 'match') scorePoint(world, receiver, 'doubleFault', t);
       } else {
+        const reason = rallyLossReason(world, t);
         world.serve.returnPending = false;
         if (world.mode === 'match') {
           // The side that should have played it loses the rally; the winner serves.
           const loser = world.possession;
-          scorePoint(world, otherTeam(loser), t);
+          scorePoint(world, otherTeam(loser), reason, t);
           setNextReceiver(world, loser);
         } else {
           // Practice: the serve alternates sides.

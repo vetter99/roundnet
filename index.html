@@ -39,7 +39,7 @@
       /* A small, quick confirmation (e.g. "Perfect"); the sound and rings do the heavy lifting. */
       #flash { position: fixed; top: 72px; left: 0; right: 0; text-align: center; color: #fff; font-size: 18px;
                letter-spacing: 0.04em; text-shadow: 0 1px 4px #000b; pointer-events: none; opacity: 0; transition: opacity 0.25s; }
-      #sound { position: fixed; bottom: 40px; left: 50%; transform: translateX(-50%); display: none;
+      #sound { position: fixed; bottom: 64px; left: 50%; transform: translateX(-50%); display: none;
                padding: 10px 18px; border: 0; border-radius: 999px; cursor: pointer;
                background: #ffd84a; color: #1d2b1f; font-size: 16px; box-shadow: 0 2px 10px #0006; }
       /* Pause overlay: dims the game; title, resume button, and the settings menu. */
@@ -55,6 +55,12 @@
       #paused .menu button { padding: 7px 14px; font-size: 14px; }
       #paused .menu button:hover { background: #fff; }
       #paused .menu .pick { background: #ffffffb0; font-size: 12px; padding: 7px 10px; }
+      /* The button a controller or the keyboard has selected. */
+      #paused button.focus { outline: 3px solid #ffd84a; outline-offset: 2px; }
+      #join .joinSeats { display: grid; grid-template-columns: repeat(2, 200px); gap: 10px; justify-content: center; }
+      #join .seat { padding: 10px 12px; border-radius: 10px; border: 2px dashed #ffffff55; text-align: center; font-size: 14px; }
+      #join .seat.taken { border-style: solid; border-color: var(--team); background: #ffffff14; }
+      #join .seat .who { font-size: 12px; opacity: 0.85; margin-top: 4px; }
       /* Match scoreboard, top center: team blocks with the score, a label in the middle. */
       #scoreboard { position: fixed; top: 10px; left: 50%; transform: translateX(-50%); display: none; align-items: stretch;
                     border-radius: 10px; overflow: hidden; box-shadow: 0 3px 12px #0006; pointer-events: none;
@@ -78,6 +84,18 @@
                background: #ffffffe0; color: #1d2b1f; font-family: 'Russo One', system-ui, sans-serif; font-size: 14px;
                box-shadow: 0 2px 8px #0005; }
       #pause:hover { background: #fff; }
+      /* Touches used by the team with the ball, under the scoreboard. */
+      #touches { position: fixed; top: 58px; left: 50%; transform: translateX(-50%); display: none; align-items: center; gap: 6px;
+                 padding: 4px 12px; border-radius: 999px; background: #1b2330c8; color: #fff; pointer-events: none;
+                 font-family: 'Russo One', system-ui, sans-serif; font-size: 12px; letter-spacing: 0.08em; }
+      #touches .dot { width: 11px; height: 11px; border-radius: 50%; border: 2px solid #ffffffb0; box-sizing: border-box; }
+      #touches .dot.used { background: var(--team); border-color: var(--team); }
+      #touches .dot.last { border-color: #ffb03a; box-shadow: 0 0 6px #ffb03a; }
+      #touches .note { color: #ffb03a; }
+      /* Why the last point ended: a quiet line near the bottom. */
+      #reason { position: fixed; bottom: 34px; left: 0; right: 0; text-align: center; color: #fff; font-size: 15px;
+                font-family: 'Russo One', system-ui, sans-serif; letter-spacing: 0.03em; text-shadow: 0 1px 3px #000c;
+                pointer-events: none; opacity: 0; transition: opacity 0.4s; }
       #help { position: fixed; bottom: 10px; left: 16px; right: 16px; color: #fffd; font-size: 13px; text-shadow: 0 1px 2px #000a; pointer-events: none; }
     </style>
   </head>
@@ -105,14 +123,22 @@
         <div class="seatRow row"><button class="pick" id="pick1"></button><button id="seat1"></button></div>
         <div class="seatRow row"><button class="pick" id="pick2"></button><button id="seat2"></button></div>
         <div class="seatRow row"><button class="pick" id="pick3"></button><button id="seat3"></button></div>
+        <div class="row"><button id="openJoin">🎮 Join with controllers / keyboard</button></div>
       </div>
-      <div class="hint">Esc / P, or the Menu button on a controller</div>
+      <div class="menu" id="join" style="display: none">
+        <h4>JOIN · press A (or J / ,) to join · ◀ ▶ to switch seats · B (or K / .) to leave</h4>
+        <div class="joinSeats"></div>
+        <div class="row"><button id="closeJoin">✔ Done</button></div>
+      </div>
+      <div class="hint">Stick / d-pad / arrows to move · A to select · B or Esc / P / Menu to resume</div>
     </div>
     <div id="scoreboard">
       <div class="team blue"><span class="serve"></span><span class="name">BLUE</span><span class="pts">0</span></div>
       <div class="mid">FIRST TO 11</div>
       <div class="team red"><span class="serve"></span><span class="name">RED</span><span class="pts">0</span></div>
     </div>
+    <div id="touches"><span class="who"></span><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="note"></span></div>
+    <div id="reason"></div>
     <div id="credit">
       Music: "Stage 1" from
       <a href="https://opengameart.org/content/4-chiptunes-adventure" target="_blank" rel="noopener">Chiptune Adventures</a>
