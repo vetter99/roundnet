@@ -39,9 +39,21 @@
       /* A small, quick confirmation (e.g. "Perfect"); the sound and rings do the heavy lifting. */
       #flash { position: fixed; top: 72px; left: 0; right: 0; text-align: center; color: #fff; font-size: 18px;
                letter-spacing: 0.04em; text-shadow: 0 1px 4px #000b; pointer-events: none; opacity: 0; transition: opacity 0.25s; }
-      #sound { position: fixed; top: 14px; left: 50%; transform: translateX(-50%); display: none;
+      #sound { position: fixed; bottom: 40px; left: 50%; transform: translateX(-50%); display: none;
                padding: 10px 18px; border: 0; border-radius: 999px; cursor: pointer;
                background: #ffd84a; color: #1d2b1f; font-size: 16px; box-shadow: 0 2px 10px #0006; }
+      /* Match scoreboard, top center: team blocks with the score, a label in the middle. */
+      #scoreboard { position: fixed; top: 10px; left: 50%; transform: translateX(-50%); display: none; align-items: stretch;
+                    border-radius: 10px; overflow: hidden; box-shadow: 0 3px 12px #0006; pointer-events: none;
+                    font-family: 'Russo One', system-ui, sans-serif; color: #fff; }
+      #scoreboard .team { display: flex; align-items: center; gap: 10px; padding: 4px 14px; font-size: 15px; letter-spacing: 0.06em; }
+      #scoreboard .blue { background: #2f6fe8; }
+      #scoreboard .red { background: #e8443a; flex-direction: row-reverse; }
+      #scoreboard .pts { font-size: 30px; min-width: 1.2em; text-align: center; transition: transform 0.15s; }
+      #scoreboard .pts.bump { transform: scale(1.35); }
+      #scoreboard .serve { width: 9px; height: 9px; border-radius: 50%; background: #ffe25a; box-shadow: 0 0 6px #ffe25a; visibility: hidden; }
+      #scoreboard .serve.on { visibility: visible; }
+      #scoreboard .mid { display: flex; align-items: center; padding: 0 14px; background: #1b2330e8; font-size: 12px; letter-spacing: 0.1em; }
       #prompt { position: fixed; top: 84px; left: 0; right: 0; display: none; text-align: center; pointer-events: none;
                 color: #fff; font-size: 30px; text-shadow: 0 2px 8px #000c; }
       #prompt small { font-size: 0.6em; opacity: 0.85; }
@@ -68,6 +80,11 @@
     <div id="flash"></div>
     <div id="help"></div>
     <div id="prompt"></div>
+    <div id="scoreboard">
+      <div class="team blue"><span class="serve"></span><span class="name">BLUE</span><span class="pts">0</span></div>
+      <div class="mid">FIRST TO 11</div>
+      <div class="team red"><span class="serve"></span><span class="name">RED</span><span class="pts">0</span></div>
+    </div>
     <div id="credit">
       Music: "Stage 1" from
       <a href="https://opengameart.org/content/4-chiptunes-adventure" target="_blank" rel="noopener">Chiptune Adventures</a>

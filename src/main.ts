@@ -8,7 +8,7 @@ import { CHARACTERS, SEAT_CHARACTERS, type CharacterKind } from './render/roster
 import type { MissReason } from './sim/hit';
 import { chargePower, isDiving, type Player } from './sim/player';
 import { DT } from './sim/time';
-import { createMatch, resetRally, restartGame, stepWorld, type SimEvent, type Team } from './sim/world';
+import { createMatch, otherTeam, resetRally, restartGame, stepWorld, type SimEvent, type Team } from './sim/world';
 
 const canvas = document.getElementById('game') as HTMLCanvasElement;
 const stats = document.querySelector('#hud .stats') as HTMLElement;
@@ -405,6 +405,43 @@ function liveSection(devices: Device[]): string {
   return section('Live', body);
 }
 
+// The match scoreboard (top center), shown in match mode only.
+const scoreboard = document.getElementById('scoreboard') as HTMLElement;
+const scoreEls = [...scoreboard.querySelectorAll('.pts')] as HTMLElement[];
+const serveEls = [...scoreboard.querySelectorAll('.serve')] as HTMLElement[];
+const scoreMid = scoreboard.querySelector('.mid') as HTMLElement;
+const shownScore = [-1, -1];
+
+function updateScoreboard(): void {
+  const match = world.mode === 'match';
+  scoreboard.style.display = match ? 'flex' : 'none';
+  if (!match) return;
+  world.score.forEach((points, team) => {
+    if (points === shownScore[team]) return;
+    // A quick pop when a score changes (not on the first draw).
+    if (shownScore[team] >= 0) {
+      scoreEls[team].classList.add('bump');
+      setTimeout(() => scoreEls[team].classList.remove('bump'), 180);
+    }
+    shownScore[team] = points;
+    scoreEls[team].textContent = String(points);
+  });
+  // The serving team gets the ball marker.
+  const serving = otherTeam(world.nextReceiver);
+  serveEls.forEach((el, team) => el.classList.toggle('on', world.winner === null && team === serving));
+  const [a, b] = world.score;
+  const target = tuning.match.pointsToWin;
+  const leader = a > b ? 0 : 1;
+  scoreMid.textContent =
+    world.winner !== null
+      ? `${TEAM_NAMES[world.winner].toUpperCase()} WINS`
+      : a === b && a >= target - 1
+        ? 'WIN BY 2'
+        : Math.max(a, b) >= target - 1 && a !== b
+          ? `GAME POINT ${TEAM_NAMES[leader].toUpperCase()}`
+          : `FIRST TO ${target}`;
+}
+
 function updateHud(frameSeconds: number, devices: Device[]): void {
   const team: Team = world.possession;
   const serverPlayer = world.players[world.serve.serverId] ?? world.players[0];
@@ -432,8 +469,8 @@ function updateHud(frameSeconds: number, devices: Device[]): void {
           : world.ball.alive
             ? `${teamSpan(team)}'s ball${touches}`
             : 'Ball down, next serve coming';
-  const scoreLine = match ? `${teamSpan(0)} ${world.score[0]} – ${world.score[1]} ${teamSpan(1)}<br>` : '';
-  stats.innerHTML = scoreLine + status;
+  stats.innerHTML = status;
+  updateScoreboard();
   renderer.setJumbotron(
     match ? `${world.score[0]} – ${world.score[1]}` : `RALLY ${rally}`,
     match ? (world.winner !== null ? `${TEAM_NAMES[world.winner].toUpperCase()} WINS` : `FIRST TO ${tuning.match.pointsToWin}`) : `BEST ${bestRally}`,
