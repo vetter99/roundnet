@@ -104,12 +104,10 @@ src/main.ts           wires it together; fixed 60Hz loop with render interpolati
   `wobblers` (parts that sway on their own). The button next
   to each seat cycles its character (remembered in localStorage). Everyone
   wears a team-color jersey with their number. House style (keep it for new
-  characters): match the world's low-poly toy look (icosphere facets, flat
-  shading, matte materials, no outlines; `Kit` in roster.ts does this), big
-  heads (`HEAD_SCALE`), big round hands on shoulders set into the torso, and
-  one iconic silhouette anchor each rather than lots of small details.
-  `?smooth` in the URL (src/render/style.ts) tries a smooth-shaded look with
-  a soft sheen and rim light instead.
+  characters): smooth, rounded vinyl-toy shapes with a soft sheen and a
+  rim light (`Kit` in roster.ts and `style.ts`), big heads (`HEAD_SCALE`),
+  big round hands on shoulders set into the torso, and one iconic silhouette
+  anchor each rather than lots of small details.
 - `src/ai/bot.ts` is a deterministic CPU player. In 2v2 the closer eligible
   teammate plays the ball, passes go to the partner, and the other supports
   or spreads out on defense. Seat buttons in the pause menu (Blue 1/2, Red 1/2) set each player

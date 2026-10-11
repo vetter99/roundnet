@@ -5,7 +5,7 @@
 // park's edge, and beyond it cornfields and a water tower on the horizon.
 // (The score is on screen; there's no physical scoreboard.) Neighborhood
 // critters watch from their picnic blankets.
-// Low-poly and flat-shaded like everything else. Visual only.
+// Smooth and rounded like the characters. Visual only.
 
 import { StandardMaterial } from '@babylonjs/core/Materials/standardMaterial';
 import { DynamicTexture } from '@babylonjs/core/Materials/Textures/dynamicTexture';
@@ -21,7 +21,6 @@ import '@babylonjs/core/Meshes/thinInstanceMesh';
 import { TransformNode } from '@babylonjs/core/Meshes/transformNode';
 import type { Scene } from '@babylonjs/core/scene';
 import { createCrowd, type Seat } from './crowd';
-import { SMOOTH } from './style';
 import type { Stadium } from './stadium';
 
 // Families on picnic blankets sit this far out from the net (m; the court's
@@ -40,12 +39,11 @@ function mat(scene: Scene, name: string, color: Color3): StandardMaterial {
   return m;
 }
 
-/** Builds flat-shaded low-poly shapes. */
+/** Builds smooth, rounded shapes. */
 class Builder {
   constructor(readonly scene: Scene) {}
 
   private put(mesh: Mesh, m: StandardMaterial, pos: V3, rot?: V3, parent?: TransformNode): Mesh {
-    if (!SMOOTH) mesh.convertToFlatShadedMesh();
     mesh.material = m;
     mesh.position.set(...pos);
     if (rot) mesh.rotation.set(...rot);
@@ -65,9 +63,7 @@ class Builder {
   }
 
   blob(radius: number, m: StandardMaterial, pos: V3, scale: V3 = [1, 1, 1], parent?: TransformNode): Mesh {
-    const shape = SMOOTH
-      ? MeshBuilder.CreateSphere('park', { diameter: radius * 2, segments: 16 }, this.scene)
-      : MeshBuilder.CreateIcoSphere('park', { radius, subdivisions: 1 }, this.scene);
+    const shape = MeshBuilder.CreateSphere('park', { diameter: radius * 2, segments: 16 }, this.scene);
     const mesh = this.put(shape, m, pos, undefined, parent);
     mesh.scaling.set(...scale);
     return mesh;
@@ -232,8 +228,7 @@ function buildCornfields(b: Builder): void {
   const scene = b.scene;
   const stalk = MeshBuilder.CreateCylinder('cornStalk', { height: 2.3, diameterTop: 0.04, diameterBottom: 0.07, tessellation: 5 }, scene);
   stalk.material = mat(scene, 'cornStalk', new Color3(0.4, 0.6, 0.22));
-  const leaf = MeshBuilder.CreateIcoSphere('cornLeaf', { radius: 0.5, subdivisions: 1 }, scene);
-  if (!SMOOTH) leaf.convertToFlatShadedMesh();
+  const leaf = MeshBuilder.CreateSphere('cornLeaf', { diameter: 1, segments: 6 }, scene);
   leaf.material = mat(scene, 'cornLeaf', new Color3(0.45, 0.66, 0.25));
   const tassel = MeshBuilder.CreateCylinder('cornTassel', { height: 0.35, diameterTop: 0, diameterBottom: 0.16, tessellation: 5 }, scene);
   tassel.material = mat(scene, 'cornTassel', new Color3(0.9, 0.78, 0.4));

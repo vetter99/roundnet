@@ -1,4 +1,4 @@
-// The park around the court: a mowed lawn, low-poly trees, bushes, rocks and
+// The park around the court: a mowed lawn, rounded trees, bushes, rocks and
 // flowers, soft sunlight with shadows, and a light haze in the distance.
 // Textures are drawn on canvases at startup, so there are no image files.
 
@@ -16,7 +16,6 @@ import '@babylonjs/core/Meshes/instancedMesh';
 import type { Mesh } from '@babylonjs/core/Meshes/mesh';
 import { MeshBuilder } from '@babylonjs/core/Meshes/meshBuilder';
 import { Scene } from '@babylonjs/core/scene';
-import { SMOOTH } from './style';
 import { STAND_OUTER_RADIUS } from './stadium';
 
 const GROUND_SIZE = 160;
@@ -123,10 +122,7 @@ export function createScenery(scene: Scene, treeCount = 70): void {
   trunk.material = material(scene, 'bark', new Color3(0.45, 0.3, 0.18));
   trunk.isVisible = false;
   const canopies = leafColors.map((color, i) => {
-    const canopy = SMOOTH
-      ? MeshBuilder.CreateSphere(`canopy${i}`, { diameter: 2.6, segments: 16 }, scene)
-      : MeshBuilder.CreateIcoSphere(`canopy${i}`, { radius: 1.3, subdivisions: 1 }, scene);
-    if (!SMOOTH) canopy.convertToFlatShadedMesh();
+    const canopy = MeshBuilder.CreateSphere(`canopy${i}`, { diameter: 2.6, segments: 16 }, scene);
     canopy.material = material(scene, `leaves${i}`, color);
     canopy.isVisible = false;
     return canopy;
