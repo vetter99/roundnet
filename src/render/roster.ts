@@ -1,0 +1,588 @@
+// The playable characters. Each one is built from simple shapes onto the
+// shared rig in character.ts (body, head, two arm pivots, two leg pivots and
+// a tail pivot), which does all the animation. Everyone wears a sleeveless
+// jersey in their team color with a big white number, so the team reads
+// from any angle.
+
+import { StandardMaterial } from '@babylonjs/core/Materials/standardMaterial';
+import { DynamicTexture } from '@babylonjs/core/Materials/Textures/dynamicTexture';
+import { Color3 } from '@babylonjs/core/Maths/math.color';
+import { Vector3 } from '@babylonjs/core/Maths/math.vector';
+import type { Mesh } from '@babylonjs/core/Meshes/mesh';
+import { MeshBuilder } from '@babylonjs/core/Meshes/meshBuilder';
+import { TransformNode } from '@babylonjs/core/Meshes/transformNode';
+import type { Scene } from '@babylonjs/core/scene';
+
+export type CharacterKind = 'bear' | 'cat' | 'truffles' | 'pinball';
+
+/** Who plays each seat: Blue 1, Blue 2, Red 1, Red 2 (1v1 uses the "1" seats). */
+export const SEAT_CHARACTERS: CharacterKind[] = ['bear', 'cat', 'truffles', 'pinball'];
+
+/** The rig's attachment points (see character.ts). Arms and legs hang down (-y) from their pivots. */
+export interface Rig {
+  scene: Scene;
+  bounce: TransformNode;
+  // Centered on the head; the face points +z.
+  head: TransformNode;
+  tail: TransformNode;
+  // Index 0 is the left side (-x), 1 the right (+x).
+  arms: TransformNode[];
+  legs: TransformNode[];
+}
+
+type V3 = [number, number, number];
+
+const WHITE = new Color3(0.97, 0.97, 0.95);
+const INK = new Color3(0.06, 0.05, 0.06);
+const PINK = new Color3(0.95, 0.55, 0.62);
+const GOLD = new Color3(0.95, 0.75, 0.22);
+const CHROME = new Color3(0.78, 0.8, 0.84);
+const SHORTS = new Color3(0.16, 0.16, 0.19);
+
+/** Shape-making helpers for one character. */
+class Kit {
+  constructor(readonly scene: Scene) {}
+
+  mat(name: string, color: Color3, shine = 0.08, power = 32): StandardMaterial {
+    const m = new StandardMaterial(name, this.scene);
+    m.diffuseColor = color;
+    m.specularColor = new Color3(shine, shine, shine);
+    m.specularPower = power;
+    return m;
+  }
+
+  glow(name: string, color: Color3): StandardMaterial {
+    const m = this.mat(name, color);
+    m.emissiveColor = color;
+    m.disableLighting = true;
+    return m;
+  }
+
+  place(mesh: Mesh, parent: TransformNode, mat: StandardMaterial, pos: V3, rot?: V3, scale?: V3): Mesh {
+    mesh.parent = parent;
+    mesh.material = mat;
+    mesh.position.set(...pos);
+    if (rot) mesh.rotation.set(...rot);
+    if (scale) mesh.scaling.set(...scale);
+    return mesh;
+  }
+
+  sphere(parent: TransformNode, d: number, mat: StandardMaterial, pos: V3, scale?: V3, rot?: V3, segments = 20): Mesh {
+    return this.place(MeshBuilder.CreateSphere('part', { diameter: d, segments }, this.scene), parent, mat, pos, rot, scale);
+  }
+
+  capsule(parent: TransformNode, height: number, radius: number, mat: StandardMaterial, pos: V3, rot?: V3, scale?: V3): Mesh {
+    return this.place(MeshBuilder.CreateCapsule('part', { height, radius, tessellation: 14 }, this.scene), parent, mat, pos, rot, scale);
+  }
+
+  cylinder(parent: TransformNode, height: number, top: number, bottom: number, mat: StandardMaterial, pos: V3, rot?: V3, scale?: V3): Mesh {
+    const mesh = MeshBuilder.CreateCylinder('part', { height, diameterTop: top, diameterBottom: bottom, tessellation: 20 }, this.scene);
+    return this.place(mesh, parent, mat, pos, rot, scale);
+  }
+
+  box(parent: TransformNode, size: V3, mat: StandardMaterial, pos: V3, rot?: V3): Mesh {
+    const mesh = MeshBuilder.CreateBox('part', { width: size[0], height: size[1], depth: size[2] }, this.scene);
+    return this.place(mesh, parent, mat, pos, rot);
+  }
+
+  torus(parent: TransformNode, diameter: number, thickness: number, mat: StandardMaterial, pos: V3, rot?: V3, scale?: V3): Mesh {
+    const mesh = MeshBuilder.CreateTorus('part', { diameter, thickness, tessellation: 32 }, this.scene);
+    return this.place(mesh, parent, mat, pos, rot, scale);
+  }
+
+  /** A smooth bent tube through `points`, tapering from `r0` to `r1`. */
+  tube(parent: TransformNode, points: V3[], r0: number, r1: number, mat: StandardMaterial): Mesh {
+    const path = points.map((p) => new Vector3(...p));
+    const length = pathLength(path);
+    const mesh = MeshBuilder.CreateTube(
+      'part',
+      { path: smooth(path), radiusFunction: (_, d) => r0 + (r1 - r0) * Math.min(1, d / length), tessellation: 14, cap: 3 },
+      this.scene,
+    );
+    return this.place(mesh, parent, mat, [0, 0, 0]);
+  }
+
+  /** An empty pivot for grouping parts (e.g. a prop tilted as a whole). */
+  node(parent: TransformNode, pos: V3, rot?: V3): TransformNode {
+    const n = new TransformNode('group', this.scene);
+    n.parent = parent;
+    n.position.set(...pos);
+    if (rot) n.rotation.set(...rot);
+    return n;
+  }
+
+  /** A shape spun around the y axis: `profile` is [radius, height] pairs from bottom to top. */
+  lathe(parent: TransformNode, profile: [number, number][], mat: StandardMaterial, pos: V3, rot?: V3): Mesh {
+    const shape = profile.map(([r, y]) => new Vector3(r, y, 0));
+    const mesh = MeshBuilder.CreateLathe('part', { shape, tessellation: 40, sideOrientation: 2 }, this.scene);
+    return this.place(mesh, parent, mat, pos, rot);
+  }
+
+  /** A flat card facing +z (both sides drawn), e.g. a number patch or a cape. */
+  card(parent: TransformNode, w: number, h: number, mat: StandardMaterial, pos: V3, rot?: V3): Mesh {
+    const mesh = MeshBuilder.CreatePlane('part', { width: w, height: h, sideOrientation: 2 }, this.scene);
+    return this.place(mesh, parent, mat, pos, rot);
+  }
+}
+
+function pathLength(path: Vector3[]): number {
+  let total = 0;
+  for (let i = 1; i < path.length; i++) total += Vector3.Distance(path[i - 1], path[i]);
+  return total || 1;
+}
+
+/** Catmull-Rom smoothing so tails and cords curve instead of kinking. */
+function smooth(points: Vector3[], steps = 6): Vector3[] {
+  if (points.length < 3) return points;
+  const out: Vector3[] = [];
+  for (let i = 0; i < points.length - 1; i++) {
+    const p0 = points[Math.max(0, i - 1)];
+    const p1 = points[i];
+    const p2 = points[i + 1];
+    const p3 = points[Math.min(points.length - 1, i + 2)];
+    for (let s = 0; s < steps; s++) out.push(Vector3.CatmullRom(p0, p1, p2, p3, s / steps));
+  }
+  out.push(points[points.length - 1]);
+  return out;
+}
+
+/**
+ * The jersey texture for a sphere torso: team color, white collar and hem,
+ * white side piping, and the number big on the front and back.
+ */
+function jerseyTexture(scene: Scene, team: Color3, number: number): DynamicTexture {
+  const w = 512;
+  const h = 256;
+  const tex = new DynamicTexture('jersey', { width: w, height: h }, scene, true);
+  const ctx = tex.getContext() as CanvasRenderingContext2D;
+  ctx.fillStyle = team.toHexString();
+  ctx.fillRect(0, 0, w, h);
+  ctx.fillStyle = '#f6f6f2';
+  ctx.fillRect(0, 0, w, 22);
+  ctx.fillRect(0, h - 16, w, 16);
+  // Side piping at the sides of the body (between front and back).
+  for (const x of [0, w / 2]) ctx.fillRect(x - 5, 0, 10, h);
+  ctx.fillRect(w - 5, 0, 5, h);
+  ctx.font = 'bold 150px "Russo One", Arial Black, sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.lineWidth = 12;
+  ctx.strokeStyle = 'rgba(0,0,0,0.35)';
+  // The sphere's texture lands rotated half a turn, so draw the numbers that way.
+  ctx.scale(-1, -1);
+  for (const x of [w * 0.25, w * 0.75]) {
+    ctx.strokeText(String(number), -x, -h * 0.47);
+    ctx.fillStyle = '#ffffff';
+    ctx.fillText(String(number), -x, -h * 0.47);
+  }
+  tex.update();
+  return tex;
+}
+
+/** A flat number patch (for the pinball machine's cabinet). */
+function numberTexture(scene: Scene, team: Color3, number: number): DynamicTexture {
+  const s = 256;
+  const tex = new DynamicTexture('number', { width: s, height: s }, scene, true);
+  const ctx = tex.getContext() as CanvasRenderingContext2D;
+  ctx.fillStyle = team.toHexString();
+  ctx.fillRect(0, 0, s, s);
+  ctx.strokeStyle = '#f6f6f2';
+  ctx.lineWidth = 16;
+  ctx.strokeRect(8, 8, s - 16, s - 16);
+  ctx.font = 'bold 170px "Russo One", Arial Black, sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillStyle = '#ffffff';
+  ctx.fillText(String(number), s / 2, s * 0.55);
+  tex.update();
+  return tex;
+}
+
+/** The tank-top jersey: a rounded torso with the jersey texture. */
+function jersey(kit: Kit, rig: Rig, team: Color3, number: number, y: number, d: number, scale: V3): Mesh {
+  const mat = kit.mat('jersey', new Color3(1, 1, 1), 0.12, 24);
+  mat.diffuseTexture = jerseyTexture(kit.scene, team, number);
+  const torso = kit.sphere(rig.bounce, d, mat, [0, y, 0], scale, undefined, 32);
+  return torso;
+}
+
+/** A cartoon eye: white, colored iris, pupil, shine; optional lid covering the top. */
+function eye(
+  kit: Kit,
+  parent: TransformNode,
+  pos: V3,
+  o: { size: number; iris: StandardMaterial; look?: [number, number]; lid?: StandardMaterial; lidDrop?: number; tilt?: number },
+): void {
+  const white = kit.mat('eyeWhite', WHITE, 0.4, 48);
+  const pupil = kit.mat('pupil', INK, 0.6, 64);
+  const shine = kit.glow('shine', new Color3(1, 1, 1));
+  const s = o.size;
+  kit.sphere(parent, s, white, pos, [1, 1.15, 0.6], undefined, 18);
+  const [lx, ly] = o.look ?? [0, 0];
+  const front: V3 = [pos[0] + lx * s * 0.18, pos[1] + ly * s * 0.18, pos[2] + s * 0.24];
+  kit.sphere(parent, s * 0.62, o.iris, front, [1, 1.1, 0.35], undefined, 14);
+  kit.sphere(parent, s * 0.34, pupil, [front[0], front[1], front[2] + s * 0.05], [1, 1.1, 0.4], undefined, 12);
+  kit.sphere(parent, s * 0.16, shine, [front[0] + s * 0.12, front[1] + s * 0.15, front[2] + s * 0.09], undefined, undefined, 8);
+  if (o.lid) {
+    // A lid: a slightly bigger cap over the eye, dropped down over the top part.
+    const drop = o.lidDrop ?? 0.35;
+    kit.sphere(parent, s * 1.12, o.lid, [pos[0], pos[1] + s * (0.62 - drop), pos[2] + 0.004], [1.04, 0.62, 0.66], [0, 0, o.tilt ?? 0], 18);
+  }
+}
+
+/** A plain arm: upper and fore arm in one capsule, with a hand at the end (about where the rig expects the paw). */
+function arm(kit: Kit, pivot: TransformNode, skin: StandardMaterial, hand: StandardMaterial, thickness = 0.05, handSize = 0.11): void {
+  kit.capsule(pivot, 0.27, thickness, skin, [0, -0.12, 0]);
+  kit.sphere(pivot, handSize, hand, [0, -0.255, 0.005], [1, 0.95, 0.9], undefined, 16);
+  // A little thumb so it reads as a hand.
+  kit.sphere(pivot, handSize * 0.42, hand, [0, -0.235, 0.05], undefined, undefined, 10);
+}
+
+/** A leg with a chunky sneaker (white sole, colored upper, laces). */
+function sneakerLeg(kit: Kit, pivot: TransformNode, skin: StandardMaterial, upper: Color3, thickness = 0.062): void {
+  kit.capsule(pivot, 0.2, thickness, skin, [0, -0.09, 0]);
+  const shoe = kit.mat('shoe', upper, 0.25, 40);
+  const sole = kit.mat('sole', WHITE, 0.1);
+  kit.sphere(pivot, 0.16, shoe, [0, -0.19, 0.04], [0.95, 0.62, 1.45], undefined, 18);
+  kit.box(pivot, [0.13, 0.035, 0.24], sole, [0, -0.225, 0.045]);
+  kit.box(pivot, [0.08, 0.012, 0.05], kit.mat('laces', WHITE), [0, -0.15, 0.1], [0.5, 0, 0]);
+}
+
+/** Shorts over the hips. */
+function shorts(kit: Kit, rig: Rig, scale: V3, color = SHORTS): void {
+  kit.sphere(rig.bounce, 0.38, kit.mat('shorts', color, 0.1), [0, 0.3, 0], scale, undefined, 24);
+}
+
+// ---------------------------------------------------------------------------
+// 1. The bear: purple, lumpy and a little ugly, covered in leaves, with a
+//    rainbow scarf and a giant crayon tucked behind his ear (he draws a lot).
+
+function buildBear(kit: Kit, rig: Rig, team: Color3, number: number): void {
+  const fur = kit.mat('fur', new Color3(0.47, 0.32, 0.66), 0.05);
+  const pale = kit.mat('muzzle', new Color3(0.76, 0.66, 0.86), 0.05);
+  const dark = kit.mat('nose', INK, 0.5, 48);
+  const tooth = kit.mat('tooth', new Color3(0.98, 0.95, 0.82), 0.3);
+  const leafA = kit.mat('leafA', new Color3(0.3, 0.6, 0.22), 0.15);
+  const leafB = kit.mat('leafB', new Color3(0.45, 0.72, 0.28), 0.15);
+  const iris = kit.mat('iris', new Color3(0.55, 0.35, 0.15), 0.3);
+
+  // Pudgy body: shorts, a big jersey belly.
+  shorts(kit, rig, [1.25, 0.85, 1.15]);
+  jersey(kit, rig, team, number, 0.52, 0.5, [1.15, 1, 1.05]);
+
+  const h = rig.head;
+  kit.sphere(h, 0.52, fur, [0, 0, 0], [1.1, 0.95, 1], undefined, 32);
+  // Lumps: the head isn't quite round.
+  kit.sphere(h, 0.2, fur, [0.12, 0.17, -0.04]);
+  kit.sphere(h, 0.17, fur, [-0.17, 0.08, -0.06]);
+  // Ears: one round, one chewed-looking and lower.
+  kit.sphere(h, 0.16, fur, [-0.2, 0.2, -0.02], [1, 1, 0.55]);
+  kit.sphere(h, 0.09, pale, [-0.2, 0.2, 0.02], [1, 1, 0.4]);
+  kit.sphere(h, 0.12, fur, [0.23, 0.13, -0.02], [1, 0.8, 0.5], [0, 0, -0.5]);
+  // Snout, a big shiny nose, droopy mismatched eyes under a unibrow, and a snaggletooth.
+  kit.sphere(h, 0.27, pale, [0, -0.09, 0.19], [1.15, 0.78, 0.95], undefined, 24);
+  kit.sphere(h, 0.1, dark, [0, -0.03, 0.31], [1.3, 0.85, 0.9]);
+  eye(kit, h, [-0.1, 0.05, 0.215], { size: 0.085, iris, look: [0.3, -0.2], lid: fur, lidDrop: 0.45 });
+  eye(kit, h, [0.1, 0.07, 0.21], { size: 0.07, iris, look: [-0.2, -0.1], lid: fur, lidDrop: 0.25, tilt: 0.3 });
+  kit.capsule(h, 0.25, 0.022, dark, [0, 0.13, 0.22], [0, 0, Math.PI / 2 + 0.08]);
+  kit.box(h, [0.035, 0.05, 0.02], tooth, [0.035, -0.19, 0.285], [0, 0, 0.15]);
+
+  // Rainbow scarf: a striped loop around the neck and an end hanging down the front.
+  const rainbow = ['#e8403a', '#f28c28', '#f5d02a', '#4cb84a', '#3a7be8', '#8a4fd6'];
+  const scarf = kit.mat('scarf', new Color3(1, 1, 1), 0.05);
+  scarf.diffuseTexture = stripes(kit.scene, rainbow);
+  kit.torus(rig.bounce, 0.34, 0.09, scarf, [0, 0.74, 0.01], undefined, [1.15, 1, 1]);
+  rainbow.forEach((color, i) => {
+    const band = kit.mat(`scarfEnd${i}`, Color3.FromHexString(color), 0.05);
+    kit.box(rig.bounce, [0.1, 0.045, 0.035], band, [-0.12, 0.69 - i * 0.045, 0.255 - i * 0.004], [0.12, 0, 0.1]);
+  });
+
+  // The giant crayon, tucked behind his right ear.
+  const crayon = kit.mat('crayon', new Color3(0.93, 0.25, 0.55), 0.3);
+  const wrapper = kit.mat('wrapper', new Color3(0.2, 0.1, 0.35), 0.1);
+  const crayonRoot = kit.node(h, [0.21, 0.2, -0.05], [0.4, 0.2, -1.0]);
+  kit.cylinder(crayonRoot, 0.34, 0.07, 0.07, crayon, [0, 0, 0]);
+  kit.cylinder(crayonRoot, 0.2, 0.074, 0.074, wrapper, [0, -0.02, 0]);
+  kit.cylinder(crayonRoot, 0.09, 0.0, 0.07, crayon, [0, 0.215, 0]);
+
+  // Leaves stuck all over him.
+  const leaves: [TransformNode, V3, V3][] = [
+    [h, [0.02, 0.26, 0.02], [0.3, 0.4, 0.2]],
+    [h, [-0.14, 0.22, 0.1], [-0.5, 0.9, 0.4]],
+    [h, [0.2, -0.02, 0.12], [0.2, -0.6, 1.2]],
+    [h, [-0.22, -0.06, 0.06], [0.6, 0.3, -1.1]],
+    [rig.bounce, [0.2, 0.58, 0.14], [0.9, 0.2, 0.7]],
+    [rig.bounce, [-0.24, 0.5, 0.05], [0.2, 1.1, -0.9]],
+    [rig.bounce, [0.05, 0.42, -0.25], [-0.9, 0.3, 0.2]],
+    [rig.bounce, [-0.16, 0.3, 0.17], [1.1, -0.4, 0.3]],
+    [rig.arms[0], [0.04, -0.1, 0.04], [0.3, 0.5, 1.3]],
+    [rig.arms[1], [-0.04, -0.15, 0.03], [-0.4, 0.2, -1.2]],
+    [rig.legs[1], [0.05, -0.06, 0.05], [0.6, 0.8, 1.0]],
+  ];
+  leaves.forEach(([parent, pos, rot], i) => {
+    kit.sphere(parent, 0.13, i % 2 ? leafA : leafB, pos, [1, 0.18, 0.55], rot, 12);
+  });
+
+  for (const pivot of rig.arms) arm(kit, pivot, fur, fur, 0.058, 0.13);
+  // Bare bear feet with pale pads.
+  for (const pivot of rig.legs) {
+    kit.capsule(pivot, 0.2, 0.07, fur, [0, -0.09, 0]);
+    kit.sphere(pivot, 0.17, fur, [0, -0.2, 0.04], [1, 0.6, 1.35], undefined, 18);
+    kit.sphere(pivot, 0.1, pale, [0, -0.205, 0.1], [1, 0.4, 0.8], [0.4, 0, 0], 12);
+  }
+  kit.sphere(rig.tail, 0.13, fur, [0, 0.04, 0.02]);
+}
+
+/** Horizontal color bands (for the scarf, so the stripes run along it). */
+function stripes(scene: Scene, colors: string[]): DynamicTexture {
+  const tex = new DynamicTexture('stripes', { width: 64, height: 192 }, scene, true);
+  const ctx = tex.getContext() as CanvasRenderingContext2D;
+  const band = 192 / colors.length;
+  colors.forEach((c, i) => {
+    ctx.fillStyle = c;
+    ctx.fillRect(0, i * band, 64, band + 1);
+  });
+  tex.update();
+  return tex;
+}
+
+// ---------------------------------------------------------------------------
+// 2. The black cat: extremely annoying. Mismatched wall-eyes, one smug lid, a
+//    lopsided grin with its tongue out, messy tufts, crooked whiskers, a bent
+//    ear, crumbs and a mustard stain on its jersey.
+
+function buildCat(kit: Kit, rig: Rig, team: Color3, number: number): void {
+  const fur = kit.mat('fur', new Color3(0.1, 0.1, 0.12), 0.35, 24);
+  const muzzle = kit.mat('muzzle', new Color3(0.24, 0.24, 0.27), 0.2);
+  const pink = kit.mat('pink', PINK, 0.3);
+  const white = kit.mat('white', WHITE, 0.3);
+
+  shorts(kit, rig, [1, 0.75, 0.95]);
+  jersey(kit, rig, team, number, 0.5, 0.44, [1, 0.97, 0.88]);
+  // Crumbs and a mustard stain: nobody sits next to this cat at lunch.
+  kit.sphere(rig.bounce, 0.08, kit.mat('mustard', new Color3(0.86, 0.68, 0.12), 0.3), [0.07, 0.47, 0.19], [1.3, 0.9, 0.3]);
+  const crumb = kit.mat('crumb', new Color3(0.78, 0.6, 0.35));
+  for (const p of [[-0.08, 0.58, 0.19], [0.12, 0.55, 0.18], [-0.02, 0.43, 0.21]] as V3[]) kit.sphere(rig.bounce, 0.025, crumb, p, undefined, undefined, 6);
+
+  const h = rig.head;
+  kit.sphere(h, 0.5, fur, [0, 0, 0], [1.15, 0.95, 1], undefined, 32);
+  // Messy tufts sticking up every which way.
+  for (const [x, rz, len] of [[-0.06, 0.4, 0.14], [0.03, -0.3, 0.17], [0.1, -0.7, 0.12]]) {
+    kit.cylinder(h, len, 0, 0.07, fur, [x, 0.25, 0.02], [0.2, 0, rz]);
+  }
+  // Ears: the left upright, the right bent over at the tip.
+  kit.cylinder(h, 0.2, 0, 0.15, fur, [-0.17, 0.22, -0.01], [0, 0, 0.35]);
+  kit.cylinder(h, 0.12, 0, 0.08, pink, [-0.165, 0.21, 0.02], [0, 0, 0.35]);
+  kit.cylinder(h, 0.11, 0.07, 0.15, fur, [0.17, 0.19, -0.01], [0, 0, -0.35]);
+  kit.cylinder(h, 0.1, 0, 0.07, fur, [0.25, 0.2, 0.01], [0, 0, -2.0]);
+
+  kit.sphere(h, 0.24, muzzle, [0, -0.1, 0.18], [1.25, 0.72, 0.8], undefined, 24);
+  kit.sphere(h, 0.05, pink, [0, -0.05, 0.27], [1.3, 0.8, 0.8]);
+  // Wall-eyed: a big yellow eye looking out left, a smaller green one looking out right under a smug lid.
+  eye(kit, h, [-0.1, 0.05, 0.2], { size: 0.13, iris: kit.mat('irisY', new Color3(0.95, 0.82, 0.15), 0.4), look: [-0.9, 0.3] });
+  eye(kit, h, [0.11, 0.04, 0.2], { size: 0.1, iris: kit.mat('irisG', new Color3(0.4, 0.82, 0.3), 0.4), look: [0.9, -0.4], lid: fur, lidDrop: 0.45, tilt: -0.25 });
+  // Lopsided grin full of teeth, tongue hanging out the side.
+  kit.box(h, [0.17, 0.035, 0.03], white, [0.02, -0.15, 0.245], [0, 0, -0.18]);
+  kit.sphere(h, 0.08, pink, [0.07, -0.18, 0.25], [0.8, 0.35, 1.1], [0.3, 0, -0.3]);
+  // Crooked whiskers.
+  const whisker = kit.mat('whisker', new Color3(0.85, 0.85, 0.85));
+  for (const side of [-1, 1]) {
+    for (const [dy, rz] of [[0, 0.1], [-0.03, -0.15], [-0.06, side > 0 ? -0.6 : -0.3]]) {
+      kit.cylinder(h, 0.2, 0.006, 0.01, whisker, [side * 0.18, -0.08 + dy, 0.2], [0, 0, Math.PI / 2 + side * rz]);
+    }
+  }
+
+  for (const pivot of rig.arms) arm(kit, pivot, fur, fur, 0.045, 0.1);
+  for (const pivot of rig.legs) sneakerLeg(kit, pivot, fur, new Color3(0.55, 0.55, 0.52), 0.05);
+  // A long tail curling out to the side (clear of the number), kinked near the tip.
+  kit.tube(rig.tail, [[0, 0, 0], [0.1, 0.03, -0.12], [0.26, 0.12, -0.16], [0.36, 0.3, -0.12], [0.33, 0.44, -0.06], [0.26, 0.42, -0.02]], 0.04, 0.025, fur);
+}
+
+// ---------------------------------------------------------------------------
+// 3. TrufflesUpaGus: a chihuahua matador. Huge bat ears, bulging eyes, gold
+//    epaulettes and a cape, a rose in his teeth, and a sombrero that is a
+//    red spotted mushroom cap.
+
+function buildTruffles(kit: Kit, rig: Rig, team: Color3, number: number): void {
+  const fur = kit.mat('fur', new Color3(0.85, 0.66, 0.42), 0.06);
+  const cream = kit.mat('cream', new Color3(0.97, 0.88, 0.72), 0.05);
+  const dark = kit.mat('nose', INK, 0.6, 64);
+  const pink = kit.mat('pink', PINK, 0.2);
+  const gold = kit.mat('gold', GOLD, 0.7, 64);
+  const capRed = kit.mat('capRed', new Color3(0.86, 0.14, 0.12), 0.35, 40);
+  const spots = kit.mat('spots', new Color3(0.98, 0.96, 0.9), 0.2);
+  const gills = kit.mat('gills', new Color3(0.9, 0.8, 0.62), 0.05);
+
+  shorts(kit, rig, [0.9, 0.72, 0.85], new Color3(0.08, 0.08, 0.1));
+  jersey(kit, rig, team, number, 0.5, 0.4, [0.95, 1, 0.85]);
+
+  const h = rig.head;
+  // Apple-domed head, short pointy muzzle.
+  kit.sphere(h, 0.5, fur, [0, 0.02, 0], [1.05, 0.95, 0.95], undefined, 32);
+  kit.sphere(h, 0.2, cream, [0, -0.1, 0.18], [1, 0.75, 1.1], undefined, 20);
+  kit.sphere(h, 0.065, dark, [0, -0.07, 0.29], [1.2, 0.9, 0.9]);
+  // Big bulging eyes.
+  eye(kit, h, [-0.11, 0.03, 0.2], { size: 0.13, iris: kit.mat('iris', new Color3(0.25, 0.14, 0.06), 0.6, 64), look: [-0.1, 0.1] });
+  eye(kit, h, [0.11, 0.03, 0.2], { size: 0.13, iris: kit.mat('iris2', new Color3(0.25, 0.14, 0.06), 0.6, 64), look: [0.1, 0.1] });
+  // Giant bat ears sticking out sideways below the hat brim.
+  for (const side of [-1, 1]) {
+    const ear = kit.cylinder(h, 0.38, 0, 0.24, fur, [side * 0.33, 0.07, -0.02], [0, 0, -side * 1.3], [1, 1, 0.35]);
+    kit.cylinder(ear, 0.28, 0, 0.16, pink, [0, -0.02, 0.035]);
+  }
+  // A red rose clenched in his teeth.
+  kit.sphere(h, 0.06, kit.mat('rose', new Color3(0.8, 0.05, 0.12), 0.3), [0.1, -0.16, 0.24]);
+  kit.cylinder(h, 0.18, 0.012, 0.012, kit.mat('stem', new Color3(0.2, 0.5, 0.2)), [0.02, -0.17, 0.25], [0, 0, Math.PI / 2 - 0.2]);
+
+  // The sombrero: a mushroom cap with a wide brim, white spots and gills underneath.
+  const hat = kit.node(h, [0, 0.2, -0.01], [-0.12, 0, 0.12]);
+  // Profile [radius, height]: a wide upturned brim rising into a tall, round mushroom dome.
+  kit.lathe(hat, [[0.0, 0.0], [0.42, 0.0], [0.45, 0.05], [0.4, 0.04], [0.24, 0.05], [0.2, 0.1], [0.21, 0.2], [0.17, 0.29], [0.09, 0.34], [0.0, 0.35]], capRed, [0, 0, 0]);
+  kit.cylinder(hat, 0.012, 0.84, 0.84, gills, [0, -0.006, 0]);
+  // Big white mushroom spots on the dome and brim.
+  const spotAt: [number, number, number, number][] = [
+    [0.4, 0.2, 0.17, 0.1], [2.3, 0.2, 0.15, 0.09], [4.2, 0.19, 0.18, 0.1], [1.4, 0.13, 0.29, 0.08], [3.4, 0.12, 0.29, 0.07], [5.3, 0.13, 0.28, 0.08],
+    [0.9, 0.33, 0.04, 0.08], [2.6, 0.32, 0.04, 0.09], [3.9, 0.34, 0.045, 0.07], [5.6, 0.33, 0.04, 0.08], [0.0, 0.0, 0.35, 0.08],
+  ];
+  for (const [a, r, y, d] of spotAt) {
+    const spot = kit.sphere(hat, d, spots, [Math.cos(a) * r, y, Math.sin(a) * r], [1, 0.35, 1]);
+    // Lay each spot on the hat's surface.
+    if (r > 0) spot.rotation.set(Math.sin(a) * (y > 0.1 ? 0.6 : 0.15), 0, -Math.cos(a) * (y > 0.1 ? 0.6 : 0.15));
+  }
+
+  // Matador: gold fringed epaulettes and a short cape.
+  for (const pivot of rig.arms) {
+    kit.sphere(pivot, 0.13, gold, [0, 0.03, 0], [1.2, 0.5, 1.1]);
+    for (let i = 0; i < 5; i++) kit.cylinder(pivot, 0.05, 0.012, 0.012, gold, [-0.04 + i * 0.02, -0.01, 0.04]);
+    arm(kit, pivot, fur, cream, 0.04, 0.1);
+  }
+  // A short matador capelet across the shoulders (it stops above the jersey number).
+  const cape = kit.mat('cape', new Color3(0.62, 0.04, 0.08), 0.15);
+  kit.card(rig.bounce, 0.44, 0.15, cape, [0, 0.66, -0.19], [0.5, Math.PI, 0]);
+  kit.box(rig.bounce, [0.44, 0.025, 0.012], gold, [0, 0.59, -0.225], [0.5, 0, 0]);
+
+  // Skinny legs and black matador slippers.
+  const slipper = kit.mat('slipper', new Color3(0.07, 0.07, 0.08), 0.5, 48);
+  for (const pivot of rig.legs) {
+    kit.capsule(pivot, 0.2, 0.04, fur, [0, -0.09, 0]);
+    kit.sphere(pivot, 0.13, slipper, [0, -0.2, 0.03], [0.9, 0.5, 1.4], undefined, 16);
+    kit.sphere(pivot, 0.04, kit.mat('bow', PINK), [0, -0.17, 0.11], [1.4, 0.7, 0.6]);
+  }
+  // A little curled tail, off to the side so the number shows.
+  kit.tube(rig.tail, [[0, 0, 0], [0.08, 0.04, -0.1], [0.18, 0.14, -0.1], [0.2, 0.22, -0.04]], 0.03, 0.015, fur);
+}
+
+// ---------------------------------------------------------------------------
+// 4. The pinball machine: a goofy cabinet in team colors with its number on
+//    the front and sides, googly eyes on the backbox, flippers for arms, a
+//    plunger nose, chrome legs and its power cord for a tail.
+
+function buildPinball(kit: Kit, rig: Rig, team: Color3, number: number): void {
+  const teamMat = kit.mat('cabinet', team, 0.35, 40);
+  const trim = kit.mat('trim', WHITE, 0.3);
+  const chrome = kit.mat('chrome', CHROME, 0.9, 96);
+  const black = kit.mat('black', new Color3(0.08, 0.08, 0.1), 0.4);
+  const numberMat = kit.mat('number', new Color3(1, 1, 1), 0.2);
+  numberMat.diffuseTexture = numberTexture(kit.scene, team, number);
+  const b = rig.bounce;
+
+  // The cabinet body, with white edge trim and the number on the front and both sides.
+  kit.box(b, [0.5, 0.36, 0.6], teamMat, [0, 0.42, 0]);
+  for (const x of [-0.255, 0.255]) {
+    kit.box(b, [0.012, 0.37, 0.61], trim, [x, 0.42, 0]);
+    kit.card(b, 0.26, 0.26, numberMat, [x * 1.04, 0.43, 0.05], [0, x > 0 ? -Math.PI / 2 : Math.PI / 2, 0]);
+  }
+  kit.card(b, 0.22, 0.22, numberMat, [0, 0.45, 0.302], [0, Math.PI, 0]);
+  kit.card(b, 0.26, 0.26, numberMat, [0, 0.43, -0.302]);
+  // Coin door under the number, with two glowing coin slots.
+  kit.box(b, [0.2, 0.08, 0.02], black, [0, 0.3, 0.305]);
+  for (const x of [-0.05, 0.05]) kit.box(b, [0.04, 0.03, 0.01], kit.glow('slot', new Color3(1, 0.55, 0.1)), [x, 0.3, 0.318]);
+  // The playfield on top: glass, three bumpers and a steel ball.
+  kit.box(b, [0.46, 0.012, 0.56], kit.mat('field', new Color3(0.12, 0.1, 0.25), 0.2), [0, 0.605, 0]);
+  [new Color3(0.95, 0.2, 0.2), new Color3(1, 0.85, 0.1), new Color3(0.2, 0.6, 1)].forEach((c, i) => {
+    const x = (i - 1) * 0.12;
+    kit.cylinder(b, 0.05, 0.08, 0.08, kit.glow(`bumper${i}`, c), [x, 0.635, -0.08 + (i % 2) * 0.1]);
+    kit.cylinder(b, 0.012, 0.09, 0.09, trim, [x, 0.665, -0.08 + (i % 2) * 0.1]);
+  });
+  kit.sphere(b, 0.06, chrome, [0.12, 0.645, 0.14]);
+  const glass = kit.mat('glass', new Color3(0.7, 0.85, 1), 0.9, 96);
+  glass.alpha = 0.25;
+  kit.box(b, [0.47, 0.01, 0.57], glass, [0, 0.69, 0]);
+
+  // Plunger nose sticking out the front right.
+  kit.cylinder(b, 0.14, 0.025, 0.025, chrome, [0.18, 0.5, 0.36], [Math.PI / 2, 0, 0]);
+  kit.sphere(b, 0.06, kit.mat('knob', new Color3(0.9, 0.1, 0.1), 0.5), [0.18, 0.5, 0.44]);
+
+  // The backbox (its head): a lit display with goofy googly eyes and a dot-matrix grin.
+  const h = rig.head;
+  kit.box(h, [0.5, 0.36, 0.14], teamMat, [0, 0.02, -0.18]);
+  kit.box(h, [0.52, 0.03, 0.16], trim, [0, 0.215, -0.18]);
+  const screen = kit.mat('screen', new Color3(1, 1, 1));
+  screen.diffuseTexture = displayTexture(kit.scene);
+  screen.emissiveColor = new Color3(0.6, 0.6, 0.6);
+  kit.card(h, 0.44, 0.3, screen, [0, 0.02, -0.105], [0, Math.PI, 0]);
+  kit.card(h, 0.28, 0.28, numberMat, [0, 0.02, -0.252]);
+  eye(kit, h, [-0.1, 0.07, -0.09], { size: 0.13, iris: kit.mat('irisB', new Color3(0.2, 0.5, 0.95), 0.4), look: [0.6, 0.7] });
+  eye(kit, h, [0.1, 0.06, -0.09], { size: 0.16, iris: kit.mat('irisB2', new Color3(0.2, 0.5, 0.95), 0.4), look: [-0.7, -0.6] });
+  // Antenna lamp on top, because it's goofy.
+  kit.cylinder(h, 0.12, 0.012, 0.012, chrome, [0.15, 0.28, -0.18]);
+  kit.sphere(h, 0.06, kit.glow('lamp', new Color3(1, 0.3, 0.2)), [0.15, 0.35, -0.18]);
+
+  // Flipper arms, mounted on the outside of the cabinet: a chrome rod with a
+  // white flipper bat on the end and a red rubber ring.
+  for (const pivot of rig.arms) {
+    pivot.position.x = Math.sign(pivot.position.x) * 0.31;
+    kit.sphere(pivot, 0.08, kit.mat('button', new Color3(0.9, 0.15, 0.15), 0.5), [0, 0, 0]);
+    kit.cylinder(pivot, 0.16, 0.025, 0.025, chrome, [0, -0.08, 0]);
+    kit.capsule(pivot, 0.17, 0.045, kit.mat('flipper', WHITE, 0.4), [0, -0.23, 0.03], [0.3, 0, 0], [1, 1, 0.6]);
+    kit.torus(pivot, 0.1, 0.02, kit.mat('rubber', new Color3(0.85, 0.1, 0.12), 0.2), [0, -0.17, 0.02], [Math.PI / 2, 0, 0]);
+  }
+  // Chrome legs (the front two walk; the back two are fixed) with leveler feet.
+  for (const pivot of rig.legs) {
+    kit.cylinder(pivot, 0.22, 0.05, 0.04, chrome, [0, -0.1, 0.12]);
+    kit.cylinder(pivot, 0.03, 0.08, 0.08, black, [0, -0.225, 0.12]);
+  }
+  for (const x of [-0.2, 0.2]) {
+    kit.cylinder(b, 0.24, 0.05, 0.04, chrome, [x, 0.12, -0.24]);
+    kit.cylinder(b, 0.03, 0.08, 0.08, black, [x, 0.015, -0.24]);
+  }
+  // Power cord tail, ending in a plug.
+  kit.tube(rig.tail, [[0, 0.15, 0.1], [0, 0.05, -0.08], [0.05, -0.15, -0.25], [0.1, -0.24, -0.45]], 0.018, 0.018, black);
+  kit.box(rig.tail, [0.06, 0.04, 0.08], black, [0.1, -0.24, -0.47]);
+  for (const x of [0.085, 0.115]) kit.box(rig.tail, [0.008, 0.01, 0.04], chrome, [x, -0.24, -0.52]);
+}
+
+/** The backbox display: dark glass with an orange dot-matrix grin and "TILT!" */
+function displayTexture(scene: Scene): DynamicTexture {
+  const w = 256;
+  const h = 176;
+  const tex = new DynamicTexture('display', { width: w, height: h }, scene, true);
+  const ctx = tex.getContext() as CanvasRenderingContext2D;
+  ctx.fillStyle = '#140c1e';
+  ctx.fillRect(0, 0, w, h);
+  ctx.fillStyle = '#ff8a1a';
+  // A dot-matrix grin.
+  for (let i = 0; i < 15; i++) {
+    const x = 40 + i * 12.5;
+    const y = 128 + Math.sin((i / 14) * Math.PI) * 22;
+    ctx.beginPath();
+    ctx.arc(x, y, 4.5, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.font = 'bold 22px monospace';
+  ctx.textAlign = 'center';
+  ctx.fillText('TILT!', w / 2, 34);
+  tex.update();
+  return tex;
+}
+
+const BUILDERS: Record<CharacterKind, (kit: Kit, rig: Rig, team: Color3, number: number) => void> = {
+  bear: buildBear,
+  cat: buildCat,
+  truffles: buildTruffles,
+  pinball: buildPinball,
+};
+
+/** Build a character's look onto the rig, in its team color with its jersey number. */
+export function buildCharacter(rig: Rig, kind: CharacterKind, team: Color3, number: number): void {
+  BUILDERS[kind](new Kit(rig.scene), rig, team, number);
+}

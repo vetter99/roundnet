@@ -22,6 +22,7 @@ import { cameraPosition, frame, type Framing } from './cameraFraming';
 import { Character } from './character';
 import { addHaze, createBallMaterial, createLawn, createScenery, createShadows, SKY } from './environment';
 import { buildRoundnetSet } from './roundnetSet';
+import { SEAT_CHARACTERS } from './roster';
 import { createStadium, type Stadium } from './stadium';
 import type { ShadowGenerator } from '@babylonjs/core/Lights/Shadows/shadowGenerator';
 import { chargePower, diveRecoveryTicks, diveTicks } from '../sim/player';
@@ -29,8 +30,6 @@ import { clamp, lerp, type Vec3 } from '../sim/vec';
 import type { World } from '../sim/world';
 import { serveHand, serveWobble } from '../sim/serve';
 
-// How much lighter (toward white) a team's second player's shirt is in 2v2.
-const SECOND_SHIRT_LIGHTEN = 0.4;
 // A ball that moves further than this (m) in one tick was teleported, not thrown.
 const BALL_JUMP = 1.5;
 const TEAM_COLORS = [new Color3(0.2, 0.45, 0.95), new Color3(0.95, 0.3, 0.25)];
@@ -440,9 +439,8 @@ export class Renderer {
 
   private createPlayerView(team: 0 | 1, slot: number): PlayerView {
     const scene = this.scene;
-    // A team's second player wears a lighter shirt so teammates can be told apart.
-    const shirt = slot === 0 ? TEAM_COLORS[team] : Color3.Lerp(TEAM_COLORS[team], new Color3(1, 1, 1), SECOND_SHIRT_LIGHTEN);
-    const character = new Character(scene, shirt, team === 0 ? 'squirrel' : 'raccoon');
+    // Each seat has its own character; teammates wear numbers 1 and 2.
+    const character = new Character(scene, TEAM_COLORS[team], SEAT_CHARACTERS[team * 2 + slot], slot + 1);
     for (const mesh of character.root.getChildMeshes()) this.shadows.addShadowCaster(mesh);
 
     const reachRing = MeshBuilder.CreateTorus('reach', { diameter: 2, thickness: 0.04, tessellation: 48 }, scene);

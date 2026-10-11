@@ -72,7 +72,11 @@ src/main.ts           wires it together; fixed 60Hz loop with render interpolati
   (`autoDiveTarget` in `src/sim/hit.ts`). There is no dive button.
 - 2v2 serving: server and receiver straight across, partners to the sides
   (`partnerSpot`); a team rotates its server each time it wins the serve back
-  (`setNextReceiver`, `world.serveOrder`). Teammate 2 wears a lighter shirt.
+  (`setNextReceiver`, `world.serveOrder`).
+- Characters (`src/render/roster.ts`) are built on the shared animated rig in
+  `src/render/character.ts`, fixed per seat: Blue 1 purple bear, Blue 2 black
+  cat, Red 1 TrufflesUpaGus (chihuahua matador, mushroom sombrero), Red 2
+  pinball machine. Everyone wears a team-color jersey with their number.
 - `src/ai/bot.ts` is a deterministic CPU player. In 2v2 the closer eligible
   teammate plays the ball, passes go to the partner, and the other supports
   or spreads out on defense. Seat buttons (Blue 1/2, Red 1/2) set each player
