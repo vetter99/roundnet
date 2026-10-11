@@ -34,7 +34,7 @@ and UX cards.
   differences). Teams wear **full kits** (jersey, shorts, wristbands/headband).
 - **Animation:** snappy and exaggerated (big squash and stretch,
   anticipation, follow-through). Reactions for now: **idle fidgets** only.
-- **Sound:** **cartoon pop/thwack** hits, a **coin-style "ding"** on perfects.
+- **Sound:** **cartoon pop/thwack** hits (the perfect-hit coin ding was removed 2026-10-10; the user didn't like it).
   **Music:** upbeat cartoon sports (to be chosen from free-license options).
 - **UI:** **bold sporty** lettering.
 - **Ball:** dimpled yellow ball with a **subtle speed trail** on fast spikes.
@@ -109,7 +109,7 @@ and UX cards.
 | AUDIO-01 | Music rotation + menu track | P2 | S | UX-01 |
 | AUDIO-02 | Crowd reactions | P2 | M | |
 | AUDIO-03 | Footsteps and landing sounds | P3 | S | |
-| AUDIO-04 | Hit feedback ✅ cartoon hits + coin ding | P0 | S | |
+| AUDIO-04 | Hit feedback ✅ cartoon hits (coin ding removed) | P0 | S | |
 | MODE-01 | Training drills | P2 | M | |
 | MODE-02 | Party mode with power-ups | P3 | L | RULE-02 |
 | MODE-03 | Tournament vs. CPU | P3 | L | AI-01, RULE-02 |
