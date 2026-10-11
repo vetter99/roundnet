@@ -116,19 +116,6 @@ export class Sfx {
     if (quality < 0.6) this.tone({ type: 'square', from: 140, to: 110, gain: 0.1 * loud, decay: 0.08 });
   }
 
-  /**
-   * A perfectly timed hit: a coin-style two-note "ding" (a fourth apart).
-   * For your own hits it's bright and full, and rises a semitone with each
-   * consecutive perfect (`streak` 0, 1, 2...); the CPU gets a softer version.
-   */
-  perfect(mine: boolean, streak = 0): void {
-    const base = 988 * Math.pow(2, Math.min(streak, 7) / 12);
-    const gain = mine ? 0.2 : 0.07;
-    this.tone({ type: 'square', from: base, to: base, gain, decay: 0.07, delay: 0.015 });
-    this.tone({ type: 'square', from: base * 4 / 3, to: base * 4 / 3, gain, decay: 0.32, delay: 0.085 });
-    if (mine) this.tone({ type: 'sine', from: base * 2, to: base * 2, gain: 0.08, decay: 0.3, delay: 0.085 });
-  }
-
   /** The ball hits the net: a springy trampoline "boing", louder for harder hits. */
   net(impactSpeed: number): void {
     const loud = Math.min(1, 0.35 + impactSpeed / 12);

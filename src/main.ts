@@ -170,8 +170,6 @@ window.addEventListener('resize', () => renderer.resize());
 // Net hits by players in the current rally, and the best rally so far (jumbotron).
 let rally = 0;
 let bestRally = 0;
-// Consecutive perfect hits by you (Blue); the perfect ding rises with it.
-let playerPerfectStreak = 0;
 
 // Latest details for the dev stats panel.
 type HitEvent = Extract<SimEvent, { type: 'hit' }>;
@@ -195,11 +193,7 @@ function onEvent(e: SimEvent): void {
     // A human's hits (or everyone's, when no one is playing) at full volume.
     const featured = human[e.playerId] || !human.some(Boolean);
     sfx.hit(e.kind, e.power, e.quality, featured ? 1 : tuning.audio.cpuHits);
-    if (mine) playerPerfectStreak = e.quality >= 1 ? playerPerfectStreak + 1 : 0;
-    if (e.quality >= 1) {
-      if (mine) showFlash('Perfect', '#5ee07a', 0.45);
-      sfx.perfect(mine, mine ? playerPerfectStreak - 1 : 0);
-    }
+    if (mine && e.quality >= 1) showFlash('Perfect', '#5ee07a', 0.45);
   } else if (e.type === 'net') {
     lastNet = e;
     // The serve's bounce doesn't count; every player hit that reaches the net does.
@@ -216,7 +210,6 @@ function onEvent(e: SimEvent): void {
     showFlash(`Point ${TEAM_NAMES[e.team]}`, TEAM_CSS[e.team], 1);
   } else if (e.type === 'gameOver') {
     showFlash(`${TEAM_NAMES[e.winner]} wins ${Math.max(...world.score)}–${Math.min(...world.score)}!`, TEAM_CSS[e.winner], 3);
-    sfx.perfect(true, 4);
   } else if (e.type === 'serve') {
     renderer.playServe(e.playerId, e.spin);
     sfx.hit('spike', e.power, 1, human[e.playerId] || !human.some(Boolean) ? 1 : tuning.audio.cpuHits);

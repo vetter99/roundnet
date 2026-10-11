@@ -149,7 +149,7 @@ export class Renderer {
     this.ball = MeshBuilder.CreateSphere('ball', { diameter: 1, segments: 20 }, scene);
     this.ball.material = createBallMaterial(scene);
     // A faint streak behind fast spikes.
-    const trail = new TrailMesh('ballTrail', this.ball, scene, { diameter: 0.3, length: 22, sections: 8, autoStart: true });
+    const trail = new TrailMesh('ballTrail', this.ball, scene, { diameter: 0.3, length: 14, sections: 8, autoStart: true });
     this.trailMat = flatMaterial('ballTrail', new Color3(1, 0.95, 0.7), scene);
     this.trailMat.disableLighting = true;
     this.trailMat.emissiveColor = new Color3(1, 0.95, 0.7);
