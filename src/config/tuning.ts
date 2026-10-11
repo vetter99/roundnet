@@ -151,6 +151,8 @@ export const DEFAULT_TUNING = {
   serve: {
     // The server stands this far behind the serve line.
     behindLine: 0.4,
+    // The receiver starts this far behind their serve line (then moves freely).
+    receiverBack: 1,
     // How fast the stick moves the aim across the net (m/s), and how far out
     // it can go (fraction of the net radius; 1 = the edge).
     aimSpeed: 1.4,
@@ -164,10 +166,11 @@ export const DEFAULT_TUNING = {
     // Attempts per serve before it's lost.
     tries: 2,
     // Spin: sideways stick while charging sets sidespin; the serve curves this
-    // hard (m/s² at full spin; a slow serve bends ~0.6 m, a fast one ~0.15 m),
-    // and the net kicks it sideways by the curve times spinKick (s).
-    spinCurve: 3,
-    spinKick: 0.22,
+    // hard (m/s² at full spin; a slow serve bends ~0.7 m, a fast one ~0.2 m),
+    // and the net kicks it sideways by the curve times spinKick (s), so a
+    // full-spin serve ends up ~2 m to the side of a receiver who stands still.
+    spinCurve: 3.5,
+    spinKick: 0.4,
   },
 
   // Rally timing, and a ball fed off the net (a practice/test helper).
@@ -198,15 +201,16 @@ export const DEFAULT_TUNING = {
     // Seconds of player movement to look ahead, so running toward the camera
     // shows where you're going before you get there.
     lookAhead: 0.5,
-    // Serve duel camera: close behind the receiver, this far back, this far
-    // off to the side (over their shoulder) and this high, with this field of
-    // view, easing in/out at duelBlendSpeed. The receiver turns see-through.
+    // Serve duel camera: behind the receiver, looking straight at the server,
+    // this far back, this far off to the side (0 = straight behind) and this
+    // high, with this field of view, easing in/out at duelBlendSpeed. The
+    // receiver turns see-through.
     duelBack: 3.4,
-    duelSide: 1,
-    duelHeight: 2.3,
+    duelSide: 0,
+    duelHeight: 3,
     duelFov: 0.9,
     // How see-through the receiver is in the duel view (1 = solid).
-    duelReceiverOpacity: 0.45,
+    duelReceiverOpacity: 0.35,
     duelBlendSpeed: 3,
   },
 

@@ -349,14 +349,14 @@ export class Renderer {
     const away = Math.hypot(receiver.pos.x, receiver.pos.z) || 1;
     const ux = receiver.pos.x / away;
     const uz = receiver.pos.z / away;
-    // Over the receiver's right shoulder, so their whole body shows beside the view.
+    // Straight behind the receiver (duelSide moves it over a shoulder).
     const duelPos = {
       x: receiver.pos.x + ux * c.duelBack + uz * c.duelSide,
       y: c.duelHeight,
       z: receiver.pos.z + uz * c.duelBack - ux * c.duelSide,
     };
     // Look across the net toward the server, about where the serve will come from.
-    const duelTarget = { x: server.pos.x * 0.6, y: 0.75, z: server.pos.z * 0.6 };
+    const duelTarget = { x: server.pos.x * 0.3, y: 0.5, z: server.pos.z * 0.3 };
 
     const b = this.duelBlend;
     const pos = { x: lerp(broadcastPos.x, duelPos.x, b), y: lerp(broadcastPos.y, duelPos.y, b), z: lerp(broadcastPos.z, duelPos.z, b) };

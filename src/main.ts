@@ -60,8 +60,8 @@ modeButton.addEventListener('click', () => {
 let gameOverTicks = 0;
 
 // Who plays each side: a human or the CPU, toggled with the on-screen buttons.
-// Default: you play Blue against a CPU Red. Both CPU = watch AI vs AI.
-const human = [true, false];
+// Default: both CPU (watch AI vs AI) until someone takes a seat.
+const human = [false, false];
 const SEAT_LABELS = [
   ['🤖 Blue: CPU', '🎮 Blue: You'],
   ['🤖 Red: CPU', '🎮 Red: Player 2'],

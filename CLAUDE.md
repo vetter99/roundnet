@@ -60,14 +60,15 @@ src/main.ts           wires it together; fixed 60Hz loop with render interpolati
   leans toward the aim. While charging, the aim locks and sideways stick sets
   spin (`serve.spin`): the arm cocks to one side and sweeps across on
   release, and the serve curves that way. No steering after release. The
-  renderer shows an over-the-shoulder camera behind the (see-through)
-  receiver until the return; human stick input follows the camera.
+  receiver starts behind their serve line (`serve.receiverBack`). The
+  renderer shows a camera straight behind the (see-through) receiver until
+  the return; human stick input follows the camera.
   `feedBall` (feeding the ball off the net) is only a test/practice helper.
 - Hits charge while the button is held and swing on release (`chargePower`).
 - Dives are automatic: swinging at a ball just out of reach dives for it
   (`autoDiveTarget` in `src/sim/hit.ts`). There is no dive button.
 - `src/ai/bot.ts` is a deterministic CPU player. On-screen toggles set each
-  side to human or CPU (you vs CPU by default; 2 players; or CPU vs CPU).
+  side to human or CPU (CPU vs CPU on load; you vs CPU; or 2 players).
 - Hit quality comes from timing: how close the ball is to the player's
   contact height at contact. Bad hits are weaker and drift off target.
 - Spikes always target the net center; the stick only aims passes. The worst-

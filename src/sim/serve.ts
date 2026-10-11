@@ -43,9 +43,9 @@ export function serverSpot(team: Team, t: Tuning): { x: number; z: number } {
   return { x: 0, z: sideOf(team) * (netOuterRadius(t) + t.court.serveLineDistance + t.serve.behindLine) };
 }
 
-/** Where the receiver starts: on the serve line, opposite the server (then free to move). */
+/** Where the receiver starts: behind their serve line, opposite the server (then free to move). */
 export function receiverSpot(team: Team, t: Tuning): { x: number; z: number } {
-  return { x: 0, z: sideOf(team) * (netOuterRadius(t) + t.court.serveLineDistance) };
+  return { x: 0, z: sideOf(team) * (netOuterRadius(t) + t.court.serveLineDistance + t.serve.receiverBack) };
 }
 
 /** Get ready for a serve: place server and receiver, reset the aim. */
