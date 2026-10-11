@@ -27,6 +27,11 @@
       #hud .row .v { font-weight: 600; text-align: right; }
       #hud .row small { opacity: 0.7; font-size: 12px; }
       #hud .empty { opacity: 0.6; }
+      #hud .panel { position: relative; width: max-content; }
+      #hud .panel.hidden { display: none; }
+      #closeStats { position: absolute; top: 14px; right: 6px; width: 22px; height: 22px; padding: 0; border: 0; border-radius: 50%;
+                    background: #ffffff22; color: #fff; font-size: 16px; line-height: 22px; cursor: pointer; pointer-events: auto; }
+      #closeStats:hover { background: #ffffff44; }
       #hud .miss { margin-top: 8px; padding: 6px 8px; border-radius: 6px; background: #ff7a6b26; font-size: 14px; }
       #hud .bar { display: inline-block; width: 70px; height: 8px; margin-right: 6px; border-radius: 4px;
                   background: #ffffff26; vertical-align: middle; overflow: hidden; }
@@ -54,7 +59,10 @@
   </head>
   <body>
     <canvas id="game" tabindex="0"></canvas>
-    <div id="hud"><div class="stats"></div><div class="last"></div></div>
+    <div id="hud">
+      <div class="stats"></div>
+      <div class="panel"><button id="closeStats" title="Hide stats (I shows them again)">×</button><div class="last"></div></div>
+    </div>
     <div id="flash"></div>
     <div id="help"></div>
     <div id="prompt"></div>

@@ -95,7 +95,7 @@ and UX cards.
 | UX-01 | Title screen | P1 | M | |
 | UX-02 | Pause menu | P1 | S | |
 | UX-03 | Settings screen | P1 | M | UX-02 |
-| UX-04 | Hide dev panels for players | P0 | S | |
+| UX-04 | Hide dev panels for players ✅ (× closes the stats panel, I toggles, remembered) | P0 | S | |
 | UX-05 | How-to-play / tutorial | P2 | M | UX-01 |
 | UX-06 | Character select | P2 | M | ART-03 |
 | UX-07 | Timing guide ✅ kept as is; player circle removed | P0 | S | |

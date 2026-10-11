@@ -33,8 +33,29 @@ soundButton.addEventListener('click', () => {
   sfx.unlock();
   canvas.focus();
 });
+// The stats panel: the × hides it, I toggles it; remembered on this browser.
+const statsPanel = document.querySelector('#hud .panel') as HTMLElement;
+const STATS_HIDDEN_KEY = 'roundnet.statsHidden';
+function setStatsHidden(hidden: boolean): void {
+  statsPanel.classList.toggle('hidden', hidden);
+  try {
+    localStorage.setItem(STATS_HIDDEN_KEY, hidden ? '1' : '0');
+  } catch {
+    // Storage can be unavailable (private mode); the panel still works.
+  }
+}
+try {
+  statsPanel.classList.toggle('hidden', localStorage.getItem(STATS_HIDDEN_KEY) === '1');
+} catch {
+  // Shown by default.
+}
+(document.getElementById('closeStats') as HTMLButtonElement).addEventListener('click', () => {
+  setStatsHidden(true);
+  canvas.focus();
+});
 window.addEventListener('keydown', (e) => {
   if (e.code === 'KeyM' && !e.repeat) sfx.muted = !sfx.muted;
+  if (e.code === 'KeyI' && !e.repeat) setStatsHidden(!statsPanel.classList.contains('hidden'));
 });
 // Per player: whether their charge was already full, to ding once on reaching it.
 const chargeWasFull = [false, false, false, false];
@@ -383,5 +404,5 @@ function updateHud(frameSeconds: number, devices: Device[]): void {
     return d === 'cpu' ? `${playerName(p)}: CPU` : `${playerName(p)} (${deviceName(d)}): ${controlsHelp(d)}`;
   };
   help.textContent =
-    `${sound} · \` tuning · swing at a ball just out of reach to dive   |   ${world.players.map(side).join('   |   ')}`;
+    `${sound} · I stats · \` tuning · swing at a ball just out of reach to dive   |   ${world.players.map(side).join('   |   ')}`;
 }
