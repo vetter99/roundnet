@@ -79,7 +79,7 @@ src/main.ts           wires it together; fixed 60Hz loop with render interpolati
   Red 2 pinball machine; also pickable: Tattoo Guy, Tilt (pinball-loving
   trickster fox), Chris P. Bacon (a piglet on all fours, back end in a wheel
   cart; no arms, so his hits are body lunges), Doo Doo (an original baby
-  shark that hops on its tail), Pesto (giant fluffy penguin chick, waddles),
+  shark lying flat, wiggling across the ground), Pesto (giant fluffy penguin chick, waddles),
   Capy (four-legged capybara with an orange on its head), Tube Man (wacky
   inflatable tube man gliding on his blower, flailing). Characters should
   move distinctly, not all be standing-human variants: the rig supports
