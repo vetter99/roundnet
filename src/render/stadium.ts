@@ -15,8 +15,8 @@ import '@babylonjs/core/Meshes/thinInstanceMesh';
 import { MeshBuilder } from '@babylonjs/core/Meshes/meshBuilder';
 import type { Scene } from '@babylonjs/core/scene';
 
-// Stands start this far from the net (the "medium" distance).
-export const STAND_INNER_RADIUS = 18;
+// Stands start this far from the net: close, so the crowd is in the shot.
+export const STAND_INNER_RADIUS = 11;
 const ROWS = 10;
 const ROW_DEPTH = 0.9;
 const ROW_RISE = 0.55;

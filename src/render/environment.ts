@@ -185,11 +185,11 @@ export function createBallMaterial(scene: Scene): StandardMaterial {
       let g: number;
       let b: number;
       if (nearStripEdge || nearSideEdge) {
-        [r, g, b] = [214, 164, 30];
+        [r, g, b] = [176, 142, 52];
       } else if (strip === 1) {
-        [r, g, b] = [255, 240, 110];
+        [r, g, b] = [232, 218, 132];
       } else {
-        [r, g, b] = [255, 226, 54];
+        [r, g, b] = [226, 198, 84];
       }
       const i = (py * w + px) * 4;
       img.data[i] = r;
@@ -202,8 +202,8 @@ export function createBallMaterial(scene: Scene): StandardMaterial {
   tex.update();
   const mat = material(scene, 'ball', new Color3(1, 1, 1));
   mat.diffuseTexture = tex;
-  // A little self-glow keeps the ball bright and easy to track, even in shade.
-  mat.emissiveColor = new Color3(0.34, 0.3, 0.06);
-  mat.specularColor = new Color3(0.3, 0.3, 0.25);
+  // A touch of self-glow keeps it readable in shade without looking neon.
+  mat.emissiveColor = new Color3(0.16, 0.14, 0.05);
+  mat.specularColor = new Color3(0.15, 0.15, 0.13);
   return mat;
 }

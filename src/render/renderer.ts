@@ -4,6 +4,7 @@ import { Engine } from '@babylonjs/core/Engines/engine';
 import { DirectionalLight } from '@babylonjs/core/Lights/directionalLight';
 import { HemisphericLight } from '@babylonjs/core/Lights/hemisphericLight';
 import { StandardMaterial } from '@babylonjs/core/Materials/standardMaterial';
+import { DynamicTexture } from '@babylonjs/core/Materials/Textures/dynamicTexture';
 import { Color3, Color4 } from '@babylonjs/core/Maths/math.color';
 import { Vector3 } from '@babylonjs/core/Maths/math.vector';
 import { Mesh } from '@babylonjs/core/Meshes/mesh';
@@ -57,11 +58,13 @@ interface ChargeMeter {
   fillMat: StandardMaterial;
 }
 
-// The ball's speed trail fades in between these speeds (m/s), so only fast
-// spikes leave a streak.
-const TRAIL_MIN_SPEED = 9;
-const TRAIL_FULL_SPEED = 14;
-const TRAIL_MAX_ALPHA = 0.45;
+// The ball's trail fades in between these speeds (m/s): nearly every ball in
+// the air leaves a streak, which helps track where it's going.
+const TRAIL_MIN_SPEED = 3;
+const TRAIL_FULL_SPEED = 8;
+const TRAIL_MAX_ALPHA = 0.7;
+// Even a slow ball (e.g. at the top of a pass) keeps a faint trail while in play.
+const TRAIL_MIN_ALPHA = 0.25;
 // Spin you can read: the ball turns about its vertical axis at this many
 // rad/s per m/s² of curve (full serve spin ≈ 4 turns a second), and a tinted
 // trail shows behind any spun ball.
@@ -146,7 +149,7 @@ export class Renderer {
     this.ball = MeshBuilder.CreateSphere('ball', { diameter: 1, segments: 20 }, scene);
     this.ball.material = createBallMaterial(scene);
     // A faint streak behind fast spikes.
-    const trail = new TrailMesh('ballTrail', this.ball, scene, { diameter: 0.16, length: 14, sections: 6, autoStart: true });
+    const trail = new TrailMesh('ballTrail', this.ball, scene, { diameter: 0.3, length: 22, sections: 8, autoStart: true });
     this.trailMat = flatMaterial('ballTrail', new Color3(1, 0.95, 0.7), scene);
     this.trailMat.disableLighting = true;
     this.trailMat.emissiveColor = new Color3(1, 0.95, 0.7);
@@ -156,17 +159,15 @@ export class Renderer {
     trail.isPickable = false;
 
     this.marker = new TransformNode('marker', scene);
-    this.approachMat = glowMaterial('approach', scene);
-    this.targetMat = glowMaterial('target', scene);
-    // Unit-radius rings scaled per frame (their thickness scales along with them).
-    this.approachRing = MeshBuilder.CreateTorus('approachRing', { diameter: 2, thickness: 0.11, tessellation: 64 }, scene);
+    // Soft glows lying on the grass: bright at the ring line, fading out on
+    // both sides. Unit-radius rings scaled per frame (the glow scales too).
+    this.approachMat = glowMaterial('approach', glowRingTexture('approachGlow', 0.08, false, scene), scene);
+    this.targetMat = glowMaterial('target', glowRingTexture('targetGlow', 0.22, true, scene), scene);
+    this.approachRing = MeshBuilder.CreateGround('approachRing', { width: 2.4, height: 2.4 }, scene);
     this.approachRing.material = this.approachMat;
-    this.targetRing = MeshBuilder.CreateTorus('targetRing', { diameter: 2, thickness: 0.2, tessellation: 48 }, scene);
+    this.targetRing = MeshBuilder.CreateGround('targetRing', { width: 2.4, height: 2.4 }, scene);
     this.targetRing.material = this.targetMat;
-    const dot = MeshBuilder.CreateDisc('markerDot', { radius: 0.06, tessellation: 24 }, scene);
-    dot.rotation.x = Math.PI / 2;
-    dot.material = this.targetMat;
-    for (const m of [this.approachRing, this.targetRing, dot]) {
+    for (const m of [this.approachRing, this.targetRing]) {
       m.parent = this.marker;
       m.isPickable = false;
     }
@@ -197,7 +198,7 @@ export class Renderer {
     const v = world.ball.vel;
     const fast = clamp((Math.hypot(v.x, v.y, v.z) - TRAIL_MIN_SPEED) / (TRAIL_FULL_SPEED - TRAIL_MIN_SPEED), 0, 1);
     const spin = this.updateBallSpin(world, frameSeconds);
-    this.trailMat.alpha = world.ball.alive ? Math.max(fast * TRAIL_MAX_ALPHA, spin * 0.4) : 0;
+    this.trailMat.alpha = world.ball.alive ? Math.max(lerp(TRAIL_MIN_ALPHA, TRAIL_MAX_ALPHA, fast), spin * 0.4) : 0;
     this.trailMat.emissiveColor = Color3.Lerp(TRAIL_PLAIN, TRAIL_SPIN, spin);
     this.updateBallShadow(this.ball.position, world.ball.alive, t);
     this.updateNetWobble(frameSeconds, t);
@@ -530,10 +531,43 @@ const APPROACH_ORANGE = new Color3(1, 0.5, 0.1);
 const TARGET_WHITE = new Color3(1, 1, 1);
 
 /** An unlit material whose color and opacity are set per frame. */
-function glowMaterial(name: string, scene: Scene): StandardMaterial {
-  const mat = flatMaterial(name, TARGET_WHITE, scene);
+function glowMaterial(name: string, glow: DynamicTexture, scene: Scene): StandardMaterial {
+  const mat = flatMaterial(name, new Color3(0, 0, 0), scene);
   mat.disableLighting = true;
+  mat.emissiveColor = TARGET_WHITE;
+  mat.opacityTexture = glow;
+  mat.backFaceCulling = false;
   return mat;
+}
+
+/**
+ * A soft glowing ring for a 2.4 x 2.4 ground square: opaque at radius 1 and
+ * fading to nothing `width` (in radius units) to either side, and optionally
+ * a faint glow in the middle that marks the center.
+ */
+function glowRingTexture(name: string, width: number, center: boolean, scene: Scene): DynamicTexture {
+  const size = 256;
+  const tex = new DynamicTexture(name, { width: size, height: size }, scene, true);
+  tex.hasAlpha = true;
+  const ctx = tex.getContext() as CanvasRenderingContext2D;
+  ctx.clearRect(0, 0, size, size);
+  const c = size / 2;
+  const unit = size / 2.4;
+  const ring = ctx.createRadialGradient(c, c, (1 - width) * unit, c, c, (1 + width) * unit);
+  ring.addColorStop(0, 'rgba(255,255,255,0)');
+  ring.addColorStop(0.5, 'rgba(255,255,255,1)');
+  ring.addColorStop(1, 'rgba(255,255,255,0)');
+  ctx.fillStyle = ring;
+  ctx.fillRect(0, 0, size, size);
+  if (center) {
+    const dot = ctx.createRadialGradient(c, c, 0, c, c, 0.3 * unit);
+    dot.addColorStop(0, 'rgba(255,255,255,0.7)');
+    dot.addColorStop(1, 'rgba(255,255,255,0)');
+    ctx.fillStyle = dot;
+    ctx.fillRect(0, 0, size, size);
+  }
+  tex.update();
+  return tex;
 }
 
 function setGlow(mat: StandardMaterial, color: Color3, alpha: number): void {
