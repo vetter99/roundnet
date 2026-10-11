@@ -16,6 +16,7 @@ export class Sfx {
   // Dips the music briefly under each hit (separate from the music volume).
   private readonly musicDuck: GainNode | null;
   private duckLevel = 0.4;
+  private hitBoost = 1;
   private musicStarted = false;
   muted = false;
 
@@ -30,7 +31,15 @@ export class Sfx {
       return;
     }
     this.master = this.ctx.createGain();
-    this.master.connect(this.ctx.destination);
+    // A limiter on the way out, so boosted hits never distort.
+    const limiter = this.ctx.createDynamicsCompressor();
+    limiter.threshold.value = -6;
+    limiter.knee.value = 4;
+    limiter.ratio.value = 12;
+    limiter.attack.value = 0.002;
+    limiter.release.value = 0.12;
+    this.master.connect(limiter);
+    limiter.connect(this.ctx.destination);
     this.musicDuck = this.ctx.createGain();
     this.musicDuck.connect(this.master);
     this.musicBus = this.ctx.createGain();
@@ -54,7 +63,8 @@ export class Sfx {
     return this.ctx?.state === 'suspended';
   }
 
-  setVolume(volume: number, music: number, duck: number): void {
+  setVolume(volume: number, music: number, duck: number, hits: number): void {
+    this.hitBoost = hits;
     if (this.master) this.master.gain.value = this.muted ? 0 : volume;
     if (this.musicBus) this.musicBus.gain.value = music;
     this.duckLevel = duck;
@@ -96,7 +106,7 @@ export class Sfx {
    */
   hit(kind: ShotKind, power: number, quality: number, volume: number): void {
     this.duckMusic();
-    const loud = (0.8 + 0.2 * power) * volume;
+    const loud = (0.8 + 0.2 * power) * volume * this.hitBoost;
     if (kind === 'drop') {
       // A light, soft "tup": a gentle touch, not a smack.
       this.tone({ type: 'sine', from: 520, to: 360, gain: 0.35 * loud, decay: 0.06 });

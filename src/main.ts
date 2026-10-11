@@ -160,7 +160,7 @@ renderer.engine.runRenderLoop(() => {
     accumulator -= DT;
   }
 
-  sfx.setVolume(tuning.audio.volume, tuning.audio.music, tuning.audio.duck);
+  sfx.setVolume(tuning.audio.volume, tuning.audio.music, tuning.audio.duck, tuning.audio.hits);
   renderer.sync(world, prev, accumulator / DT, tuning, frameSeconds);
   updateHud(frameSeconds, devices);
 });
