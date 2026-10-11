@@ -42,13 +42,19 @@
       #sound { position: fixed; bottom: 40px; left: 50%; transform: translateX(-50%); display: none;
                padding: 10px 18px; border: 0; border-radius: 999px; cursor: pointer;
                background: #ffd84a; color: #1d2b1f; font-size: 16px; box-shadow: 0 2px 10px #0006; }
-      /* Pause overlay: dims the game, title and a resume button in the middle. */
+      /* Pause overlay: dims the game; title, resume button, and the settings menu. */
       #paused { position: fixed; inset: 0; display: none; flex-direction: column; align-items: center; justify-content: center; gap: 14px;
                 background: #0a1210a0; color: #fff; font-family: 'Russo One', system-ui, sans-serif; z-index: 5; }
       #paused .title { font-size: 46px; letter-spacing: 0.12em; text-shadow: 0 2px 10px #000c; }
       #paused button { padding: 10px 26px; border: 0; border-radius: 999px; cursor: pointer; font-family: inherit; font-size: 18px;
                        background: #ffffffe8; color: #1d2b1f; box-shadow: 0 2px 10px #0006; }
       #paused .hint { font-size: 13px; opacity: 0.8; }
+      #paused .menu { display: flex; flex-direction: column; gap: 10px; padding: 14px 18px; border-radius: 14px; background: #0d1a14d0; box-shadow: 0 4px 16px #0006; }
+      #paused .menu h4 { margin: 0; font-size: 12px; font-weight: 400; letter-spacing: 0.12em; opacity: 0.7; }
+      #paused .menu .row { display: flex; gap: 8px; justify-content: center; }
+      #paused .menu button { padding: 7px 14px; font-size: 14px; }
+      #paused .menu button:hover { background: #fff; }
+      #paused .menu .pick { background: #ffffffb0; font-size: 12px; padding: 7px 10px; }
       /* Match scoreboard, top center: team blocks with the score, a label in the middle. */
       #scoreboard { position: fixed; top: 10px; left: 50%; transform: translateX(-50%); display: none; align-items: stretch;
                     border-radius: 10px; overflow: hidden; box-shadow: 0 3px 12px #0006; pointer-events: none;
@@ -67,14 +73,11 @@
       #prompt b { display: inline-block; min-width: 1.4em; padding: 0 0.3em; border-radius: 999px; background: #3fbf5f; }
       #credit { position: fixed; top: 12px; right: 16px; font-size: 11px; color: #fffb; text-shadow: 0 1px 2px #000a; }
       #credit a { color: inherit; }
-      /* Who plays each side: toggles between a human and the CPU. */
-      #seats { position: fixed; top: 34px; right: 16px; display: flex; flex-direction: column; align-items: flex-end; gap: 6px; }
-      #seats button { padding: 7px 13px; border: 0; border-radius: 999px; cursor: pointer;
-                      background: #ffffffe0; color: #1d2b1f; font-family: 'Russo One', system-ui, sans-serif; font-size: 14px;
-                      box-shadow: 0 2px 8px #0005; }
-      #seats button:hover { background: #fff; }
-      #seats .seatRow { display: flex; gap: 6px; }
-      #seats .pick { background: #ffffffb0; font-size: 12px; padding: 7px 10px; }
+      /* The pause button, alone in the top right; all settings live in the pause menu. */
+      #pause { position: fixed; top: 34px; right: 16px; padding: 7px 13px; border: 0; border-radius: 999px; cursor: pointer;
+               background: #ffffffe0; color: #1d2b1f; font-family: 'Russo One', system-ui, sans-serif; font-size: 14px;
+               box-shadow: 0 2px 8px #0005; }
+      #pause:hover { background: #fff; }
       #help { position: fixed; bottom: 10px; left: 16px; right: 16px; color: #fffd; font-size: 13px; text-shadow: 0 1px 2px #000a; pointer-events: none; }
     </style>
   </head>
@@ -90,6 +93,19 @@
     <div id="paused">
       <div class="title">PAUSED</div>
       <button id="resume">▶ Resume</button>
+      <div class="menu">
+        <h4>GAME</h4>
+        <div class="row">
+          <button id="mode">🏆 Match (to 11)</button>
+          <button id="format">👥 2v2</button>
+          <button id="statsToggle">📊 Show stats</button>
+        </div>
+        <h4>PLAYERS · character ▸ and who plays</h4>
+        <div class="seatRow row"><button class="pick" id="pick0"></button><button id="seat0"></button></div>
+        <div class="seatRow row"><button class="pick" id="pick1"></button><button id="seat1"></button></div>
+        <div class="seatRow row"><button class="pick" id="pick2"></button><button id="seat2"></button></div>
+        <div class="seatRow row"><button class="pick" id="pick3"></button><button id="seat3"></button></div>
+      </div>
       <div class="hint">Esc / P, or the Menu button on a controller</div>
     </div>
     <div id="scoreboard">
@@ -102,16 +118,7 @@
       <a href="https://opengameart.org/content/4-chiptunes-adventure" target="_blank" rel="noopener">Chiptune Adventures</a>
       by Juhani Junkala (CC0)
     </div>
-    <div id="seats">
-      <button id="pause">⏸ Pause</button>
-      <button id="statsToggle">📊 Show stats</button>
-      <button id="mode">🏆 Match (to 11)</button>
-      <button id="format">👥 2v2</button>
-      <div class="seatRow"><button class="pick" id="pick0"></button><button id="seat0"></button></div>
-      <div class="seatRow"><button class="pick" id="pick1"></button><button id="seat1"></button></div>
-      <div class="seatRow"><button class="pick" id="pick2"></button><button id="seat2"></button></div>
-      <div class="seatRow"><button class="pick" id="pick3"></button><button id="seat3"></button></div>
-    </div>
+    <button id="pause">⏸ Pause</button>
     <button id="sound">🔇 Click here to turn on sound</button>
     <script type="module" src="/src/main.ts"></script>
   </body>

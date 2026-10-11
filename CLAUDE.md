@@ -48,12 +48,12 @@ src/main.ts           wires it together; fixed 60Hz loop with render interpolati
 - No rim faults for now: the frame bounces like the net.
 - The ball is only playable after it comes off the net or a player
   (`isPlayable` in `src/sim/hit.ts`).
-- 1v1 or 2v2 rallies (`src/sim/world.ts`, `world.format`, on-screen toggle):
+- 1v1 or 2v2 rallies (`src/sim/world.ts`, `world.format`, pause-menu toggle):
   when the ball comes off the net, the other team has possession and must
   put it back on the net. In 2v2 no player may touch the ball twice in a row
   (`noDoubleTouch` in `Turn`); in 1v1 you can pass to yourself. The team without
   the ball can't hit it and gets pushed aside if it runs into the team with
-  the ball. Two modes (on-screen toggle): practice (no score, serve
+  the ball. Two modes (pause-menu toggle): practice (no score, serve
   alternates) and match (to `match.pointsToWin`, win by 2; the side that lets
   the ball land loses the point; the winner serves; `match.maxTouches`; a
   double fault gives the receiver the point).
@@ -68,6 +68,8 @@ src/main.ts           wires it together; fixed 60Hz loop with render interpolati
   renderer shows a camera straight behind the (see-through) receiver until
   the return; human stick input follows the camera.
   `feedBall` (feeding the ball off the net) is only a test/practice helper.
+- All settings (mode, format, stats, seats and characters) live in the pause
+  menu; the play screen only shows a Pause button (or Esc / P / controller Menu).
 - Hits charge while the button is held and swing on release (`chargePower`).
 - Dives are automatic: swinging at a ball just out of reach dives for it
   (`autoDiveTarget` in `src/sim/hit.ts`). There is no dive button.
@@ -94,7 +96,7 @@ src/main.ts           wires it together; fixed 60Hz loop with render interpolati
   one iconic silhouette anchor each rather than lots of small details.
 - `src/ai/bot.ts` is a deterministic CPU player. In 2v2 the closer eligible
   teammate plays the ball, passes go to the partner, and the other supports
-  or spreads out on defense. Seat buttons (Blue 1/2, Red 1/2) set each player
+  or spreads out on defense. Seat buttons in the pause menu (Blue 1/2, Red 1/2) set each player
   to human or CPU (all CPU, 2v2 match, on load); humans get gamepads in seat order, then
   the keyboard (whole, or split WASD / arrows for two).
 - Hit quality comes from timing: how close the ball is to the player's
