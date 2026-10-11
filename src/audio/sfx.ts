@@ -13,6 +13,9 @@ export class Sfx {
   private readonly noise: AudioBuffer | null;
   // Background music, on its own volume under the master volume.
   private readonly musicBus: GainNode | null;
+  // Dips the music briefly under each hit (separate from the music volume).
+  private readonly musicDuck: GainNode | null;
+  private duckLevel = 0.4;
   private musicStarted = false;
   muted = false;
 
@@ -23,12 +26,15 @@ export class Sfx {
       this.master = null;
       this.noise = null;
       this.musicBus = null;
+      this.musicDuck = null;
       return;
     }
     this.master = this.ctx.createGain();
     this.master.connect(this.ctx.destination);
+    this.musicDuck = this.ctx.createGain();
+    this.musicDuck.connect(this.master);
     this.musicBus = this.ctx.createGain();
-    this.musicBus.connect(this.master);
+    this.musicBus.connect(this.musicDuck);
     // One second of white noise, reused for every noisy sound.
     this.noise = this.ctx.createBuffer(1, this.ctx.sampleRate, this.ctx.sampleRate);
     const data = this.noise.getChannelData(0);
@@ -48,9 +54,20 @@ export class Sfx {
     return this.ctx?.state === 'suspended';
   }
 
-  setVolume(volume: number, music: number): void {
+  setVolume(volume: number, music: number, duck: number): void {
     if (this.master) this.master.gain.value = this.muted ? 0 : volume;
     if (this.musicBus) this.musicBus.gain.value = music;
+    this.duckLevel = duck;
+  }
+
+  /** Dip the music under a hit, then bring it back over a fraction of a second. */
+  private duckMusic(): void {
+    if (!this.ctx || !this.musicDuck) return;
+    const g = this.musicDuck.gain;
+    const t0 = this.ctx.currentTime;
+    g.cancelScheduledValues(t0);
+    g.setTargetAtTime(this.duckLevel, t0, 0.01);
+    g.setTargetAtTime(1, t0 + 0.12, 0.15);
   }
 
   /** Load a music file and loop it forever on the music bus (starts once). */
@@ -74,11 +91,12 @@ export class Sfx {
   /**
    * The ball is struck, cartoon style: a big thwack for spikes, a bouncy pop
    * for passes. Every hit is clearly audible; power adds weight and
-   * brightness rather than deciding whether you hear it. The CPU's hits play
-   * quieter (`mine` = false) so your own stand out.
+   * brightness rather than deciding whether you hear it. `volume` scales it
+   * (e.g. a CPU's hits a little quieter so your own stand out).
    */
-  hit(kind: ShotKind, power: number, quality: number, mine: boolean): void {
-    const loud = (0.8 + 0.2 * power) * (mine ? 1 : 0.6);
+  hit(kind: ShotKind, power: number, quality: number, volume: number): void {
+    this.duckMusic();
+    const loud = (0.8 + 0.2 * power) * volume;
     if (kind === 'drop') {
       // A light, soft "tup": a gentle touch, not a smack.
       this.tone({ type: 'sine', from: 520, to: 360, gain: 0.35 * loud, decay: 0.06 });

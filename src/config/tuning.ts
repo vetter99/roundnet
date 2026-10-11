@@ -225,8 +225,14 @@ export const DEFAULT_TUNING = {
   audio: {
     // Master volume, 0..1. M mutes.
     volume: 0.6,
-    // Background music, relative to master.
-    music: 0.35,
+    // Background music, relative to master. It sits well under the hit
+    // sounds, and ducks to `duck` of its level for a moment on every hit so
+    // the hits always cut through.
+    music: 0.2,
+    duck: 0.4,
+    // A CPU's hits play at this volume when a human is playing, so your own
+    // stand out (with no humans, every hit plays at full volume).
+    cpuHits: 0.8,
   },
 
   debug: {

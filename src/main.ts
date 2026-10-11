@@ -160,7 +160,7 @@ renderer.engine.runRenderLoop(() => {
     accumulator -= DT;
   }
 
-  sfx.setVolume(tuning.audio.volume, tuning.audio.music);
+  sfx.setVolume(tuning.audio.volume, tuning.audio.music, tuning.audio.duck);
   renderer.sync(world, prev, accumulator / DT, tuning, frameSeconds);
   updateHud(frameSeconds, devices);
 });
@@ -192,7 +192,9 @@ function onEvent(e: SimEvent): void {
     lastHit = e;
     lastMiss = null;
     const mine = world.players[e.playerId].team === 0;
-    sfx.hit(e.kind, e.power, e.quality, mine);
+    // A human's hits (or everyone's, when no one is playing) at full volume.
+    const featured = human[e.playerId] || !human.some(Boolean);
+    sfx.hit(e.kind, e.power, e.quality, featured ? 1 : tuning.audio.cpuHits);
     if (mine) playerPerfectStreak = e.quality >= 1 ? playerPerfectStreak + 1 : 0;
     if (e.quality >= 1) {
       if (mine) showFlash('Perfect', '#5ee07a', 0.45);
@@ -217,7 +219,7 @@ function onEvent(e: SimEvent): void {
     sfx.perfect(true, 4);
   } else if (e.type === 'serve') {
     renderer.playServe(e.playerId, e.spin);
-    sfx.hit('spike', e.power, 1, world.players[e.playerId].team === 0);
+    sfx.hit('spike', e.power, 1, human[e.playerId] || !human.some(Boolean) ? 1 : tuning.audio.cpuHits);
   } else if (e.type === 'fault') {
     sfx.ground();
     showFlash(e.lost ? `Double fault: serve goes to ${TEAM_NAMES[1 - e.team]}` : 'Fault: 2nd serve', '#ffd84a', 1.2);
