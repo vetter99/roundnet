@@ -23,24 +23,51 @@ describe('bot', () => {
   });
 });
 
-describe('bot two-touch play', () => {
-  it('usually passes to itself first, then spikes the second touch', () => {
+describe('bot touch play', () => {
+  /** Two CPUs play for `seconds`; returns each possession's touches, e.g. 'pass>pass>spike'. */
+  function patterns(seconds: number) {
     const world = createWorld();
     let touches: string[] = [];
-    const patterns: string[] = [];
-    for (let i = 0; i < 60 * 300; i++) {
+    const out: string[] = [];
+    for (let i = 0; i < 60 * seconds; i++) {
       stepWorld(world, [botIntent(world, 0, t), botIntent(world, 1, t)], t);
       for (const e of world.events) {
         if (e.type === 'hit') touches.push(e.kind);
         if (e.type === 'possession' || e.type === 'ground') {
-          if (touches.length) patterns.push(touches.join('>'));
+          if (touches.length) out.push(touches.join('>'));
           touches = [];
         }
       }
     }
-    const passThenSpike = patterns.filter((p) => p === 'pass>spike').length;
-    expect(passThenSpike / patterns.length).toBeGreaterThan(0.5);
-    // It never passes and then forgets to play its second touch.
-    expect(patterns.every((p) => p === 'spike' || p === 'drop' || p === 'pass>spike')).toBe(true);
+    return out;
+  }
+
+  it('usually passes twice, then spikes the third touch', () => {
+    const all = patterns(300);
+    const threeTouch = all.filter((p) => p === 'pass>pass>spike').length;
+    expect(threeTouch / all.length).toBeGreaterThan(0.5);
+    // It always finishes with a spike or drop, never a pass left hanging.
+    expect(all.every((p) => /^(pass>){0,2}(spike|drop)$/.test(p))).toBe(true);
+  });
+
+  it('gets to most drop shots', () => {
+    const world = createWorld();
+    let drops = 0;
+    let returned = 0;
+    let pending: number | null = null;
+    for (let i = 0; i < 60 * 1200; i++) {
+      stepWorld(world, [botIntent(world, 0, t), botIntent(world, 1, t)], t);
+      for (const e of world.events) {
+        if (e.type === 'hit') {
+          const team = world.players[e.playerId].team;
+          if (pending !== null && team !== pending) returned++;
+          pending = e.kind === 'drop' ? team : null;
+          if (e.kind === 'drop') drops++;
+        }
+        if (e.type === 'ground') pending = null;
+      }
+    }
+    expect(drops).toBeGreaterThan(5);
+    expect(returned / drops).toBeGreaterThan(0.5);
   });
 });
