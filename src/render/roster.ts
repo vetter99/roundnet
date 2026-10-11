@@ -19,6 +19,7 @@ import type { Mesh } from '@babylonjs/core/Meshes/mesh';
 import { MeshBuilder } from '@babylonjs/core/Meshes/meshBuilder';
 import { TransformNode } from '@babylonjs/core/Meshes/transformNode';
 import type { Scene } from '@babylonjs/core/scene';
+import { addRim, SMOOTH, SMOOTH_SEGMENTS } from './style';
 
 export type CharacterKind = 'bear' | 'cat' | 'truffles' | 'pinball' | 'guy' | 'fox' | 'pig' | 'shark' | 'penguin' | 'capybara' | 'tubeman' | 'myleg' | 'jalcon';
 
@@ -102,6 +103,8 @@ const BIG_SUBDIVISIONS = 2;
 const SMALL_SUBDIVISIONS = 1;
 const TEXTURED_SEGMENTS = 12;
 const SHINE_KEPT = 0.25;
+// In the smooth look (?smooth) materials keep this much of their shine.
+const SMOOTH_SHINE = 0.8;
 
 /** Shape-making helpers for one character, in the low-poly flat-shaded style. */
 class Kit {
@@ -110,9 +113,11 @@ class Kit {
   mat(name: string, color: Color3, shine = 0.08, power = 32): StandardMaterial {
     const m = new StandardMaterial(name, this.scene);
     m.diffuseColor = color;
-    const kept = shine * SHINE_KEPT;
+    // Low-poly is matte; the smooth look keeps a soft sheen and a rim light.
+    const kept = shine * (SMOOTH ? SMOOTH_SHINE : SHINE_KEPT);
     m.specularColor = new Color3(kept, kept, kept);
     m.specularPower = power;
+    if (SMOOTH) addRim(m);
     return m;
   }
 
@@ -125,7 +130,7 @@ class Kit {
 
   place(mesh: Mesh, parent: TransformNode, mat: StandardMaterial, pos: V3, rot?: V3, scale?: V3, faceted = true): Mesh {
     // Flat shading: every face lit evenly, so the low-poly facets show.
-    if (faceted) mesh.convertToFlatShadedMesh();
+    if (faceted && !SMOOTH) mesh.convertToFlatShadedMesh();
     mesh.parent = parent;
     mesh.material = mat;
     mesh.position.set(...pos);
@@ -135,8 +140,8 @@ class Kit {
   }
 
   sphere(parent: TransformNode, d: number, mat: StandardMaterial, pos: V3, scale?: V3, rot?: V3): Mesh {
-    const mesh = mat.diffuseTexture
-      ? MeshBuilder.CreateSphere('part', { diameter: d, segments: TEXTURED_SEGMENTS }, this.scene)
+    const mesh = SMOOTH || mat.diffuseTexture
+      ? MeshBuilder.CreateSphere('part', { diameter: d, segments: SMOOTH ? SMOOTH_SEGMENTS : TEXTURED_SEGMENTS }, this.scene)
       : MeshBuilder.CreateIcoSphere(
           'part',
           { radius: d / 2, subdivisions: d * Math.max(...(scale ?? [1, 1, 1])) >= 0.2 ? BIG_SUBDIVISIONS : SMALL_SUBDIVISIONS },
@@ -146,12 +151,12 @@ class Kit {
   }
 
   capsule(parent: TransformNode, height: number, radius: number, mat: StandardMaterial, pos: V3, rot?: V3, scale?: V3): Mesh {
-    const mesh = MeshBuilder.CreateCapsule('part', { height, radius, tessellation: 8, capSubdivisions: 3 }, this.scene);
+    const mesh = MeshBuilder.CreateCapsule('part', { height, radius, tessellation: SMOOTH ? SMOOTH_SEGMENTS : 8, capSubdivisions: SMOOTH ? 8 : 3 }, this.scene);
     return this.place(mesh, parent, mat, pos, rot, scale);
   }
 
   cylinder(parent: TransformNode, height: number, top: number, bottom: number, mat: StandardMaterial, pos: V3, rot?: V3, scale?: V3): Mesh {
-    const mesh = MeshBuilder.CreateCylinder('part', { height, diameterTop: top, diameterBottom: bottom, tessellation: 9 }, this.scene);
+    const mesh = MeshBuilder.CreateCylinder('part', { height, diameterTop: top, diameterBottom: bottom, tessellation: SMOOTH ? SMOOTH_SEGMENTS : 9 }, this.scene);
     return this.place(mesh, parent, mat, pos, rot, scale);
   }
 
@@ -161,7 +166,7 @@ class Kit {
   }
 
   torus(parent: TransformNode, diameter: number, thickness: number, mat: StandardMaterial, pos: V3, rot?: V3, scale?: V3): Mesh {
-    const mesh = MeshBuilder.CreateTorus('part', { diameter, thickness, tessellation: 14 }, this.scene);
+    const mesh = MeshBuilder.CreateTorus('part', { diameter, thickness, tessellation: SMOOTH ? SMOOTH_SEGMENTS * 2 : 14 }, this.scene);
     return this.place(mesh, parent, mat, pos, rot, scale);
   }
 
@@ -171,7 +176,7 @@ class Kit {
     const length = pathLength(path);
     const mesh = MeshBuilder.CreateTube(
       'part',
-      { path: smooth(path, 3), radiusFunction: (_, d) => r0 + (r1 - r0) * Math.min(1, d / length), tessellation: 7, cap: 3 },
+      { path: smooth(path, SMOOTH ? 8 : 3), radiusFunction: (_, d) => r0 + (r1 - r0) * Math.min(1, d / length), tessellation: SMOOTH ? 18 : 7, cap: 3 },
       this.scene,
     );
     return this.place(mesh, parent, mat, [0, 0, 0]);
@@ -189,7 +194,7 @@ class Kit {
   /** A shape spun around the y axis: `profile` is [radius, height] pairs from bottom to top. */
   lathe(parent: TransformNode, profile: [number, number][], mat: StandardMaterial, pos: V3, rot?: V3): Mesh {
     const shape = profile.map(([r, y]) => new Vector3(r, y, 0));
-    const mesh = MeshBuilder.CreateLathe('part', { shape, tessellation: 14, sideOrientation: 2 }, this.scene);
+    const mesh = MeshBuilder.CreateLathe('part', { shape, tessellation: SMOOTH ? 48 : 14, sideOrientation: 2 }, this.scene);
     return this.place(mesh, parent, mat, pos, rot);
   }
 
