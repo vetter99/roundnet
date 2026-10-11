@@ -229,14 +229,43 @@ function controlsHelp(d: Device): string {
   return 'stick move · hold A pass/serve · hold B spike · Y jump · View reset ball';
 }
 
+// Pause: freezes the game and all sound. The on-screen button, Esc / P, or
+// any controller's Menu (Start) button toggles it.
+const pauseButton = document.getElementById('pause') as HTMLButtonElement;
+const pauseOverlay = document.getElementById('paused') as HTMLElement;
+let paused = false;
+function setPaused(on: boolean): void {
+  paused = on;
+  sfx.setPaused(on);
+  pauseOverlay.style.display = on ? 'flex' : 'none';
+  pauseButton.textContent = on ? '▶ Resume' : '⏸ Pause';
+  // Ignore keys pressed while paused.
+  if (!on) input.clearPresses();
+}
+pauseButton.addEventListener('click', () => {
+  setPaused(!paused);
+  pauseButton.blur();
+  canvas.focus();
+});
+(document.getElementById('resume') as HTMLButtonElement).addEventListener('click', () => {
+  setPaused(false);
+  canvas.focus();
+});
+
 renderer.engine.runRenderLoop(() => {
   const now = performance.now();
   // Cap catch-up time so a background tab doesn't fast-forward the game.
   const frameSeconds = Math.min((now - lastTime) / 1000, 0.25);
   lastTime = now;
+  if (input.pollPause()) setPaused(!paused);
+  const devices = assignDevices();
+  if (paused) {
+    // Frozen: keep drawing the same moment, with no time passing.
+    renderer.sync(world, prev, accumulator / DT, tuning, 0);
+    return;
+  }
   accumulator += frameSeconds;
 
-  const devices = assignDevices();
   // Some browsers count a controller button as permission to play sound.
   if (sfx.locked && input.gamepads().some((pad) => pad.buttons.some((b) => b.pressed))) sfx.unlock();
   while (accumulator >= DT) {
@@ -487,5 +516,5 @@ function updateHud(frameSeconds: number, devices: Device[]): void {
     return d === 'cpu' ? `${playerName(p)}: CPU` : `${playerName(p)} (${deviceName(d)}): ${controlsHelp(d)}`;
   };
   help.textContent =
-    `${sound} · I stats · \` tuning · swing at a ball just out of reach to dive   |   ${world.players.map(side).join('   |   ')}`;
+    `${sound} · Esc / P / Menu pause · I stats · \` tuning · swing at a ball just out of reach to dive   |   ${world.players.map(side).join('   |   ')}`;
 }

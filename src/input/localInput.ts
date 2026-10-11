@@ -7,14 +7,18 @@ export interface InputFrame extends Intent {
 
 const STICK_DEADZONE = 0.2;
 
-type ButtonLayout = Record<'A' | 'B' | 'X' | 'Y' | 'LB' | 'RB' | 'LT' | 'RT' | 'VIEW', number>;
+type ButtonLayout = Record<'A' | 'B' | 'X' | 'Y' | 'LB' | 'RB' | 'LT' | 'RT' | 'VIEW' | 'MENU', number>;
 
 // Standard gamepad layout (Xbox naming; PlayStation/Switch map to the same slots).
-// (VIEW is Back/View/Share/Select, left of the center button.)
-const STANDARD_LAYOUT: ButtonLayout = { A: 0, B: 1, X: 2, Y: 3, LB: 4, RB: 5, LT: 6, RT: 7, VIEW: 8 };
+// (VIEW is Back/View/Share/Select, left of the center button; MENU is
+// Start/Menu/Options, right of it: the usual pause button.)
+const STANDARD_LAYOUT: ButtonLayout = { A: 0, B: 1, X: 2, Y: 3, LB: 4, RB: 5, LT: 6, RT: 7, VIEW: 8, MENU: 9 };
 // Xbox controllers over Bluetooth can report a raw layout (mapping !== 'standard')
 // that skips slots 2 and 5, with the triggers reported as axes instead of buttons.
-const XBOX_RAW_LAYOUT: ButtonLayout = { A: 0, B: 1, X: 3, Y: 4, LB: 6, RB: 7, LT: -1, RT: -1, VIEW: 10 };
+const XBOX_RAW_LAYOUT: ButtonLayout = { A: 0, B: 1, X: 3, Y: 4, LB: 6, RB: 7, LT: -1, RT: -1, VIEW: 10, MENU: 11 };
+
+// Keys that pause and resume the game.
+const PAUSE_KEYS = new Set(['Escape', 'KeyP']);
 
 type KeyMap = Record<'up' | 'down' | 'left' | 'right' | 'jump' | 'pass' | 'spike' | 'feed', string[]>;
 
@@ -72,12 +76,18 @@ export class LocalInput {
   private readonly pressed = new Set<string>();
   // Previous buttons per gamepad index, to detect new presses.
   private readonly prevPadButtons = new Map<number, boolean[]>();
+  // Pause presses since the last check, from the keyboard, and each pad's
+  // pause button last time (tracked apart from pollGamepad, which only runs
+  // for pads driving a player).
+  private pauseKeyPressed = false;
+  private readonly prevPauseButton = new Map<number, boolean>();
 
   constructor(target: Window) {
     target.addEventListener('keydown', (e) => {
       if (e.target instanceof HTMLInputElement) return;
       if (CAPTURED_KEYS.has(e.code)) e.preventDefault();
       if (!e.repeat) this.pressed.add(e.code);
+      if (!e.repeat && PAUSE_KEYS.has(e.code)) this.pauseKeyPressed = true;
       this.held.add(e.code);
     });
     target.addEventListener('keyup', (e) => this.held.delete(e.code));
@@ -103,6 +113,24 @@ export class LocalInput {
     const frames = { all: read(KEYMAPS.all), left: read(KEYMAPS.left), right: read(KEYMAPS.right) };
     this.pressed.clear();
     return frames;
+  }
+
+  /** True once for each press of a pause key (Esc, P) or any controller's Menu/Start button. */
+  pollPause(): boolean {
+    let pressed = this.pauseKeyPressed;
+    this.pauseKeyPressed = false;
+    for (const pad of this.gamepads()) {
+      const i = layoutFor(pad).MENU;
+      const down = pad.buttons[i]?.pressed ?? false;
+      if (down && !(this.prevPauseButton.get(pad.index) ?? false)) pressed = true;
+      this.prevPauseButton.set(pad.index, down);
+    }
+    return pressed;
+  }
+
+  /** Forget key presses made while the game wasn't reading them (e.g. while paused). */
+  clearPresses(): void {
+    this.pressed.clear();
   }
 
   /** Connected gamepads in the order the browser lists them. */

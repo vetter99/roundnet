@@ -93,7 +93,7 @@ and UX cards.
 | INPUT-05 | Touch controls for phones | P3 | L | |
 | INPUT-06 | Triggers as the main hit buttons (playtest) | P1 | S | |
 | UX-01 | Title screen | P1 | M | |
-| UX-02 | Pause menu | P1 | S | |
+| UX-02 | Pause menu (basic pause done: button, Esc/P, controller Menu; freezes and mutes) | P1 | S | |
 | UX-03 | Settings screen | P1 | M | UX-02 |
 | UX-04 | Hide dev panels for players ✅ (stats hidden on load; Show stats button, I key or × toggle it; remembered) | P0 | S | |
 | UX-05 | How-to-play / tutorial | P2 | M | UX-01 |

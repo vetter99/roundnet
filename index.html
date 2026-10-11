@@ -42,6 +42,13 @@
       #sound { position: fixed; bottom: 40px; left: 50%; transform: translateX(-50%); display: none;
                padding: 10px 18px; border: 0; border-radius: 999px; cursor: pointer;
                background: #ffd84a; color: #1d2b1f; font-size: 16px; box-shadow: 0 2px 10px #0006; }
+      /* Pause overlay: dims the game, title and a resume button in the middle. */
+      #paused { position: fixed; inset: 0; display: none; flex-direction: column; align-items: center; justify-content: center; gap: 14px;
+                background: #0a1210a0; color: #fff; font-family: 'Russo One', system-ui, sans-serif; z-index: 5; }
+      #paused .title { font-size: 46px; letter-spacing: 0.12em; text-shadow: 0 2px 10px #000c; }
+      #paused button { padding: 10px 26px; border: 0; border-radius: 999px; cursor: pointer; font-family: inherit; font-size: 18px;
+                       background: #ffffffe8; color: #1d2b1f; box-shadow: 0 2px 10px #0006; }
+      #paused .hint { font-size: 13px; opacity: 0.8; }
       /* Match scoreboard, top center: team blocks with the score, a label in the middle. */
       #scoreboard { position: fixed; top: 10px; left: 50%; transform: translateX(-50%); display: none; align-items: stretch;
                     border-radius: 10px; overflow: hidden; box-shadow: 0 3px 12px #0006; pointer-events: none;
@@ -80,6 +87,11 @@
     <div id="flash"></div>
     <div id="help"></div>
     <div id="prompt"></div>
+    <div id="paused">
+      <div class="title">PAUSED</div>
+      <button id="resume">▶ Resume</button>
+      <div class="hint">Esc / P, or the Menu button on a controller</div>
+    </div>
     <div id="scoreboard">
       <div class="team blue"><span class="serve"></span><span class="name">BLUE</span><span class="pts">0</span></div>
       <div class="mid">FIRST TO 11</div>
@@ -91,6 +103,7 @@
       by Juhani Junkala (CC0)
     </div>
     <div id="seats">
+      <button id="pause">⏸ Pause</button>
       <button id="statsToggle">📊 Show stats</button>
       <button id="mode">🏆 Match (to 11)</button>
       <button id="format">👥 2v2</button>

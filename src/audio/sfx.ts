@@ -53,6 +53,11 @@ export class Sfx {
     window.addEventListener('pointerdown', () => this.unlock());
   }
 
+  // While the game is paused all audio is suspended (music stops where it is).
+  private paused = false;
+  // Whether audio was running when the game paused, so unpausing restores it.
+  private resumeAfterPause = false;
+
   /** Try to start audio. Works after a click or key press (controller buttons may not count). */
   unlock(): void {
     if (this.locked) void this.ctx?.resume();
@@ -60,7 +65,19 @@ export class Sfx {
 
   /** True until the player has clicked or pressed a key (browser autoplay rule). */
   get locked(): boolean {
-    return this.ctx?.state === 'suspended';
+    return !this.paused && this.ctx?.state === 'suspended';
+  }
+
+  /** Pause or resume all sound with the game. */
+  setPaused(paused: boolean): void {
+    if (!this.ctx || paused === this.paused) return;
+    if (paused) {
+      this.resumeAfterPause = this.ctx.state === 'running';
+      void this.ctx.suspend();
+    } else if (this.resumeAfterPause) {
+      void this.ctx.resume();
+    }
+    this.paused = paused;
   }
 
   setVolume(volume: number, music: number, duck: number, hits: number): void {
