@@ -90,15 +90,11 @@ src/main.ts           wires it together; fixed 60Hz loop with render interpolati
   (`partnerSpot`); a team rotates its server each time it wins the serve back
   (`setNextReceiver`, `world.serveOrder`).
 - Characters (`src/render/roster.ts`) are built on the shared animated rig in
-  `src/render/character.ts`. Defaults per seat: Blue 1 purple bear, Blue 2
-  black cat, Red 1 TrufflesUpaGus (chihuahua matador, mushroom sombrero),
-  Red 2 pinball machine; also pickable: Tattoo Guy, Tilt (pinball-loving
-  trickster fox), Chris P. Bacon (a piglet on all fours, back end in a wheel
-  cart; no arms, so his hits are body lunges), Doo Doo (an original baby
-  shark on his belly, scooting on big flippers, tail swishing), Pesto (giant fluffy penguin chick, waddles),
-  Capy (four-legged capybara with an orange on its head), Tube Man (wacky
-  inflatable tube man gliding on his blower, flailing), My Leg (all legs,
-  struts), Jalcon (jaguar + peregrine falcon, hovers flapping). Characters
+  `src/render/character.ts`. The roster is four (defaults Blue 1, Blue 2,
+  Red 1, Red 2): Tilt (a trickster fox, pop-punk rapper look), Chris P.
+  Bacon (a piglet on all fours, back end in a wheel cart; no arms, so his
+  hits are body lunges), Tube Man (wacky inflatable tube man gliding on his
+  blower, flailing), Trash Panda (a raccoon in a trash can on wheels). Characters
   should move distinctly, not all be standing-human variants: the rig supports
   gaits (`walk`, `waddle`, `hop`, `four`, `glide`, `strut`, `fly`), extra leg pivots, and
   `wobblers` (parts that sway on their own). The button next
