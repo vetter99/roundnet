@@ -59,8 +59,9 @@ src/main.ts           wires it together; fixed 60Hz loop with render interpolati
   double fault gives the receiver the point).
 - Serving is a duel (`src/sim/serve.ts`), toss then hit like real roundnet:
   hold the stick toward where to aim (the ball held out in the off paw leans
-  that way, `serveHand`; no marker), pass tosses the ball a short way up,
-  drifting that way and locking the aim, then hold
+  that way, `serveHand`; no marker), hold and release pass to toss (a tap is low;
+  a full charge goes higher and drifts further toward the aim, moving where
+  the serve is struck from), locking the aim, then hold
   spike to charge (sideways stick = spin; the arm cocks and sweeps) and
   release to hit. Timing works like a rally hit: at `serve.contactHeight` it
   goes where aimed at full power; early it goes long, late short and slower.

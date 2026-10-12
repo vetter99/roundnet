@@ -741,7 +741,7 @@ function updateHud(frameSeconds: number, devices: Device[]): void {
         ? `${playerSpan(serverPlayer)} is serving…${second}`
         : world.serve.tossed
           ? `${playerSpan(serverPlayer)}: hold <b>${hitKey}</b>, release as it drops to chest height (stick ←→ = spin)${second}`
-          : `${playerSpan(serverPlayer)}: stick aims · <b>${tossKey}</b> to toss${second}`;
+          : `${playerSpan(serverPlayer)}: stick aims · hold <b>${tossKey}</b>, release to toss (longer = higher, wider)${second}`;
   }
   const match = world.mode === 'match';
   const status =
