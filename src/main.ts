@@ -663,7 +663,6 @@ function showReason(winner: Team, text: string): void {
 // Touches used by the team with the ball (match mode, while it's in play).
 const touchesEl = document.getElementById('touches') as HTMLElement;
 const touchDots = [...touchesEl.querySelectorAll('.dot')] as HTMLElement[];
-const touchWho = touchesEl.querySelector('.who') as HTMLElement;
 const touchNote = touchesEl.querySelector('.note') as HTMLElement;
 function updateTouches(): void {
   const max = tuning.match.maxTouches;
@@ -672,7 +671,6 @@ function updateTouches(): void {
   if (!inPlay) return;
   const team = world.possession;
   touchesEl.style.setProperty('--team', TEAM_CSS[team]);
-  touchWho.innerHTML = `${teamSpan(team)} TOUCHES`;
   const used = world.touches;
   touchDots.forEach((dot, i) => {
     dot.style.display = i < max ? '' : 'none';

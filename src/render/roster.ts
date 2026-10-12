@@ -367,7 +367,9 @@ function buildFox(kit: Kit, rig: Rig, team: Color3, number: number): void {
   // and its tails at the back; his ears poke out.
   const bandana = kit.mat('bandana', new Color3(1, 1, 1), 0.15);
   bandana.diffuseTexture = paisleyTexture(kit.scene, team);
-  kit.sphere(h, 0.5, bandana, [0, 0.12, -0.03], [1.13, 0.68, 1.04]);
+  // It sits right on his head, so draw it in front where they meet (no flicker).
+  bandana.zOffset = -2;
+  kit.sphere(h, 0.52, bandana, [0, 0.13, -0.03], [1.14, 0.7, 1.06]);
   kit.torus(h, 0.47, 0.04, bandana, [0, 0.13, -0.01], [-0.15, 0, 0], [1.1, 1, 1.02]);
   kit.sphere(h, 0.1, bandana, [0, 0.12, -0.27]);
   for (const side of [-1, 1]) kit.sphere(h, 0.16, bandana, [side * 0.05, 0.03, -0.3], [0.5, 1.1, 0.2], [0.3, 0, side * 0.5]);

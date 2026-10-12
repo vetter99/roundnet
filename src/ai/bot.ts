@@ -26,6 +26,10 @@ const REACTION_SLOP_TICKS = 12;
 const MISREAD_EXTRA_TICKS = 36;
 const MISREAD_BASE = 0.05;
 const MISREAD_FROM_POWER = 0.2;
+// Returning a serve: reacts this many ticks after it comes off the net, and
+// misreads it this fraction as often as a rally spike.
+const SERVE_RETURN_REACTION_TICKS = 4;
+const SERVE_MISREAD_SCALE = 0.4;
 const MOVE_EFFORT = 0.95;
 // Out of 10 possessions, how many play three touches (pass, pass, spike) and
 // how many two (pass, spike); the rest spike the first touch.
@@ -89,9 +93,9 @@ function roll(world: World, salt = 0): number {
 }
 
 /** Whether the CPU misreads the incoming ball this possession. */
-function misreads(world: World): boolean {
+function misreads(world: World, scale = 1): boolean {
   const power = world.lastHitPower;
-  return roll(world) < MISREAD_BASE + MISREAD_FROM_POWER * power * power;
+  return roll(world) < (MISREAD_BASE + MISREAD_FROM_POWER * power * power) * scale;
 }
 
 /** Whether this possession's spike should be a drop shot (opponents all far back, some of the time). */
@@ -156,9 +160,14 @@ export function botIntent(world: World, index: number, t: Tuning): Intent {
   const myBall = ourBall && chaser(world, me, t) === me.id;
   const dropIncoming =
     world.lastHitTeam !== me.team && world.lastHitKind === 'drop' && roll(world, 1) >= DROP_FOOLED_CHANCE;
+  // Serves are watched from the toss, so the receiver reacts at once and
+  // misreads them less often than rally spikes.
+  const returningServe = world.serve.returnPending && world.possession === me.team;
   const reaction = dropIncoming
     ? DROP_REACTION_TICKS
-    : REACTION_TICKS + Math.round(Math.abs(slop(world, 0)) * REACTION_SLOP_TICKS) + (misreads(world) ? MISREAD_EXTRA_TICKS : 0);
+    : returningServe
+      ? SERVE_RETURN_REACTION_TICKS + (misreads(world, SERVE_MISREAD_SCALE) ? MISREAD_EXTRA_TICKS : 0)
+      : REACTION_TICKS + Math.round(Math.abs(slop(world, 0)) * REACTION_SLOP_TICKS) + (misreads(world) ? MISREAD_EXTRA_TICKS : 0);
 
   if (!myBall || (!followUp && world.tick - world.possessionTick < reaction)) {
     const dropChaser = !partner || closestTo([me, partner], dropLanding(world, t)) === me.id;
