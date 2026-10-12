@@ -16,6 +16,8 @@ const t = createTuning();
  * (along x) as the ball is tossed, which sets the aim. Runs until the serve is
  * hit (or the toss lands) and returns every event along the way.
  */
+const TOSS_CHARGE_TICKS = 20;
+
 function tossAndServe(world: World, tt = t, opts: { tap?: boolean; spinX?: number; releaseAt?: number; aimX?: number } = {}): SimEvent[] {
   const idx = world.players.findIndex((p) => p.id === world.serve.serverId);
   const as = (i: Partial<Intent>) => world.players.map((_, k) => (k === idx ? { ...NEUTRAL_INTENT, ...i } : NEUTRAL_INTENT));
@@ -24,8 +26,9 @@ function tossAndServe(world: World, tt = t, opts: { tap?: boolean; spinX?: numbe
     stepWorld(world, as(i), tt);
     events.push(...world.events);
   };
-  step({ pass: true, moveX: opts.aimX ?? 0 });
-  step({});
+  // A medium toss: charged for a third of a second.
+  for (let i = 0; i < TOSS_CHARGE_TICKS; i++) step({ pass: true, moveX: opts.aimX ?? 0 });
+  step({ moveX: opts.aimX ?? 0 });
   const releaseHeight = tt.serve.contactHeight + (opts.releaseAt ?? 0);
   for (let i = 0; i < 120 && world.waitingForServe; i++) {
     const b = world.ball;
@@ -177,6 +180,20 @@ describe('world', () => {
     expect(world.serve.tossed).toBe(false);
   });
 
+  it('a longer toss charge tosses higher and further toward the aim', () => {
+    const toss = (chargeTicks: number) => {
+      const world = createMatch(t);
+      const red = (intent: Partial<Intent>): Intent[] => [NEUTRAL_INTENT, { ...NEUTRAL_INTENT, ...intent }];
+      for (let i = 0; i < chargeTicks; i++) stepWorld(world, red({ pass: true, moveX: -1 }), t);
+      stepWorld(world, red({ moveX: -1 }), t);
+      return { ...world.ball.vel };
+    };
+    const tap = toss(1);
+    const full = toss(60);
+    expect(full.y).toBeGreaterThan(tap.y + 1.5);
+    expect(Math.abs(full.x)).toBeGreaterThan(Math.abs(tap.x) * 1.5);
+  });
+
   it('serving takes two steps: pass tosses the ball up, then spike hits it', () => {
     const world = createMatch(t);
     const red = (intent: Partial<Intent>): Intent[] => [NEUTRAL_INTENT, { ...NEUTRAL_INTENT, ...intent }];
@@ -185,8 +202,10 @@ describe('world', () => {
     stepWorld(world, red({}), t);
     expect(world.serve.tossed).toBe(false);
     expect(world.waitingForServe).toBe(true);
-    // Pass tosses it straight up; it's still waiting to be hit.
+    // Pass (pressed, then released) tosses it straight up; it's still waiting to be hit.
     stepWorld(world, red({ pass: true }), t);
+    expect(world.serve.tossed).toBe(false);
+    stepWorld(world, red({}), t);
     expect(world.events).toContainEqual({ type: 'toss', playerId: 1 });
     expect(world.serve.tossed).toBe(true);
     for (let i = 0; i < 5; i++) stepWorld(world, red({}), t);
@@ -615,6 +634,7 @@ describe('serve duel', () => {
     expect(world.serve.aim.x).toBeCloseTo(0);
     // Toss while holding it: the ball goes up from the paw, drifting that way, and the aim locks.
     stepWorld(world, red({ pass: true, moveX: -1 }), t);
+    stepWorld(world, red({ moveX: -1 }), t);
     expect(world.ball.pos.x).toBeCloseTo(right.x, 1);
     expect(world.ball.pos.z).toBeCloseTo(right.z, 1);
     expect(world.ball.vel.x).toBeLessThan(0);

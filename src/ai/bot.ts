@@ -74,10 +74,13 @@ const SUPPORT_ANGLE = 1.5;
 // less when the partner is closer.
 const PASS_TO_PARTNER_REACH = 3.5;
 // Serving: the CPU aims a little to one side of the net center, then after a
-// pause tosses, starts charging as the toss slows below SERVE_CHARGE_FROM_VY
+// pause charges the toss for between SERVE_TOSS_TICKS_MIN and _MAX ticks
+// (varying serve to serve: low or high tosses) and releases, starts charging as the toss slows below SERVE_CHARGE_FROM_VY
 // (m/s upward; about two-thirds power by the hit), and releases as the ball
 // drops to the sweet spot, off by up to SERVE_TIMING_ERROR (m) each serve.
 const SERVE_DELAY_TICKS = 50;
+const SERVE_TOSS_TICKS_MIN = 2;
+const SERVE_TOSS_TICKS_MAX = 30;
 const SERVE_CHARGE_FROM_VY = 1.5;
 const SERVE_TIMING_ERROR = 0.12;
 const SERVE_AIM_SIDE = 0.35;
@@ -126,7 +129,8 @@ export function botIntent(world: World, index: number, t: Tuning): Intent {
     intent.moveZ = 0;
     const elapsed = world.tick - world.serveReadyTick;
     if (!world.serve.tossed) {
-      intent.pass = elapsed >= SERVE_DELAY_TICKS;
+      const tossTicks = SERVE_TOSS_TICKS_MIN + ((world.serveReadyTick * 31337) % (SERVE_TOSS_TICKS_MAX - SERVE_TOSS_TICKS_MIN + 1));
+      intent.pass = elapsed >= SERVE_DELAY_TICKS && elapsed < SERVE_DELAY_TICKS + tossTicks;
       return intent;
     }
     // Tossed: charge from near the top of the toss, release at the sweet spot (give or take).

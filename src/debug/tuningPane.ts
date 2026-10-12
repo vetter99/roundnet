@@ -26,7 +26,7 @@ const RANGES: Record<string, Ranges> = {
   court: { serveLineDistance: [1, 5], noSpikeZoneDistance: [0, 1.5], lineWidth: [0.01, 0.2] },
   marker: { maxRadius: [0.2, 2.5], targetRadius: [0.05, 1], approachTime: [0.2, 3] },
   match: { pointsToWin: [1, 31, 1], maxTouches: [1, 6, 1] },
-  serve: { behindLine: [0, 2], receiverBack: [0, 3], aimLimit: [0.3, 1.3], wobble: [0, 1], speedMin: [3, 15], speedMax: [3, 20], handHeight: [0.3, 1.5], tossSpeed: [1, 8], tossDrift: [0, 1.5], contactHeight: [0.3, 1.8], mistimeDrift: [0, 2], handForward: [0, 0.8], handSide: [-0.4, 0.4], handReach: [0, 0.6], handLift: [0, 0.4], tries: [1, 3, 1], spinCurve: [0, 20], spinKick: [0, 1] },
+  serve: { behindLine: [0, 2], receiverBack: [0, 3], aimLimit: [0.3, 1.3], wobble: [0, 1], speedMin: [3, 15], speedMax: [3, 20], handHeight: [0.3, 1.5], tossSpeedMin: [1, 8], tossSpeedMax: [1, 10], tossDriftMin: [0, 1.5], tossDriftMax: [0, 2], contactHeight: [0.3, 1.8], mistimeDrift: [0, 2], handForward: [0, 0.8], handSide: [-0.4, 0.4], handReach: [0, 0.6], handLift: [0, 0.4], tries: [1, 3, 1], spinCurve: [0, 20], spinKick: [0, 1] },
   practice: { resetDelayTicks: [0, 180, 1], feedDistance: [0.8, 4], feedHeight: [0.5, 4], feedSpeed: [2, 15] },
   audio: { volume: [0, 1], music: [0, 1], duck: [0, 1], hits: [0.5, 3], cpuHits: [0, 1] },
   camera: {

@@ -181,13 +181,19 @@ export const DEFAULT_TUNING = {
     // sideways (up to handReach at the edge of the net) and up for a deeper
     // aim (up to handLift), so the receiver reads the aim from the ball in hand.
     handHeight: 0.6,
-    // The toss: straight up out of the paw at this speed (m/s; 4.2 peaks about
-    // 0.7 m above the paw). The sweet spot to hit it is this high on the way
-    // down (timing quality works like a rally hit, see hit.perfectWindow). A
-    // badly timed hit lands up to this far long (early) or short (late), m.
-    tossSpeed: 4.2,
-    // The toss drifts this fast (m/s) toward the held aim (about 0.25 m by the hit).
-    tossDrift: 0.4,
+    // The toss is charged like a hit (hold pass, release): straight up out of
+    // the paw at this speed (m/s) for a tap, up to the max at full charge
+    // (3.6 peaks about 0.55 m above the paw, 6 about 1.5 m). The sweet spot to
+    // hit it is this high on the way down (timing quality works like a rally
+    // hit, see hit.perfectWindow). A badly timed hit lands up to this far long
+    // (early) or short (late), m.
+    tossSpeedMin: 3.6,
+    tossSpeedMax: 6,
+    // The toss drifts toward the held aim this fast (m/s) for a tap, up to the
+    // max at full charge (about 0.1 m vs 0.6 m out by the hit), so a big toss
+    // moves where the serve is struck from, and its angle to the receiver.
+    tossDriftMin: 0.3,
+    tossDriftMax: 0.65,
     contactHeight: 0.95,
     mistimeDrift: 0.7,
     handForward: 0.22,

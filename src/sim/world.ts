@@ -220,14 +220,15 @@ export function stepWorld(world: World, intents: readonly Intent[], t: Tuning): 
     const swing = stepPlayer(p, serving ? serverIntent(intent) : intent, t);
     if (p.dive && !wasDiving) world.events.push({ type: 'dive', playerId: p.id });
     if (p.dive?.ticks === diveTicks(t)) world.events.push({ type: 'diveLand', playerId: p.id });
-    // Serving, step 1: pressing pass tosses the ball up.
-    if (serving && !world.serve.tossed && p.charge?.kind === 'pass' && p.charge.ticks === 0) {
-      tossServe(world, p, t);
-      world.events.push({ type: 'toss', playerId: p.id });
-    }
     if (!swing) return;
-    // A server's swings never become rally hits (the toss's pass release, or a spike before the toss).
+    // A server's swings never become rally hits (the toss, or a spike before the toss).
     if (serving) p.hitBuffer = null;
+    // Serving, step 1: releasing a charged pass tosses the ball up.
+    if (serving && !world.serve.tossed && swing.kind === 'pass') {
+      tossServe(world, p, swing.power, t);
+      world.events.push({ type: 'toss', playerId: p.id });
+      return;
+    }
     // Serving, step 2: releasing spike while the ball is up hits the serve.
     const serveHit = serving && world.serve.tossed && swing.kind === 'spike';
     if (serving && !serveHit) return;

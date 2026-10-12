@@ -4,8 +4,9 @@
 // 1. Aim: hold the stick toward where on the net to serve; the ball, held
 //    out in the off paw, leans that way as a preview (no marker; the
 //    receiver reads the paw).
-// 2. Toss: pass tosses the ball a short way up, drifting a little in the held
-//    direction, and locks the aim.
+// 2. Toss: hold pass to charge and release to toss: a tap goes a short way
+//    up; a full charge goes higher and drifts further in the held direction
+//    (changing where the serve is struck from). The aim locks.
 // 3. Hit: hold spike to charge while it's in the air (sideways stick sets
 //    spin: the arm cocks, then sweeps across), and release to hit. Timing is
 //    like a rally hit: at the sweet spot (`serve.contactHeight`) it goes where
@@ -146,6 +147,9 @@ export function stepServeAim(world: World, server: Player, intent: Intent, t: Tu
       const side = serveSide(world, server, t);
       world.serve.spin = clamp(stick.x * side.x + stick.z * side.z, -1, 1);
     }
+  } else if (server.charge?.kind === 'pass' && !intent.pass) {
+    // The toss is being released this tick: keep the aim from the last held
+    // tick (the stick may have been let go at the same moment).
   } else {
     const limit = t.net.radius * t.serve.aimLimit;
     const r = Math.hypot(stick.x, stick.z);
@@ -192,13 +196,16 @@ export function serveWobble(world: World, server: Player, t: Tuning): { x: numbe
   return { x: Math.sin(world.tick * 0.31) * amp, z: Math.cos(world.tick * 0.23) * amp };
 }
 
-/** Toss the ball up out of the server's paw. */
-export function tossServe(world: World, server: Player, t: Tuning): void {
+/** Toss the ball up out of the server's paw, higher and wider the more it was charged (0..1). */
+export function tossServe(world: World, server: Player, power: number, t: Tuning): void {
   const ball = world.ball;
   ball.pos = serveHand(world, server, t);
-  // A little drift toward the aim, so the toss goes the way the stick is held.
+  // Higher with more charge, drifting toward the aim (further with more charge).
+  const p = clamp(power, 0, 1);
+  const up = lerp(t.serve.tossSpeedMin, t.serve.tossSpeedMax, p);
+  const drift = lerp(t.serve.tossDriftMin, t.serve.tossDriftMax, p);
   const limit = t.net.radius * t.serve.aimLimit || 1;
-  ball.vel = { x: (world.serve.aim.x / limit) * t.serve.tossDrift, y: t.serve.tossSpeed, z: (world.serve.aim.z / limit) * t.serve.tossDrift };
+  ball.vel = { x: (world.serve.aim.x / limit) * drift, y: up, z: (world.serve.aim.z / limit) * drift };
   ball.alive = true;
   ball.soft = false;
   ball.curve = undefined;
