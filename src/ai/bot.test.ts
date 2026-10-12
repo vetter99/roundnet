@@ -58,7 +58,8 @@ describe('bot touch play', () => {
     let drops = 0;
     let returned = 0;
     let pending: number | null = null;
-    for (let i = 0; i < 60 * 1200; i++) {
+    // A long run, so the drop count is big enough to be stable.
+    for (let i = 0; i < 60 * 3600; i++) {
       stepWorld(world, [botIntent(world, 0, t), botIntent(world, 1, t)], t);
       for (const e of world.events) {
         if (e.type === 'hit') {
