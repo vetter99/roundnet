@@ -103,7 +103,7 @@ and UX cards.
 | UX-09 | Teach the rules to new players (touch counter + point reasons done; tutorial later) | P1 | M | |
 | ART-01 | Court environment ✅ pitch, HD stands, 3D crowd | P1 | M | |
 | ART-02 | Ball and net ✅ yellow volleyball, webbed net | P2 | S | |
-| ART-03 | Character variety (roster of four 2026-10-11: Tilt, Chris P. Bacon, Tube Man, Scout; smooth style; per-seat picker) | P2 | M | |
+| ART-03 | Character variety (roster of four 2026-10-11: Tilt, Chris P. Bacon, Tube Man, Scout the red panda; smooth style; per-seat picker) | P2 | M | |
 | ART-04 | Celebrations and reactions | P2 | M | |
 | ART-05 | Hit effects: particles, hit-stop, shake (deferred) | P3 | M | |
 | ART-06 | Camera ✅ smart framing done; alternatives listed | P2 | S | |

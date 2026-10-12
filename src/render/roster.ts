@@ -20,18 +20,18 @@ import { TransformNode } from '@babylonjs/core/Meshes/transformNode';
 import type { Scene } from '@babylonjs/core/scene';
 import { addRim, SEGMENTS } from './style';
 
-export type CharacterKind = 'fox' | 'tubeman' | 'pig' | 'mouse';
+export type CharacterKind = 'fox' | 'tubeman' | 'pig' | 'redpanda';
 
 /** Every character, in picker order, with display names. */
 export const CHARACTERS: { kind: CharacterKind; name: string }[] = [
   { kind: 'fox', name: 'Tilt' },
   { kind: 'tubeman', name: 'Tube Man' },
   { kind: 'pig', name: 'Chris P. Bacon' },
-  { kind: 'mouse', name: 'Scout' },
+  { kind: 'redpanda', name: 'Scout' },
 ];
 
 /** Who plays each seat by default: Blue 1, Blue 2, Red 1, Red 2 (1v1 uses the "1" seats). */
-export const SEAT_CHARACTERS: CharacterKind[] = ['fox', 'pig', 'tubeman', 'mouse'];
+export const SEAT_CHARACTERS: CharacterKind[] = ['fox', 'pig', 'tubeman', 'redpanda'];
 
 /** The rig's attachment points (see character.ts). Arms and legs hang down (-y) from their pivots. */
 export interface Rig {
@@ -682,25 +682,26 @@ function arcPoints(c: V3, r: number, bow: 1 | -1): V3[] {
 }
 
 // ---------------------------------------------------------------------------
-// Scout, a cute little mouse scout (an original take on the cheerful
-// woodland-scout look): a happy closed-eye grin, a cream face with rosy
-// cheeks, big round ears poking out from a round olive scout helmet with
-// chunky amber goggles on top and a teal feather tuft, a fluffy scarf over
-// his jersey, a belt with a pouch, olive shorts, big floppy boots, and a long
-// pink tail. He scurries around on quick little steps.
+// Scout, a red panda cub scout: a big round fuzzy rust-red head with white
+// eyebrow spots, white cheeks and muzzle, reddish tear marks, white-rimmed
+// ears, a happy closed-eye grin and a little black nose; dark legs and arms;
+// a huge fluffy ringed tail. In scout gear: a round olive helmet with amber
+// goggles and a teal feather, a mustard scarf over his jersey, a belt with a
+// pouch, olive shorts and big floppy boots. He scurries on quick little steps.
 
-function buildMouse(kit: Kit, rig: Rig, team: Color3, number: number): void {
+function buildRedPanda(kit: Kit, rig: Rig, team: Color3, number: number): void {
   rig.gait = 'scurry';
-  const fur = kit.mat('fur', new Color3(0.68, 0.6, 0.55), 0.15);
-  const cream = kit.mat('cream', new Color3(0.98, 0.92, 0.84), 0.1);
-  const pink = kit.mat('pink', new Color3(1, 0.66, 0.72), 0.2);
-  const blush = kit.mat('blush', new Color3(1, 0.58, 0.6), 0.1);
-  const black = kit.mat('black', new Color3(0.12, 0.08, 0.08), 0.3);
+  const fur = kit.mat('fur', new Color3(0.78, 0.33, 0.12), 0.15);
+  const furLight = kit.mat('furLight', new Color3(0.9, 0.55, 0.28), 0.12);
+  const dark = kit.mat('darkFur', new Color3(0.2, 0.1, 0.07), 0.15);
+  const white = kit.mat('white', new Color3(0.99, 0.96, 0.9), 0.1);
+  const tear = kit.mat('tear', new Color3(0.6, 0.22, 0.1), 0.1);
+  const black = kit.mat('black', new Color3(0.08, 0.06, 0.06), 0.4);
   const olive = kit.mat('olive', new Color3(0.42, 0.45, 0.25), 0.15);
   const oliveDark = kit.mat('oliveDark', new Color3(0.3, 0.33, 0.18), 0.15);
   const leather = kit.mat('leather', new Color3(0.45, 0.3, 0.17), 0.3);
   const boot = kit.mat('boot', new Color3(0.38, 0.4, 0.3), 0.2);
-  const scarf = kit.mat('scarf', new Color3(0.85, 0.4, 0.3), 0.05);
+  const scarf = kit.mat('scarf', new Color3(0.95, 0.75, 0.2), 0.05);
   const b = rig.bounce;
 
   // Olive shorts, the jersey, a fluffy scarf, and a belt with a pouch.
@@ -715,24 +716,28 @@ function buildMouse(kit: Kit, rig: Rig, team: Color3, number: number): void {
   kit.box(b, [0.1, 0.09, 0.06], leather, [-0.16, 0.33, 0.13], [0, -0.6, 0]);
   kit.sphere(b, 0.035, kit.mat('buckle', GOLD, 0.8, 64), [0, 0.36, 0.19]);
 
-  // The head: round, a cream face, big happy closed eyes (little arcs), rosy
-  // cheeks, a small pink nose and a smile; big round ears.
+  // The head: big, round and fuzzy, with the red panda's white face markings.
   const h = rig.head;
-  kit.sphere(h, 0.48, fur, [0, 0, 0], [1.08, 0.95, 1]);
-  kit.sphere(h, 0.38, cream, [0, -0.05, 0.08], [1.05, 0.85, 0.85]);
+  kit.sphere(h, 0.5, fur, [0, 0, 0], [1.12, 0.95, 1]);
+  // Fluffy cheek tufts out to the sides.
+  for (const side of [-1, 1]) kit.sphere(h, 0.2, white, [side * 0.21, -0.07, 0.07], [1, 0.85, 0.8]);
+  // White muzzle, black nose, and a smile.
+  kit.sphere(h, 0.2, white, [0, -0.08, 0.2], [1.1, 0.8, 0.8]);
+  kit.sphere(h, 0.065, black, [0, -0.04, 0.29], [1.3, 0.85, 0.8]);
+  kit.tube(h, arcPoints([0, -0.11, 0.27], 0.04, -1), 0.01, 0.01, black);
   for (const side of [-1, 1]) {
-    // A closed, smiling eye: an arc bowed upward.
-    kit.tube(h, arcPoints([side * 0.1, 0.02, 0.235], 0.045, 1), 0.012, 0.012, black);
-    kit.sphere(h, 0.09, blush, [side * 0.15, -0.05, 0.19], [1, 0.6, 0.35]);
-    kit.sphere(h, 0.3, fur, [side * 0.26, 0.12, -0.03], [1, 1, 0.33]);
-    kit.sphere(h, 0.22, pink, [side * 0.26, 0.12, 0.0], [1, 1, 0.25]);
+    // White eyebrow spots, happy closed eyes, and reddish tear marks under them.
+    kit.sphere(h, 0.08, white, [side * 0.1, 0.12, 0.2], [1.2, 0.7, 0.5]);
+    kit.tube(h, arcPoints([side * 0.1, 0.03, 0.235], 0.042, 1), 0.012, 0.012, black);
+    kit.sphere(h, 0.06, tear, [side * 0.12, -0.03, 0.215], [0.6, 1.3, 0.4]);
+    // Big rounded ears with white rims and dark insides.
+    const ear = kit.node(h, [side * 0.22, 0.2, -0.03], [0, 0, -side * 0.35]);
+    kit.sphere(ear, 0.2, white, [0, 0, 0], [1, 1.1, 0.4]);
+    kit.sphere(ear, 0.15, dark, [0, -0.005, 0.02], [1, 1.1, 0.35]);
   }
-  kit.sphere(h, 0.06, pink, [0, -0.03, 0.27], [1.2, 0.8, 0.8]);
-  // A smile: an arc bowed downward.
-  kit.tube(h, arcPoints([0, -0.07, 0.24], 0.05, -1), 0.011, 0.011, black);
 
   // The round olive scout helmet with a brim, amber goggles on top, and a teal feather tuft.
-  const hat = kit.node(h, [0, 0.13, -0.01], [-0.12, 0, 0]);
+  const hat = kit.node(h, [0, 0.14, -0.01], [-0.12, 0, 0]);
   kit.sphere(hat, 0.47, olive, [0, 0.03, 0], [1.05, 0.6, 1.05]);
   kit.torus(hat, 0.47, 0.035, oliveDark, [0, 0, 0], undefined, [1.05, 1, 1.05]);
   kit.torus(hat, 0.46, 0.022, kit.mat('strap', new Color3(0.15, 0.13, 0.12), 0.2), [0, 0.07, 0], undefined, [1.04, 1, 1.04]);
@@ -748,24 +753,32 @@ function buildMouse(kit: Kit, rig: Rig, team: Color3, number: number): void {
     kit.sphere(hat, 0.16, feather, [0.05, 0.2, -0.1], [0.3, 1.2, 0.15], [rx, 0, rz]);
   }
 
-  // Little furry arms with cream paws; legs in big floppy boots.
+  // Dark furry arms and legs (like a real red panda), legs in big floppy boots.
   setShoulders(rig, 0.2);
-  for (const pivot of rig.arms) arm(kit, pivot, fur, cream, 0.045, 0.13);
+  for (const pivot of rig.arms) arm(kit, pivot, dark, dark, 0.048, 0.13);
   for (const pivot of rig.legs) {
-    kit.capsule(pivot, 0.12, 0.05, fur, [0, -0.04, 0]);
+    kit.capsule(pivot, 0.12, 0.055, dark, [0, -0.04, 0]);
     kit.cylinder(pivot, 0.15, 0.14, 0.11, boot, [0, -0.13, 0]);
     kit.torus(pivot, 0.15, 0.025, boot, [0, -0.06, 0], [0.2, 0, 0]);
     kit.sphere(pivot, 0.19, boot, [0, -0.2, 0.05], [0.95, 0.6, 1.4]);
   }
-  // A long thin pink tail curling up behind.
-  kit.tube(rig.tail, [[0, 0, 0], [0.05, -0.05, -0.2], [0.15, 0.05, -0.38], [0.18, 0.25, -0.42], [0.1, 0.32, -0.36]], 0.025, 0.012, pink);
+  // A huge fluffy tail with light rings, curling up behind him.
+  // Many overlapping puffs read as one bushy tail; every few puffs switch
+  // color, making wide rings.
+  const puffs = 20;
+  for (let k = 0; k < puffs; k++) {
+    const u = k / (puffs - 1);
+    const d = 0.25 - Math.abs(u - 0.4) * 0.12;
+    const ring = Math.floor(k / 3) % 2 === 1;
+    kit.sphere(rig.tail, d, ring ? furLight : fur, [0.02 + u * 0.1, 0.02 + u * u * 0.45, -0.08 - Math.sin(u * 2.4) * 0.28]);
+  }
 }
 
 const BUILDERS: Record<CharacterKind, (kit: Kit, rig: Rig, team: Color3, number: number) => void> = {
   fox: buildFox,
   tubeman: buildTubeMan,
   pig: buildPig,
-  mouse: buildMouse,
+  redpanda: buildRedPanda,
 };
 
 /** Build a character's look onto the rig, in its team color with its jersey number. */
