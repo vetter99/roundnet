@@ -363,6 +363,14 @@ function buildFox(kit: Kit, rig: Rig, team: Color3, number: number): void {
   const ink = kit.mat('ink', new Color3(0.08, 0.12, 0.3), 0.3);
   kit.sphere(h, 0.04, ink, [-0.13, -0.035, 0.225], [0.8, 1, 0.4]);
   kit.cylinder(h, 0.035, 0, 0.032, ink, [-0.13, -0.004, 0.225], undefined, [1, 1, 0.4]);
+  // A paisley bandana in his team color, tied over his head with the knot
+  // and its tails at the back; his ears poke out.
+  const bandana = kit.mat('bandana', new Color3(1, 1, 1), 0.15);
+  bandana.diffuseTexture = paisleyTexture(kit.scene, team);
+  kit.sphere(h, 0.5, bandana, [0, 0.12, -0.03], [1.13, 0.68, 1.04]);
+  kit.torus(h, 0.47, 0.04, bandana, [0, 0.13, -0.01], [-0.15, 0, 0], [1.1, 1, 1.02]);
+  kit.sphere(h, 0.1, bandana, [0, 0.12, -0.27]);
+  for (const side of [-1, 1]) kit.sphere(h, 0.16, bandana, [side * 0.05, 0.03, -0.3], [0.5, 1.1, 0.2], [0.3, 0, side * 0.5]);
   // A hoop earring in his left ear.
   kit.torus(h, 0.06, 0.012, gold, [-0.2, 0.18, 0.0], [0, 0, 0.3]);
 
@@ -380,6 +388,41 @@ function buildFox(kit: Kit, rig: Rig, team: Color3, number: number): void {
   // The huge bushy tail, curling up behind him, with a white tip.
   kit.tube(rig.tail, [[0, 0, 0], [0.05, 0.05, -0.18], [0.12, 0.2, -0.3], [0.16, 0.4, -0.28]], 0.09, 0.06, inked);
   kit.sphere(rig.tail, 0.16, white, [0.17, 0.46, -0.27], [1, 1.3, 1]);
+}
+
+/** A bandana's paisley print: white teardrop motifs and dots on the team color. */
+function paisleyTexture(scene: Scene, team: Color3): DynamicTexture {
+  const s = 128;
+  const tex = new DynamicTexture('paisley', { width: s, height: s }, scene, true);
+  const ctx = tex.getContext() as CanvasRenderingContext2D;
+  ctx.fillStyle = team.toHexString();
+  ctx.fillRect(0, 0, s, s);
+  ctx.strokeStyle = '#f4f1ea';
+  ctx.fillStyle = '#f4f1ea';
+  ctx.lineWidth = 2;
+  for (const [x, y, r] of [[32, 32, 0.4], [96, 32, 2.6], [32, 96, 1.9], [96, 96, 5]]) {
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.rotate(r);
+    // A paisley teardrop with a curled tip, and a dot inside.
+    ctx.beginPath();
+    ctx.arc(0, 4, 10, 0.2, Math.PI * 2 - 0.9);
+    ctx.quadraticCurveTo(14, -18, 4, -16);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(0, 5, 3.5, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  }
+  for (const [x, y] of [[64, 64], [64, 8], [8, 64], [64, 120], [120, 64]]) {
+    ctx.beginPath();
+    ctx.arc(x, y, 3, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  tex.update();
+  tex.uScale = 3;
+  tex.vScale = 3;
+  return tex;
 }
 
 /**
@@ -685,7 +728,7 @@ function arcPoints(c: V3, r: number, bow: 1 | -1): V3[] {
 // Scout, a red panda cub scout: a big round fuzzy rust-red head with white
 // eyebrow spots, white cheeks and muzzle, reddish tear marks, white-rimmed
 // ears, a happy closed-eye grin and a little black nose; dark legs and arms;
-// a huge fluffy ringed tail. In scout gear: a round olive helmet with amber
+// a fluffy ringed tail. In scout gear: a round olive helmet with amber
 // goggles and a teal feather, a mustard scarf over his jersey, a belt with a
 // pouch, olive shorts and big floppy boots. He scurries on quick little steps.
 
@@ -762,15 +805,15 @@ function buildRedPanda(kit: Kit, rig: Rig, team: Color3, number: number): void {
     kit.torus(pivot, 0.15, 0.025, boot, [0, -0.06, 0], [0.2, 0, 0]);
     kit.sphere(pivot, 0.19, boot, [0, -0.2, 0.05], [0.95, 0.6, 1.4]);
   }
-  // A huge fluffy tail with light rings, curling up behind him.
+  // A fluffy tail with light rings, curling up behind him.
   // Many overlapping puffs read as one bushy tail; every few puffs switch
   // color, making wide rings.
-  const puffs = 20;
+  const puffs = 14;
   for (let k = 0; k < puffs; k++) {
     const u = k / (puffs - 1);
-    const d = 0.25 - Math.abs(u - 0.4) * 0.12;
+    const d = 0.15 - Math.abs(u - 0.4) * 0.07;
     const ring = Math.floor(k / 3) % 2 === 1;
-    kit.sphere(rig.tail, d, ring ? furLight : fur, [0.02 + u * 0.1, 0.02 + u * u * 0.45, -0.08 - Math.sin(u * 2.4) * 0.28]);
+    kit.sphere(rig.tail, d, ring ? furLight : fur, [0.02 + u * 0.06, 0.02 + u * u * 0.26, -0.06 - Math.sin(u * 2.4) * 0.17]);
   }
 }
 
