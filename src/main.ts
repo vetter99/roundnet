@@ -663,7 +663,6 @@ function showReason(winner: Team, text: string): void {
 // Touches used by the team with the ball (match mode, while it's in play).
 const touchesEl = document.getElementById('touches') as HTMLElement;
 const touchDots = [...touchesEl.querySelectorAll('.dot')] as HTMLElement[];
-const touchNote = touchesEl.querySelector('.note') as HTMLElement;
 function updateTouches(): void {
   const max = tuning.match.maxTouches;
   const inPlay = world.mode === 'match' && world.ball.alive && !world.waitingForServe && !world.serve.inFlight;
@@ -678,7 +677,6 @@ function updateTouches(): void {
     // The last touch left: it has to go onto the net.
     dot.classList.toggle('last', i === max - 1 && used === max - 1);
   });
-  touchNote.textContent = used === max - 1 ? 'LAST · ONTO THE NET' : used >= max ? 'NONE LEFT' : '';
 }
 
 // The match scoreboard (top center), shown in match mode only.
