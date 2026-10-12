@@ -602,7 +602,8 @@ hits and clearly tell a perfect from a normal hit.
 **P2 · M**
 
 Receiving drill, target practice (land spikes in a zone), serve practice,
-each with a score to beat.
+each with a score to beat. A basic serve practice mode (repeat serves, the
+human always serves, no score) exists; it still needs a score to beat.
 
 ### MODE-02 · Party mode with power-ups
 **P3 · L** · Depends on RULE-02

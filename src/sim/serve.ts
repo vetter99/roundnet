@@ -87,10 +87,13 @@ export function setNextReceiver(world: World, receiver: Team): void {
 
 /** Get ready for a serve: pick and place server and receiver (and partners), reset the aim. */
 export function setUpServe(world: World, t: Tuning): void {
+  // Serve practice with a chosen server: they serve, to the player across from them.
+  const practiced = world.mode === 'serves' ? world.players.find((p) => p.id === world.servePracticeId) : undefined;
+  if (practiced) world.nextReceiver = otherTeam(practiced.team);
   const server = serverTeam(world);
   const servers = teamPlayers(world, server);
   const receivers = teamPlayers(world, world.nextReceiver);
-  const slot = world.serveOrder[server] % servers.length;
+  const slot = practiced ? servers.indexOf(practiced) : world.serveOrder[server] % servers.length;
   world.serve.serverId = servers[slot].id;
   world.serve.receiverId = receivers[slot % receivers.length].id;
   world.lastHitterId = null;

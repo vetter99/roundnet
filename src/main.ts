@@ -16,7 +16,8 @@ import { CHARACTERS, SEAT_CHARACTERS, type CharacterKind } from './render/roster
 import type { MissReason } from './sim/hit';
 import { chargePower, isDiving, type Player } from './sim/player';
 import { DT } from './sim/time';
-import { createMatch, otherTeam, resetRally, restartGame, stepWorld, type PointReason, type SimEvent, type Team } from './sim/world';
+import { setUpServe } from './sim/serve';
+import { createMatch, otherTeam, resetRally, restartGame, stepWorld, type Mode, type PointReason, type SimEvent, type Team } from './sim/world';
 
 const canvas = document.getElementById('game') as HTMLCanvasElement;
 const stats = document.querySelector('#hud .stats') as HTMLElement;
@@ -105,10 +106,18 @@ function rumble(playerId: number, strong: number, weak: number, ms: number): voi
   void actuator?.playEffect?.('dual-rumble', { duration: ms, strongMagnitude: strong, weakMagnitude: weak })?.catch(() => {});
 }
 
-// Practice (endless rallies) or Match (scored games), toggled on screen.
+// Practice (endless rallies), Match (scored games) or Serve practice (the
+// same player serves over and over), cycled by the button.
+const MODES: { mode: Mode; label: string }[] = [
+  { mode: 'practice', label: '🎯 Practice' },
+  { mode: 'match', label: '🏆 Match (to 11)' },
+  { mode: 'serves', label: '🏐 Serve practice' },
+];
 modeButton.addEventListener('click', () => {
-  restartGame(world, tuning, world.mode === 'match' ? 'practice' : 'match');
-  modeButton.textContent = world.mode === 'match' ? '🏆 Match (to 11)' : '🎯 Practice';
+  const next = MODES[(MODES.findIndex((m) => m.mode === world.mode) + 1) % MODES.length];
+  world.servePracticeId = practiceServer();
+  restartGame(world, tuning, next.mode);
+  modeButton.textContent = next.label;
   rally = 0;
   modeButton.blur();
   canvas.focus();
@@ -137,6 +146,24 @@ function seatOf(p: Player): number {
 function isHuman(playerId: number): boolean {
   const p = world.players[playerId];
   return p !== undefined && human[seatOf(p)];
+}
+
+/** Serve practice: the human who serves every time (the first human seat), or null for none. */
+function practiceServer(): number | null {
+  const humans = world.players.filter((p) => human[seatOf(p)]).sort((a, b) => seatOf(a) - seatOf(b));
+  return humans[0]?.id ?? null;
+}
+
+/**
+ * Serve practice: keep the human (if any) as the server. If that changed
+ * while waiting for a serve that hasn't been tossed, set the serve up again.
+ */
+function keepPracticeServer(): void {
+  if (world.mode !== 'serves') return;
+  const id = practiceServer();
+  if (id === world.servePracticeId) return;
+  world.servePracticeId = id;
+  if (world.waitingForServe && !world.serve.tossed && id !== null && world.serve.serverId !== id) setUpServe(world, tuning);
 }
 
 /** A player's name: "Blue", or "Blue 1" / "Blue 2" in 2v2. */
@@ -454,6 +481,7 @@ renderer.engine.runRenderLoop(() => {
     if (joinOpen) closeJoin();
     else setPaused(!paused);
   }
+  keepPracticeServer();
   const menuPresses = input.pollMenu();
   if (paused) handleMenu(menuPresses);
   const devices = assignDevices();

@@ -56,7 +56,10 @@ src/main.ts           wires it together; fixed 60Hz loop with render interpolati
   the ball. Two modes (pause-menu toggle): practice (no score, serve
   alternates) and match (to `match.pointsToWin`, win by 2; the side that lets
   the ball land loses the point; the winner serves; `match.maxTouches`; a
-  double fault gives the receiver the point).
+  double fault gives the receiver the point). A third mode, serve practice
+  (`'serves'`), repeats serves from one server (`world.servePracticeId`: the
+  first human seat, else the usual rotation) with no score; faults don't pass
+  the serve.
 - Serving is a duel (`src/sim/serve.ts`), toss then hit like real roundnet:
   hold the stick toward where to aim (the ball held out in the off paw leans
   that way, `serveHand`; no marker), hold and release pass to toss (a tap is low;

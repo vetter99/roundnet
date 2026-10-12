@@ -736,6 +736,28 @@ describe('serve spin', () => {
   });
 });
 
+describe('serve practice', () => {
+  it('the chosen player serves every time, with no score, and faults never pass the serve', () => {
+    const loose = createTuning();
+    loose.serve.aimLimit = 10;
+    const world = createWorld('2v2');
+    world.mode = 'serves';
+    world.servePracticeId = 1; // Blue 2
+    setUpServe(world, loose);
+    const servers: number[] = [];
+    for (let round = 0; round < 4; round++) {
+      servers.push(world.serve.serverId);
+      // Alternate a good serve and one aimed well off the net (a fault).
+      tossAndServe(world, loose, { tap: true, aimX: round % 2 ? 3 / (loose.net.radius * loose.serve.aimLimit) : 0 });
+      for (let i = 0; i < 600 && !world.waitingForServe; i++) stepWorld(world, [], loose);
+    }
+    expect(servers).toEqual([1, 1, 1, 1]);
+    expect(world.score).toEqual([0, 0]);
+    // The receiver is the Red player straight across.
+    expect(world.players[world.serve.receiverId].team).toBe(1);
+  });
+});
+
 describe('match mode', () => {
   /** A match world where Blue has the ball off the net, ready to play it. */
   function blueHasBallInMatch() {

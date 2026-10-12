@@ -51,8 +51,13 @@ export type SimEvent =
  */
 export type PointReason = 'doubleFault' | 'ace' | 'notReached' | 'missedNet' | 'outOfTouches' | 'dropped';
 
-/** Practice: endless rallies, serve alternates. Match: scored games (see `match` in tuning). */
-export type Mode = 'practice' | 'match';
+/**
+ * Practice: endless rallies, serve alternates. Match: scored games (see
+ * `match` in tuning). Serves: serve practice, the same player serves every
+ * time (`servePracticeId`, or the current server), no score, faults don't
+ * pass the serve.
+ */
+export type Mode = 'practice' | 'match' | 'serves';
 /** One player per side, or two (where no player may touch the ball twice in a row). */
 export type Format = '1v1' | '2v2';
 
@@ -91,6 +96,8 @@ export interface World {
   // The team that receives the next serve; the other team serves it.
   nextReceiver: Team;
   mode: Mode;
+  // Serve practice: who serves every time (null: whoever is serving keeps it).
+  servePracticeId: number | null;
   format: Format;
   // Per team, which teammate (index within the team) serves when it next has the serve.
   serveOrder: [number, number];
@@ -134,6 +141,7 @@ export function createWorld(format: Format = '1v1'): World {
     serveReadyTick: 0,
     nextReceiver: 0,
     mode: 'practice',
+    servePracticeId: null,
     format,
     // Red serves first; Blue's first serve (when it wins the serve) rotates to its slot 0.
     serveOrder: [format === '2v2' ? 1 : 0, 0],
@@ -294,7 +302,12 @@ export function stepWorld(world: World, intents: readonly Intent[], t: Tuning): 
         world.waitingForServe = false;
         const server = otherTeam(world.nextReceiver);
         const receiver = world.nextReceiver;
-        const lost = faultServe(world, t);
+        // In serve practice faults never pass the serve.
+        const lost = world.mode === 'serves' ? false : faultServe(world, t);
+        if (world.mode === 'serves') {
+          world.serve.inFlight = false;
+          world.serve.returnPending = false;
+        }
         world.events.push({ type: 'fault', team: server, lost });
         if (lost && world.mode === 'match') scorePoint(world, receiver, 'doubleFault', t);
       } else {
@@ -305,10 +318,11 @@ export function stepWorld(world: World, intents: readonly Intent[], t: Tuning): 
           const loser = world.possession;
           scorePoint(world, otherTeam(loser), reason, t);
           setNextReceiver(world, loser);
-        } else {
+        } else if (world.mode === 'practice') {
           // Practice: the serve alternates sides.
           setNextReceiver(world, otherTeam(world.nextReceiver));
         }
+        // Serve practice: the same server serves again.
       }
     }
   }
