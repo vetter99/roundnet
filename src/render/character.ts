@@ -239,7 +239,8 @@ export class Character {
     if (this.landTimer > 0) stretch = -0.28 * Math.sin((this.landTimer / LAND_SQUASH_TIME) * Math.PI);
 
     const run = p.grounded ? clamp(speed / 6, 0, 1) : 0;
-    this.walkPhase += dt * (5 + speed * 2.4);
+    // Scurriers take steps twice as fast.
+    this.walkPhase += dt * (5 + speed * 2.4) * (this.gait === 'scurry' ? 2 : 1);
     const stride = Math.sin(this.walkPhase);
     const breathe = Math.sin(this.walkPhase * 0.4) * 0.015;
     // How the body moves with each step, by gait:
@@ -290,7 +291,7 @@ export class Character {
     // Four legs (front left, front right, back left, back right) move in
     // diagonal pairs. Waddlers take short steps, strutters big high steps;
     // fliers let their legs dangle.
-    const reach = this.gait === 'waddle' ? 0.4 : this.gait === 'strut' ? 1.3 : 0.9;
+    const reach = this.gait === 'waddle' ? 0.4 : this.gait === 'strut' ? 1.3 : this.gait === 'scurry' ? 0.55 : 0.9;
     this.legs.forEach((leg, i) => {
       const opposite = i === 0 || i === 3 ? 1 : -1;
       if (this.gait === 'fly') leg.rotation.x = 0.25 + Math.sin(this.time * 9 + i) * 0.08;
