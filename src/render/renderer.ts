@@ -399,8 +399,13 @@ export class Renderer {
 
   /** Play the pass or spike animation for a player. */
   /** A player swings; with spin (-1..1) the arm also sweeps across in that direction. */
-  playSwing(playerId: number, kind: ShotKind, spin = 0): void {
-    this.players[playerId]?.character.playSwing(kind, spin);
+  playSwing(playerId: number, kind: ShotKind, spin = 0, power = 0.5): void {
+    this.players[playerId]?.character.playSwing(kind, spin, power);
+  }
+
+  /** A player just hit the ball at `at`: their hand(s) reach to it. */
+  playContact(playerId: number, kind: ShotKind, at: { x: number; y: number; z: number }): void {
+    this.players[playerId]?.character.playContact(kind, at);
   }
 
   /** Ease toward the closest view that keeps the players, ball, landing spot and net on screen. */

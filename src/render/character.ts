@@ -79,6 +79,20 @@ const SERVE_AIM_LEAN = 0.25;
 // Shoulder to the center of a ball held in the paw (m, at size 1); the arm
 // stretches a little, cartoon style, when the ball is further than this.
 const HOLD_REACH = 0.33;
+// How far an arm may stretch (times its length) to hold the serve ball, and to reach a hit.
+const HOLD_STRETCH = 1.5;
+const CONTACT_STRETCH = 1.9;
+// A hit's arm reach: held this long (s), then fading back into the swing over this long.
+const CONTACT_HOLD = 0.07;
+const CONTACT_FADE = 0.16;
+// Passes: the paws meet this far (m) under the ball, this far apart (each side of center).
+const PASS_CONTACT_DROP = 0.08;
+const PASS_PAW_GAP = 0.05;
+// Swing speed for a soft vs. a full-power hit (1 = the animation's own speed).
+const SPIKE_RATE_SOFT = 0.8;
+const SPIKE_RATE_HARD = 1.45;
+const PASS_RATE_SOFT = 0.85;
+const PASS_RATE_HARD = 1.2;
 // Arms hang straight down from the shoulder at rest.
 const HANG = new Vector3(0, -1, 0);
 // Spin (serves and spikes): while charging, the hitting arm cocks out to one
@@ -109,7 +123,10 @@ export class Character {
   private readonly legs: TransformNode[];
   private facing = 0;
   private walkPhase = 0;
-  private swing: { anim: SwingAnim; time: number } | null = null;
+  // `rate` speeds the swing up for harder hits (1 = normal).
+  private swing: { anim: SwingAnim; time: number; rate: number } | null = null;
+  // A hit just made: the arm(s) reach to where the ball was, then let go.
+  private contact: { kind: ShotKind; at: Vector3; time: number } | null = null;
   // The wind-up pose phase held while charging, so the release continues from it.
   private heldPhase: { kind: ShotKind; phase: number } | null = null;
   private landTimer = 0;
@@ -169,12 +186,24 @@ export class Character {
    * Play the pass or spike animation; call whenever this player swings. With
    * spin, the hitting arm also sweeps across in the spin direction.
    */
-  playSwing(kind: ShotKind, spin = 0): void {
+  playSwing(kind: ShotKind, spin = 0, power = 0.5): void {
     this.spinSweep = spin !== 0 ? spin : null;
     const anim = SWING_ANIMS[kind];
     const startPhase = this.heldPhase?.kind === kind ? this.heldPhase.phase : 0;
-    this.swing = { anim, time: startPhase * anim.duration };
+    // Harder hits swing visibly faster.
+    const p = clamp(power, 0, 1);
+    const rate = kind === 'spike' ? lerp(SPIKE_RATE_SOFT, SPIKE_RATE_HARD, p) : kind === 'pass' ? lerp(PASS_RATE_SOFT, PASS_RATE_HARD, p) : 1;
+    this.swing = { anim, time: startPhase * anim.duration, rate };
     this.heldPhase = null;
+  }
+
+  /**
+   * The ball was just hit at `at` (world position): the hitting arm (both
+   * arms for a pass) reaches to it, so the hand visibly makes the hit, then
+   * blends back into the swing's follow-through.
+   */
+  playContact(kind: ShotKind, at: { x: number; y: number; z: number }): void {
+    this.contact = { kind, at: new Vector3(at.x, at.y, at.z), time: 0 };
   }
 
   update(
@@ -217,7 +246,7 @@ export class Character {
     let phase = 0;
     let anim: SwingAnim | undefined;
     if (this.swing) {
-      this.swing.time += dt;
+      this.swing.time += dt * this.swing.rate;
       phase = this.swing.time / this.swing.anim.duration;
       anim = this.swing.anim;
       if (phase >= 1) {
@@ -299,6 +328,9 @@ export class Character {
     });
     this.arms.forEach((arm, i) => {
       const side = i === 0 ? -1 : 1;
+      // Posed by angles below; reaches (holding, hitting) override after.
+      arm.rotationQuaternion = null;
+      arm.scaling.y = 1;
       if (anim) {
         const [swing, spread] = sampleArm(i === 0 ? anim.left : anim.right, phase);
         arm.rotation.x = swing;
@@ -324,19 +356,45 @@ export class Character {
       this.root.rotation.y -= cock * SPIN_TWIST;
     }
 
-    this.holdBall(holdBall);
+    if (holdBall) this.reachArm(this.arms[0], holdBall, 1, HOLD_STRETCH);
+    this.reachForContact(dt);
 
     if (dive) this.applyDivePose(dive, anim !== undefined);
   }
 
-  /** Reach the off (left) paw to a ball held out before serving (world position), or let go. */
-  private holdBall(at?: { x: number; y: number; z: number }): void {
-    const arm = this.arms[0];
-    if (!at) {
-      arm.rotationQuaternion = null;
-      arm.scaling.y = 1;
+  /** While a hit's contact is fresh, the hitting arm(s) reach to the ball, fading out after. */
+  private reachForContact(dt: number): void {
+    const c = this.contact;
+    if (!c) return;
+    c.time += dt;
+    const weight = c.time < CONTACT_HOLD ? 1 : 1 - (c.time - CONTACT_HOLD) / CONTACT_FADE;
+    if (weight <= 0) {
+      this.contact = null;
       return;
     }
+    if (c.kind === 'pass') {
+      // A bump: both paws together just under the ball.
+      for (const [i, arm] of this.arms.entries()) {
+        const at = c.at.add(new Vector3(0, -PASS_CONTACT_DROP, 0));
+        this.reachArm(arm, at.add(this.sideways(i === 0 ? -PASS_PAW_GAP : PASS_PAW_GAP)), weight, CONTACT_STRETCH);
+      }
+    } else {
+      this.reachArm(this.arms[1], c.at, weight, CONTACT_STRETCH);
+    }
+  }
+
+  /** A sideways offset (m) in world space, to the character's right for positive. */
+  private sideways(d: number): Vector3 {
+    const yaw = this.root.rotation.y;
+    return new Vector3(Math.cos(yaw) * d, 0, -Math.sin(yaw) * d);
+  }
+
+  /**
+   * Point an arm at `at` (world position), stretching it (cartoon style, up
+   * to `maxStretch`) to reach. `weight` blends from its current pose (0) to
+   * fully reaching (1).
+   */
+  private reachArm(arm: TransformNode, at: { x: number; y: number; z: number }, weight: number, maxStretch: number): void {
     // The arm's parent is usually the body, but may hang off a moving part
     // (e.g. a flailing tube), so update the whole chain above it first.
     const chain: TransformNode[] = [];
@@ -347,12 +405,11 @@ export class Character {
     const reach = Vector3.TransformCoordinates(new Vector3(at.x, at.y, at.z), toParent).subtractInPlace(arm.position);
     const length = reach.length();
     if (length < 1e-4) return;
-    arm.rotationQuaternion = Quaternion.FromUnitVectorsToRef(
-      HANG,
-      reach.scaleInPlace(1 / length),
-      arm.rotationQuaternion ?? new Quaternion(),
-    );
-    arm.scaling.y = clamp(length / HOLD_REACH, 0.7, 1.5);
+    const posed = arm.rotationQuaternion ?? Quaternion.FromEulerAngles(arm.rotation.x, arm.rotation.y, arm.rotation.z);
+    const pointing = Quaternion.FromUnitVectorsToRef(HANG, reach.scaleInPlace(1 / length), new Quaternion());
+    arm.rotationQuaternion = Quaternion.Slerp(posed, pointing, weight);
+    const stretch = clamp(length / HOLD_REACH, 0.7, maxStretch);
+    arm.scaling.y = lerp(arm.scaling.y, stretch, weight);
   }
 
   /** Stretch out flat in the lunge, lie there, then push back up. Overrides the normal pose. */

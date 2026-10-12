@@ -513,17 +513,24 @@ let lastHit: HitEvent | null = null;
 let lastNet: NetEvent | null = null;
 let lastMiss: { team: Team; reason: MissReason } | null = null;
 
+/** Where the ball was hit this tick: it has already flown one tick on, so step back. */
+function contactPoint(): { x: number; y: number; z: number } {
+  const { pos, vel } = world.ball;
+  return { x: pos.x - vel.x * DT, y: pos.y - vel.y * DT, z: pos.z - vel.z * DT };
+}
+
 function onEvent(e: SimEvent): void {
   if (e.type === 'swing') {
     // A tapped spike is a drop shot: play the gentle push instead of the slam.
     const drop = e.kind === 'spike' && e.power < tuning.hit.dropShotMaxPower;
-    renderer.playSwing(e.playerId, drop ? 'drop' : e.kind, drop ? 0 : e.spin);
+    renderer.playSwing(e.playerId, drop ? 'drop' : e.kind, drop ? 0 : e.spin, e.power);
     sfx.swing(e.power);
   } else if (e.type === 'whiff') {
     lastMiss = { team: world.players[e.playerId].team, reason: e.reason };
   } else if (e.type === 'hit') {
     lastHit = e;
     lastMiss = null;
+    renderer.playContact(e.playerId, e.kind, contactPoint());
     // A light buzz for passes and drops, a thump for spikes.
     if (e.kind === 'spike') rumble(e.playerId, 0.3 + 0.6 * e.power, 0.4, 90);
     else rumble(e.playerId, 0.05, 0.35, 60);
@@ -554,6 +561,7 @@ function onEvent(e: SimEvent): void {
     renderer.playSwing(e.playerId, 'drop');
     sfx.swing(0.2);
   } else if (e.type === 'serve') {
+    renderer.playContact(e.playerId, 'spike', contactPoint());
     rumble(e.playerId, 0.3 + 0.5 * e.power, 0.4, 90);
     const featured = isHuman(e.playerId) || !world.players.some((p) => isHuman(p.id));
     sfx.hit('spike', e.power, e.quality, featured ? 1 : tuning.audio.cpuHits);
