@@ -310,8 +310,8 @@ function arm(kit: Kit, pivot: TransformNode, skin: StandardMaterial, hand: Stand
 
 // ---------------------------------------------------------------------------
 // Tilt, the trickster fox, now a pop-punk rapper: sly half-lidded eyes, one
-//    eyebrow up, a smirk, a water-drip tattoo under his eye, bleached spiky
-//    hair between tall black-tipped ears, a chunky gold chain (with a little
+//    eyebrow up, a smirk, a water-drip tattoo under his eye, tall
+//    black-tipped ears, a chunky gold chain (with a little
 //    pinball pendant, his old love), a hoop earring, painted claws, full
 //    tattoo sleeves on both arms and both bare legs (no shorts), and a huge
 //    bushy tail.
@@ -359,11 +359,6 @@ function buildFox(kit: Kit, rig: Rig, team: Color3, number: number): void {
     kit.cylinder(ear, 0.24, 0, 0.17, fur, [0, 0.1, 0], undefined, [1, 1, 0.45]);
     kit.cylinder(ear, 0.08, 0, 0.065, black, [0, 0.19, 0], undefined, [1, 1, 0.5]);
     kit.cylinder(ear, 0.15, 0, 0.1, white, [0, 0.07, 0.03], undefined, [1, 1, 0.3]);
-  }
-  // Bleached, spiky hair between the ears.
-  const bleach = kit.mat('bleach', new Color3(0.98, 0.93, 0.72), 0.2);
-  for (const [x, z, rx, rz, len] of [[0, 0.06, 0.5, 0, 0.18], [-0.07, 0.0, 0.2, 0.4, 0.16], [0.07, 0.0, 0.2, -0.4, 0.16], [0, -0.06, -0.2, 0, 0.17], [-0.04, 0.1, 0.8, 0.3, 0.13], [0.05, 0.1, 0.8, -0.3, 0.13]]) {
-    kit.cylinder(h, len, 0, 0.09, bleach, [x, 0.25, z], [rx, 0, rz]);
   }
   // A water-drip tattoo under his left eye: a little teardrop of ink.
   const ink = kit.mat('ink', new Color3(0.08, 0.12, 0.3), 0.3);
