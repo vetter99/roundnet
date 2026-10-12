@@ -81,10 +81,8 @@ type V3 = [number, number, number];
 
 const WHITE = new Color3(0.97, 0.97, 0.95);
 const INK = new Color3(0.06, 0.05, 0.06);
-const PINK = new Color3(0.95, 0.55, 0.62);
 const GOLD = new Color3(0.95, 0.75, 0.22);
 const CHROME = new Color3(0.78, 0.8, 0.84);
-const SHORTS = new Color3(0.14, 0.14, 0.18);
 // Materials keep this much of their requested shine (a soft sheen).
 const SHINE_KEPT = 0.8;
 
@@ -310,17 +308,13 @@ function arm(kit: Kit, pivot: TransformNode, skin: StandardMaterial, hand: Stand
   }
 }
 
-/** Shorts over the hips. */
-function shorts(kit: Kit, rig: Rig, scale: V3, color = SHORTS): void {
-  kit.sphere(rig.bounce, 0.38, kit.mat('shorts', color, 0.1), [0, 0.3, 0], scale);
-}
-
 // ---------------------------------------------------------------------------
-// Tilt, the trickster fox, now a pop-punk rapper: sly half-lidded eyes
-//    behind pink-tinted round shades, one eyebrow up, a smirk, bleached
-//    spiky hair between tall black-tipped ears, a chunky gold chain (with a
-//    little pinball pendant, his old love), a hoop earring, painted claws,
-//    a pink electric guitar slung on his back, and a huge bushy tail.
+// Tilt, the trickster fox, now a pop-punk rapper: sly half-lidded eyes, one
+//    eyebrow up, a smirk, a water-drip tattoo under his eye, bleached spiky
+//    hair between tall black-tipped ears, a chunky gold chain (with a little
+//    pinball pendant, his old love), a hoop earring, painted claws, full
+//    tattoo sleeves on both arms and both bare legs (no shorts), and a huge
+//    bushy tail.
 
 function buildFox(kit: Kit, rig: Rig, team: Color3, number: number): void {
   const fur = kit.mat('fur', new Color3(0.95, 0.45, 0.1), 0.1);
@@ -328,9 +322,12 @@ function buildFox(kit: Kit, rig: Rig, team: Color3, number: number): void {
   const black = kit.mat('black', new Color3(0.13, 0.1, 0.1), 0.1);
   const chrome = kit.mat('chrome', CHROME, 0.9, 64);
   const gold = kit.mat('gold', GOLD, 0.9, 64);
-  const pinkMat = kit.mat('pink', PINK, 0.5, 48);
+  // Fur covered in tattoos, for his arms and legs.
+  const inked = kit.mat('inkedFur', new Color3(1, 1, 1), 0.1);
+  inked.diffuseTexture = sleeveTexture(kit.scene, new Color3(0.95, 0.45, 0.1));
 
-  shorts(kit, rig, [1, 0.78, 0.95]);
+  // No shorts: furry hips under the jersey.
+  kit.sphere(rig.bounce, 0.36, fur, [0, 0.3, 0], [1, 0.75, 0.95]);
   jersey(kit, rig, team, number, 0.5, 0.44, [1, 0.97, 0.9]);
   // A chunky gold chain of links, with a little chrome pinball pendant.
   for (let k = 0; k < 14; k++) {
@@ -340,15 +337,6 @@ function buildFox(kit: Kit, rig: Rig, team: Color3, number: number): void {
   }
   kit.sphere(rig.bounce, 0.07, chrome, [0, 0.53, 0.2]);
 
-  // A pink electric guitar slung across his back, neck up over his shoulder.
-  const guitar = kit.node(rig.bounce, [0.02, 0.5, -0.24], [0, 0, 0.7]);
-  kit.sphere(guitar, 0.3, pinkMat, [0, -0.06, 0], [1, 1.2, 0.3]);
-  kit.sphere(guitar, 0.22, pinkMat, [0, 0.13, 0], [1, 1, 0.3]);
-  kit.cylinder(guitar, 0.04, 0.07, 0.07, kit.mat('pickup', new Color3(0.1, 0.1, 0.1), 0.4), [0, 0, -0.05], [Math.PI / 2, 0, 0]);
-  kit.box(guitar, [0.05, 0.42, 0.03], kit.mat('neck', new Color3(0.3, 0.2, 0.12), 0.3), [0, 0.42, 0]);
-  kit.box(guitar, [0.08, 0.1, 0.04], pinkMat, [0, 0.66, 0]);
-  // The strap across his chest.
-  kit.torus(rig.bounce, 0.5, 0.02, kit.mat('strap', new Color3(0.08, 0.08, 0.09), 0.2), [0, 0.52, 0], [0, 0, -0.75], [1, 1, 0.95]);
 
   const h = rig.head;
   kit.sphere(h, 0.48, fur, [0, 0.02, 0], [1.1, 0.95, 1]);
@@ -377,31 +365,163 @@ function buildFox(kit: Kit, rig: Rig, team: Color3, number: number): void {
   for (const [x, z, rx, rz, len] of [[0, 0.06, 0.5, 0, 0.18], [-0.07, 0.0, 0.2, 0.4, 0.16], [0.07, 0.0, 0.2, -0.4, 0.16], [0, -0.06, -0.2, 0, 0.17], [-0.04, 0.1, 0.8, 0.3, 0.13], [0.05, 0.1, 0.8, -0.3, 0.13]]) {
     kit.cylinder(h, len, 0, 0.09, bleach, [x, 0.25, z], [rx, 0, rz]);
   }
-  // Pink-tinted round sunglasses with thin gold frames.
-  const lens = kit.mat('shades', new Color3(1, 0.35, 0.6), 0.9, 96);
-  lens.alpha = 0.7;
-  for (const side of [-1, 1]) {
-    kit.torus(h, 0.13, 0.014, gold, [side * 0.1, 0.05, 0.255], [Math.PI / 2, 0, 0]);
-    kit.cylinder(h, 0.01, 0.12, 0.12, lens, [side * 0.1, 0.05, 0.255], [Math.PI / 2, 0, 0]);
-    kit.cylinder(h, 0.2, 0.01, 0.01, gold, [side * 0.21, 0.06, 0.15], [Math.PI / 2, side * 0.6, 0]);
-  }
-  kit.cylinder(h, 0.06, 0.01, 0.01, gold, [0, 0.06, 0.258], [0, 0, Math.PI / 2]);
+  // A water-drip tattoo under his left eye: a little teardrop of ink.
+  const ink = kit.mat('ink', new Color3(0.08, 0.12, 0.3), 0.3);
+  kit.sphere(h, 0.04, ink, [-0.13, -0.035, 0.225], [0.8, 1, 0.4]);
+  kit.cylinder(h, 0.035, 0, 0.032, ink, [-0.13, -0.004, 0.225], undefined, [1, 1, 0.4]);
   // A hoop earring in his left ear.
   kit.torus(h, 0.06, 0.012, gold, [-0.2, 0.18, 0.0], [0, 0, 0.3]);
 
-  // Black-socked arms and legs, like a real fox, with painted black claws.
+  // Tattooed arms down to black paws, with painted black claws.
   setShoulders(rig, 0.2);
   for (const pivot of rig.arms) {
-    arm(kit, pivot, fur, black, 0.05, 0.15);
+    arm(kit, pivot, inked, black, 0.05, 0.15);
     for (let k = -1; k <= 1; k++) kit.sphere(pivot, 0.035, kit.mat('nails', new Color3(0.05, 0.05, 0.06), 0.9, 80), [k * 0.035, -0.335, 0.06]);
   }
+  // Bare tattooed legs down to black feet.
   for (const pivot of rig.legs) {
-    kit.capsule(pivot, 0.2, 0.065, black, [0, -0.09, 0]);
-    kit.sphere(pivot, 0.18, black, [0, -0.18, 0.05], [0.95, 0.6, 1.4]);
+    kit.capsule(pivot, 0.22, 0.068, inked, [0, -0.08, 0]);
+    kit.sphere(pivot, 0.18, black, [0, -0.19, 0.05], [0.95, 0.6, 1.4]);
   }
   // The huge bushy tail, curling up behind him, with a white tip.
   kit.tube(rig.tail, [[0, 0, 0], [0.05, 0.05, -0.18], [0.12, 0.2, -0.3], [0.16, 0.4, -0.28]], 0.09, 0.06, fur);
   kit.sphere(rig.tail, 0.16, white, [0.17, 0.46, -0.27], [1, 1.3, 1]);
+}
+
+/**
+ * A full tattoo sleeve on fur: dense flash-style ink (roses, stars, daggers,
+ * swallows, waves, script lines) with a few red and teal fills, tiling so it
+ * wraps around a limb with no seam.
+ */
+function sleeveTexture(scene: Scene, fur: Color3): DynamicTexture {
+  const s = 256;
+  const tex = new DynamicTexture('sleeve', { width: s, height: s }, scene, true);
+  const ctx = tex.getContext() as CanvasRenderingContext2D;
+  ctx.fillStyle = fur.toHexString();
+  ctx.fillRect(0, 0, s, s);
+  let seed = 21;
+  const rand = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+  const ink = '#1a1420';
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+  // Draw each design at (x, y), and again shifted by the texture size so it tiles.
+  const stamp = (x: number, y: number, draw: () => void) => {
+    for (const dx of [-s, 0, s]) {
+      for (const dy of [-s, 0, s]) {
+        ctx.save();
+        ctx.translate(x + dx, y + dy);
+        draw();
+        ctx.restore();
+      }
+    }
+  };
+  const rose = () => {
+    ctx.fillStyle = '#c42838';
+    ctx.strokeStyle = ink;
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.arc(0, 0, 16, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+    ctx.beginPath();
+    for (let a = 0; a < 9; a += 0.3) ctx.lineTo(Math.cos(a) * a * 1.6, Math.sin(a) * a * 1.6);
+    ctx.stroke();
+    ctx.fillStyle = '#2f8a6e';
+    for (const r of [-0.6, 2.4]) {
+      ctx.beginPath();
+      ctx.ellipse(Math.cos(r) * 22, Math.sin(r) * 22, 10, 5, r, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+    }
+  };
+  const star = () => {
+    ctx.fillStyle = ink;
+    ctx.beginPath();
+    for (let k = 0; k < 10; k++) {
+      const r = k % 2 ? 6 : 14;
+      const a = (k / 10) * Math.PI * 2 - Math.PI / 2;
+      ctx.lineTo(Math.cos(a) * r, Math.sin(a) * r);
+    }
+    ctx.closePath();
+    ctx.fill();
+  };
+  const dagger = () => {
+    ctx.strokeStyle = ink;
+    ctx.fillStyle = '#d9d4cc';
+    ctx.lineWidth = 2.5;
+    ctx.rotate(0.5);
+    ctx.beginPath();
+    ctx.moveTo(0, -30);
+    ctx.lineTo(5, 8);
+    ctx.lineTo(-5, 8);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+    ctx.fillStyle = ink;
+    ctx.fillRect(-12, 8, 24, 5);
+    ctx.fillRect(-3, 13, 6, 14);
+  };
+  const swallow = () => {
+    ctx.fillStyle = '#245a8f';
+    ctx.strokeStyle = ink;
+    ctx.lineWidth = 2.5;
+    ctx.beginPath();
+    ctx.moveTo(-22, -6);
+    ctx.quadraticCurveTo(-4, -2, 0, 4);
+    ctx.quadraticCurveTo(4, -2, 22, -6);
+    ctx.quadraticCurveTo(8, 6, 4, 10);
+    ctx.lineTo(8, 22);
+    ctx.lineTo(0, 14);
+    ctx.lineTo(-8, 22);
+    ctx.lineTo(-4, 10);
+    ctx.quadraticCurveTo(-8, 6, -22, -6);
+    ctx.fill();
+    ctx.stroke();
+  };
+  const waves = () => {
+    ctx.strokeStyle = ink;
+    ctx.lineWidth = 3;
+    for (let k = 0; k < 3; k++) {
+      ctx.beginPath();
+      for (let x = -30; x <= 30; x += 3) ctx.lineTo(x, k * 8 + Math.sin(x * 0.2) * 4);
+      ctx.stroke();
+    }
+  };
+  const script = () => {
+    ctx.strokeStyle = ink;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    for (let x = -26; x <= 26; x += 2) ctx.lineTo(x, Math.sin(x * 0.7) * 5 + (x % 9 === 0 ? -6 : 0));
+    ctx.stroke();
+  };
+  const designs = [rose, star, dagger, swallow, waves, script, star, rose, script];
+  // A packed grid of designs, jittered so it looks hand-placed, filled in
+  // edge to edge like a full sleeve.
+  const grid = 6;
+  const cell = s / grid;
+  for (let gy = 0; gy < grid; gy++) {
+    for (let gx = 0; gx < grid; gx++) {
+      const x = gx * cell + cell / 2 + (rand() - 0.5) * cell * 0.4;
+      const y = gy * cell + cell / 2 + (rand() - 0.5) * cell * 0.4;
+      const design = designs[Math.floor(rand() * designs.length)];
+      const scale = 0.8 + rand() * 0.3;
+      stamp(x, y, () => {
+        ctx.scale(scale, scale);
+        design();
+      });
+    }
+  }
+  // Little filler dots between designs.
+  for (let k = 0; k < 90; k++) {
+    stamp(rand() * s, rand() * s, () => {
+      ctx.fillStyle = ink;
+      ctx.beginPath();
+      ctx.arc(0, 0, 1.5 + rand() * 1.5, 0, Math.PI * 2);
+      ctx.fill();
+    });
+  }
+  tex.update();
+  return tex;
 }
 
 // ---------------------------------------------------------------------------
