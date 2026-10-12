@@ -77,7 +77,7 @@ export const DEFAULT_TUNING = {
       // While diving, reach is measured from the outstretched paws, this far
       // ahead of the feet in the dive direction, plus a bonus.
       reachOffset: 0.7,
-      reachBonus: 0.7,
+      reachBonus: 0.45,
       // Ideal contact height while diving: you're stretched out low.
       contactHeight: 0.6,
       // How far above the dive contact height a ball can still be hit.
@@ -86,7 +86,7 @@ export const DEFAULT_TUNING = {
       powerScale: 0.6,
       // There's no dive button: swinging at a ball that's out of reach, but no
       // more than this far beyond it, dives for it automatically.
-      autoRange: 1.8,
+      autoRange: 1.4,
     },
   },
 
