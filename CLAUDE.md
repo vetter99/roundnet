@@ -93,10 +93,9 @@ src/main.ts           wires it together; fixed 60Hz loop with render interpolati
   `src/render/character.ts`. The roster is four (defaults Blue 1, Blue 2,
   Red 1, Red 2): Tilt (a trickster fox, pop-punk rapper look: tattoo
   tattoos on arms, legs and tail, drip face tattoo, gold chain), Chris P.
-  Bacon (a piglet on all fours, back end in a wheel cart; no arms, so his
-  hits are body lunges), Tube Man (wacky inflatable tube man gliding on his
-  blower, flailing), Trash Panda (a raccoon in a trash can on wheels), and
-  Scout (a cheerful mouse scout: helmet with goggles, scarf, boots; scurries). Characters
+  Bacon (a piglet on all fours, back end in a wheel cart; little trotter
+  arms on his chest do the hitting), Tube Man (wacky inflatable tube man gliding on his
+  blower, flailing), and Scout (a cheerful mouse scout: helmet with goggles, scarf, boots; scurries). Characters
   should move distinctly, not all be standing-human variants: the rig supports
   gaits (`walk`, `waddle`, `hop`, `four`, `glide`, `strut`, `fly`, `scurry`), extra leg pivots, and
   `wobblers` (parts that sway on their own). The button next
