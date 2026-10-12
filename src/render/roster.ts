@@ -521,7 +521,7 @@ function sleeveTexture(scene: Scene, fur: Color3): DynamicTexture {
 // ---------------------------------------------------------------------------
 // Chris P. Bacon: a pink piglet on all fours like the real one, his body
 //    level with the ground, walking on his front legs while his back end,
-//    wrapped in blue cloth, rides in a two-wheeled cart on a yellow frame (the
+//    wrapped in brown cloth, rides in a two-wheeled cart on a yellow frame (the
 //    wheels roll as he moves). Big snout, perky ears, a curly tail, a black
 //    harness, and his jersey around his middle with the number on his back.
 //    Little trotter arms on the sides of his chest do the hitting, so his
@@ -543,8 +543,8 @@ function buildPig(kit: Kit, rig: Rig, team: Color3, number: number): void {
   torso.position.z = 0.02;
   // Turned up, then around, so the number reads upright from behind him.
   torso.rotation.set(-Math.PI / 2, Math.PI, 0);
-  // His back end, wrapped in blue cloth.
-  kit.sphere(b, 0.38, kit.mat('cloth', new Color3(0.15, 0.4, 0.95), 0.1), [0, 0.33, -0.2], [1.05, 0.95, 1]);
+  // His back end, wrapped in brown cloth (not blue, which reads as a team color).
+  kit.sphere(b, 0.38, kit.mat('cloth', new Color3(0.32, 0.22, 0.15), 0.1), [0, 0.33, -0.2], [1.05, 0.95, 1]);
   // The harness: a strap around the chest and one just in front of the cloth
   // (clear of the number), with a silver ring on top.
   for (const z of [0.2, -0.13]) kit.torus(b, 0.44, 0.03, black, [0, 0.37, z], [Math.PI / 2, 0, 0], [1.02, 1, 1.05]);
