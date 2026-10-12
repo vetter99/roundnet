@@ -7,7 +7,7 @@ import { HemisphericLight } from '@babylonjs/core/Lights/hemisphericLight';
 import { StandardMaterial } from '@babylonjs/core/Materials/standardMaterial';
 import { DynamicTexture } from '@babylonjs/core/Materials/Textures/dynamicTexture';
 import { Color3, Color4 } from '@babylonjs/core/Maths/math.color';
-import { Vector3 } from '@babylonjs/core/Maths/math.vector';
+import { Quaternion, Vector3 } from '@babylonjs/core/Maths/math.vector';
 import { Mesh } from '@babylonjs/core/Meshes/mesh';
 import { VertexData } from '@babylonjs/core/Meshes/mesh.vertexData';
 import { MeshBuilder } from '@babylonjs/core/Meshes/meshBuilder';
@@ -98,6 +98,10 @@ const TRAIL_PLAIN = new Color3(1, 0.95, 0.7);
 const TRAIL_SPIN_LEFT = new Color3(0.15, 0.9, 1);
 const TRAIL_SPIN_RIGHT = new Color3(1, 0.3, 0.85);
 const SPIN_FULL = 30;
+// Every ball in flight tumbles forward this fast (rad/s per m/s of speed),
+// up to a cap, so it never looks like it's sliding flat through the air.
+const BALL_TUMBLE = 1.6;
+const BALL_TUMBLE_MAX = 22;
 const TRAIL_SPIN_ALPHA = 0.9;
 
 const METER_WIDTH = 0.5;
@@ -307,7 +311,20 @@ export class Renderer {
     } else {
       this.ballSpin *= Math.exp(-0.4 * dt);
     }
-    this.ball.rotation.y += this.ballSpin * dt;
+    // Turn the ball: the sidespin twist about the vertical, plus a forward
+    // tumble (like topspin) about the horizontal axis across its flight,
+    // faster the faster it flies, so its stripes visibly roll on every shot.
+    const v = ball.vel;
+    const flat = Math.hypot(v.x, v.z);
+    const tumble = ball.alive && !world.waitingForServe ? Math.min(Math.hypot(v.x, v.y, v.z) * BALL_TUMBLE, BALL_TUMBLE_MAX) : 0;
+    const q = this.ball.rotationQuaternion ?? Quaternion.Identity();
+    if (Math.abs(this.ballSpin) > 1e-3) q.multiplyInPlace(Quaternion.RotationAxis(Vector3.Up(), this.ballSpin * dt));
+    if (tumble > 0 && flat > 0.05) {
+      // The axis across the flight (velocity x up), so the top rolls forward.
+      const across = new Vector3(v.z / flat, 0, -v.x / flat);
+      q.copyFrom(Quaternion.RotationAxis(across, tumble * dt).multiply(q));
+    }
+    this.ball.rotationQuaternion = q;
     // Signed amount, -1..1: the sign says which way it curves.
     return clamp(this.ballSpin / SPIN_FULL, -1, 1);
   }
