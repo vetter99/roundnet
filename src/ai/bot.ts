@@ -139,7 +139,8 @@ export function botIntent(world: World, index: number, t: Tuning): Intent {
     const error = ((((world.serveReadyTick * 7919) % 9) - 4) / 4) * SERVE_TIMING_ERROR;
     const release = ball.vel.y < 0 && ball.pos.y <= t.serve.contactHeight + error;
     intent.spike = (me.charge?.kind === 'spike' || ball.vel.y < SERVE_CHARGE_FROM_VY) && !release;
-    // While charging, on about half of serves push the stick sideways for spin.
+    // While charging, on about half of serves push the stick sideways for
+    // sidespin, and on about two thirds up or down for topspin or backspin.
     const spinChoice = (world.serveReadyTick * 48271) % 4;
     if (me.charge && spinChoice < 2) {
       // Sideways relative to the line from the server to its aim.
@@ -150,6 +151,7 @@ export function botIntent(world: World, index: number, t: Tuning): Intent {
       intent.moveX = (az / d) * dir;
       intent.moveZ = (-ax / d) * dir;
     }
+    if (me.charge) intent.forward = ((world.serveReadyTick * 69621) % 3) - 1;
     return intent;
   }
   // Everyone else holds their spot until the serve is in the air.

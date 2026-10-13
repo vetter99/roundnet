@@ -22,15 +22,16 @@ export type SimEvent =
   | BallEvent
   | ({ type: 'hit' } & HitResult)
   // The player released a spike or pass (whether or not it connects).
-  // spin: sidespin -1..1 (from the serve or a spike), for the arm sweep.
-  | { type: 'swing'; playerId: number; kind: HitKind; power: number; spin: number }
+  // spin: sidespin -1..1 (from the serve or a spike), for the arm sweep;
+  // topspin: topspin (+) / backspin (-), -1..1, for the arm's follow-through.
+  | { type: 'swing'; playerId: number; kind: HitKind; power: number; spin: number; topspin: number }
   // A swing's buffer ran out without touching the ball.
   | { type: 'whiff'; playerId: number; kind: HitKind; reason: MissReason }
   // The ball came off the net, so the other team must now play it.
   | { type: 'possession'; team: Team }
   // A serve was hit; a serve that missed the net (lost = out of tries).
   | { type: 'toss'; playerId: number }
-  | { type: 'serve'; playerId: number; power: number; spin: number; quality: number }
+  | { type: 'serve'; playerId: number; power: number; spin: number; topspin: number; quality: number }
   | { type: 'fault'; team: Team; lost: boolean }
   // Match mode: a point scored, and the end of a game.
   // Why: see PointReason. `loser` is the team that gave the point away.
@@ -88,6 +89,8 @@ export interface World {
   lastHitPower: number;
   // Ticks since the ball died; the serve prompt appears after a short pause.
   deadTicks: number;
+  // Serve practice: the tick the receiver returned the serve (null: not yet).
+  returnTick: number | null;
   // True while the game waits for the server to serve (aim, charge, release).
   waitingForServe: boolean;
   serve: ServeState;
@@ -136,6 +139,7 @@ export function createWorld(format: Format = '1v1'): World {
     lastHitKind: null,
     lastHitPower: 0,
     deadTicks: 0,
+    returnTick: null,
     waitingForServe: true,
     serve: createServeState(),
     serveReadyTick: 0,
@@ -240,10 +244,16 @@ export function stepWorld(world: World, intents: readonly Intent[], t: Tuning): 
     // Serving, step 2: releasing spike while the ball is up hits the serve.
     const serveHit = serving && world.serve.tossed && swing.kind === 'spike';
     if (serving && !serveHit) return;
-    world.events.push({ type: 'swing', playerId: p.id, ...swing, spin: serving ? world.serve.spin : swing.spin });
+    world.events.push({
+      type: 'swing',
+      playerId: p.id,
+      ...swing,
+      spin: serving ? world.serve.spin : swing.spin,
+      topspin: serving ? world.serve.topspin : swing.topspin,
+    });
     if (serveHit && wobble) {
       const quality = launchServe(world, p, swing.power, wobble, t);
-      world.events.push({ type: 'serve', playerId: p.id, power: swing.power, spin: world.serve.spin, quality });
+      world.events.push({ type: 'serve', playerId: p.id, power: swing.power, spin: world.serve.spin, topspin: world.serve.topspin, quality });
     }
   });
   separatePlayers(world, t);
@@ -267,7 +277,10 @@ export function stepWorld(world: World, intents: readonly Intent[], t: Tuning): 
       world.events.push({ type: 'hit', ...hit });
       if (p.team === world.possession) world.touches++;
       // The duel ends once the receiving side plays the ball.
-      if (p.team !== world.lastHitTeam) world.serve.returnPending = false;
+      if (p.team !== world.lastHitTeam && world.serve.returnPending) {
+        world.serve.returnPending = false;
+        if (world.mode === 'serves') world.returnTick = world.tick;
+      }
       world.lastHitTeam = p.team;
       world.lastHitterId = p.id;
       turn.lastHitterId = p.id;
@@ -325,6 +338,12 @@ export function stepWorld(world: World, intents: readonly Intent[], t: Tuning): 
         // Serve practice: the same server serves again.
       }
     }
+  }
+
+  // Serve practice doesn't play the point out: soon after the return, serve again.
+  if (world.mode === 'serves' && world.returnTick !== null && world.tick - world.returnTick >= t.practice.serveReturnTicks) {
+    resetRally(world, t);
+    return;
   }
 
   if (world.ball.alive) {

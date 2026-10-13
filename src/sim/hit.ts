@@ -165,7 +165,9 @@ export function tryHit(p: Player, ball: Ball, intent: Intent, t: Tuning, turn?: 
   ball.soft = false;
   // A new hit replaces any spin the ball had.
   ball.curve = undefined;
+  ball.topspin = undefined;
   if (kind === 'spike') {
+    if (p.hitBuffer.topspin !== 0) ball.topspin = p.hitBuffer.topspin;
     spike(ball, quality, power, t);
     if (p.hitBuffer.spin !== 0) addSpin(ball, p, p.hitBuffer.spin, t.hit.spikeSpinCurve);
   } else if (kind === 'drop') {

@@ -17,7 +17,7 @@ const RANGES: Record<string, Ranges> = {
     contactHeight: [0.5, 2.5], reach: [0.3, 2], lowReach: [0, 2.5], highReach: [0, 1.5],
   },
   hit: {
-    spikeSpeedMin: [4, 25], spikeSpeedMax: [4, 30], chargeTime: [0.1, 2], chargeMoveFactor: [0, 1], spikeSpinCurve: [0, 15], minQualityPower: [0, 1], mishitDrift: [0, 3],
+    spikeSpeedMin: [4, 25], spikeSpeedMax: [4, 30], chargeTime: [0.1, 2], chargeMoveFactor: [0, 1], spikeSpinCurve: [0, 15], topspinDip: [0, 10], topspinNetEffect: [0, 0.8], backspinDeaden: [0, 0.9], minQualityPower: [0, 1], mishitDrift: [0, 3],
     perfectWindow: [0, 0.6], qualityFalloff: [0.1, 2], passUpSpeedMin: [2, 15], passUpSpeedMax: [2, 18], passHorizontalSpeed: [0, 6],
     inputBufferTicks: [0, 20, 1], cooldownTicks: [0, 40, 1],
     dropShotMaxPower: [0, 0.6], dropSpeed: [1, 10], dropPastCenter: [0, 0.7], dropBounceUp: [0.5, 6], dropHorizontalKeep: [0, 1],
@@ -27,7 +27,7 @@ const RANGES: Record<string, Ranges> = {
   marker: { maxRadius: [0.2, 2.5], targetRadius: [0.05, 1], approachTime: [0.2, 3] },
   match: { pointsToWin: [1, 31, 1], maxTouches: [1, 6, 1] },
   serve: { behindLine: [0, 2], receiverBack: [0, 3], aimLimit: [0.3, 1.3], wobble: [0, 1], speedMin: [3, 15], speedMax: [3, 20], handHeight: [0.3, 1.5], tossSpeedMin: [1, 8], tossSpeedMax: [1, 10], tossDriftMin: [0, 1.5], tossDriftMax: [0, 2], contactHeight: [0.3, 1.8], mistimeDrift: [0, 2], handForward: [0, 0.8], handSide: [-0.4, 0.4], handReach: [0, 0.6], handLift: [0, 0.4], tries: [1, 3, 1], spinCurve: [0, 20], spinKick: [0, 1] },
-  practice: { resetDelayTicks: [0, 180, 1], feedDistance: [0.8, 4], feedHeight: [0.5, 4], feedSpeed: [2, 15] },
+  practice: { resetDelayTicks: [0, 180, 1], serveReturnTicks: [0, 180, 1], feedDistance: [0.8, 4], feedHeight: [0.5, 4], feedSpeed: [2, 15] },
   audio: { volume: [0, 1], music: [0, 1], duck: [0, 1], hits: [0.5, 3], cpuHits: [0, 1] },
   camera: {
     pitchDeg: [10, 85], fov: [0.4, 1.3], minDistance: [4, 30], maxDistance: [8, 45], margin: [0.4, 1],

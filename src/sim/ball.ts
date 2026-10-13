@@ -15,6 +15,9 @@ export interface Ball {
   // Sideways acceleration from spin on a serve (m/s²). It bends the flight,
   // and the net kicks the ball sideways in the same direction.
   curve?: { x: number; z: number };
+  // Topspin (positive) or backspin (negative), -1..1: it dips or floats in
+  // flight and skips low or pops up high off the net (see hit.topspinDip).
+  topspin?: number;
 }
 
 export type BallEvent =
@@ -35,6 +38,7 @@ export function cloneBall(b: Ball): Ball {
     lastTouch: b.lastTouch,
     soft: b.soft,
     curve: b.curve && { ...b.curve },
+    topspin: b.topspin,
   };
 }
 
@@ -65,7 +69,7 @@ function stepBallOnce(ball: Ball, dt: number, t: Tuning, events: BallEvent[]): v
   vel.x *= drag;
   vel.y *= drag;
   vel.z *= drag;
-  vel.y -= t.gravity * dt;
+  vel.y -= (t.gravity + spinDip(ball, t)) * dt;
   if (ball.curve) {
     vel.x += ball.curve.x * dt;
     vel.z += ball.curve.z * dt;
@@ -92,8 +96,14 @@ function stepBallOnce(ball: Ball, dt: number, t: Tuning, events: BallEvent[]): v
     vel.x = vel.y = vel.z = 0;
     ball.alive = false;
     ball.curve = undefined;
+    ball.topspin = undefined;
     events.push({ type: 'ground', at: copyVec3(pos) });
   }
+}
+
+/** Extra downward pull from topspin (negative: lift from backspin), m/s². */
+export function spinDip(ball: Ball, t: Tuning): number {
+  return (ball.topspin ?? 0) * t.hit.topspinDip;
 }
 
 /** How steeply a ball is coming down: 0 skimming flat, 1 straight down. */
@@ -133,13 +143,23 @@ function netBounce(ball: Ball, t: Tuning, events: BallEvent[]): void {
     vel.z += ball.curve.z * t.serve.spinKick;
     ball.curve = undefined;
   }
+  if (ball.topspin) {
+    // Topspin skips off low and fast; backspin dies, dropping close to the net.
+    const top = Math.max(0, ball.topspin) * t.hit.topspinNetEffect;
+    const dead = Math.max(0, -ball.topspin) * t.hit.backspinDeaden;
+    vel.y *= (1 - top) * (1 - dead);
+    vel.x *= (1 + top) * (1 - dead);
+    vel.z *= (1 + top) * (1 - dead);
+    ball.topspin = undefined;
+  }
   ball.lastTouch = 'net';
   events.push({ type: 'net', at: copyVec3(ball.pos), speed: inSpeed, upSpeed: vel.y, steepness: steepnessOf(incoming) });
 }
 
 /**
  * Set the ball's velocity so its center reaches `target` with the given
- * horizontal speed (ignoring air drag, which is small).
+ * horizontal speed (ignoring air drag, which is small). Set `ball.topspin`
+ * first: the arc allows for its dip or float.
  */
 export function launchBallAt(ball: Ball, target: Vec3, horizontalSpeed: number, t: Tuning): void {
   const dx = target.x - ball.pos.x;
@@ -148,7 +168,8 @@ export function launchBallAt(ball: Ball, target: Vec3, horizontalSpeed: number, 
   const time = Math.max(dist / Math.max(horizontalSpeed, 0.01), t.hit.minFlightTime);
   ball.vel.x = dx / time;
   ball.vel.z = dz / time;
-  ball.vel.y = (target.y - ball.pos.y + 0.5 * t.gravity * time * time) / time;
+  const g = t.gravity + spinDip(ball, t);
+  ball.vel.y = (target.y - ball.pos.y + 0.5 * g * time * time) / time;
 }
 
 export interface LandingPrediction {

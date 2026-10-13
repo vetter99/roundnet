@@ -59,14 +59,15 @@ src/main.ts           wires it together; fixed 60Hz loop with render interpolati
   double fault gives the receiver the point). A third mode, serve practice
   (`'serves'`), repeats serves from one server (`world.servePracticeId`: the
   first human seat, else the usual rotation) with no score; faults don't pass
-  the serve.
+  the serve, and the point isn't played out: a second after the return
+  (`practice.serveReturnTicks`) it's the next serve.
 - Serving is a duel (`src/sim/serve.ts`), toss then hit like real roundnet:
   hold the stick toward where to aim (the ball held out in the off paw leans
   that way, `serveHand`; no marker), hold and release pass to toss (a tap is low;
   a full charge goes higher and drifts further toward the aim, moving where
   the serve is struck from), locking the aim, then hold
-  spike to charge (sideways stick = spin; the arm cocks and sweeps) and
-  release to hit. Timing works like a rally hit: at `serve.contactHeight` it
+  spike to charge (sideways stick = sidespin, the arm cocks and sweeps;
+  stick up / down = topspin / backspin) and release to hit. Timing works like a rally hit: at `serve.contactHeight` it
   goes where aimed at full power; early it goes long, late short and slower.
   More charge wobbles the aim. A serve that misses the net, or a toss that's
   never hit, is a fault; two tries per serve. The receiver starts 2 m behind
@@ -120,8 +121,16 @@ src/main.ts           wires it together; fixed 60Hz loop with render interpolati
 - Spikes always target the net center; the stick aims passes, and on spikes
   sideways stick while charging adds sidespin (`hit.spikeSpinCurve`), like the
   serve. Spun balls curve, kick sideways off the net, and show it with the
-  hitter's arm sweep, a cyan/magenta trail, and the striped ball turning. The worst-timed spikes drift
-  far enough past center to miss (`hit.mishitDrift`).
+  hitter's arm sweep, a cyan/magenta trail, and the striped ball turning.
+  Stick up / down while charging (spikes and serves; the stick's own up,
+  whatever the camera, `Intent.forward`) adds topspin / backspin (`ball.topspin`, `hit.topspinDip`): topspin dips slightly
+  in flight and skips off the net low and fast (`hit.topspinNetEffect`);
+  backspin floats slightly and dies off the net, dropping close to it
+  (`hit.backspinDeaden`). Shots still aim at the same spot on the net. It
+  shows in the ball's roll (forward or backward) and the arm (raised high and
+  following through down for topspin, held low and scooping up for
+  backspin). The worst-timed spikes drift far enough past center to miss
+  (`hit.mishitDrift`).
 
 ## Backlog
 

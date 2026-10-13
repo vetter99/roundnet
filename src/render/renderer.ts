@@ -102,6 +102,9 @@ const SPIN_FULL = 30;
 // up to a cap, so it never looks like it's sliding flat through the air.
 const BALL_TUMBLE = 1.6;
 const BALL_TUMBLE_MAX = 22;
+// Topspin rolls the ball forward this fast (rad/s) at full spin, backspin
+// rolls it backward as fast, so either is plain to see against the usual tumble.
+const TOPSPIN_ROLL = 34;
 const TRAIL_SPIN_ALPHA = 0.9;
 
 const METER_WIDTH = 0.5;
@@ -121,6 +124,9 @@ export class Renderer {
   // The ball's visible sidespin (rad/s about the vertical axis). It keeps
   // turning after the net bounce, so the returner can read the kick.
   private ballSpin = 0;
+  // The ball's visible topspin (+) / backspin (-), -1..1. Like the sidespin it
+  // keeps showing, fading, after the net bounce.
+  private ballRoll = 0;
   // Landing spot + timing guide: a fixed target ring and an approach ring
   // that shrinks onto it as the ball nears the PERFECT moment.
   private readonly marker: TransformNode;
@@ -279,9 +285,12 @@ export class Renderer {
       const aiming = world.waitingForServe && world.winner === null && p.id === world.serve.serverId;
       const wobble = aiming ? serveWobble(world, p, t) : null;
       const aim = wobble ? { x: world.serve.aim.x + wobble.x, z: world.serve.aim.z + wobble.z } : undefined;
-      // Spin shows in the arm: cocked to one side while charging a serve or spike.
-      const spin = aiming ? world.serve.spin : p.charge?.kind === 'spike' ? p.charge.spin : 0;
-      view.character.update(p, x, y, z, t.player.size, frameSeconds, charge, dive, world.waitingForServe, aim, spin, aiming ? held : undefined);
+      // Spin shows in the arm: cocked to one side while charging a serve or
+      // spike, and raised high for topspin or dropped low for backspin.
+      const spiking = p.charge?.kind === 'spike';
+      const spin = aiming ? world.serve.spin : spiking ? p.charge!.spin : 0;
+      const roll = aiming ? world.serve.topspin : spiking ? p.charge!.topspin : 0;
+      view.character.update(p, x, y, z, t.player.size, frameSeconds, charge, dive, world.waitingForServe, aim, spin, aiming ? held : undefined, roll);
       this.updateMeter(view.meter, charge?.power ?? null, x, y + 1.55 * t.player.size, z);
       // Reach rings are a debug aid only (they were confused with the timing rings).
       view.reachRing.isVisible = t.debug.showReach;
@@ -311,15 +320,21 @@ export class Renderer {
     } else {
       this.ballSpin *= Math.exp(-0.4 * dt);
     }
+    if (ball.topspin) this.ballRoll = ball.topspin;
+    else this.ballRoll *= Math.exp((!ball.alive || ball.lastTouch === 'player' || world.waitingForServe ? -6 : -0.8) * dt);
     // Turn the ball: the sidespin twist about the vertical, plus a forward
-    // tumble (like topspin) about the horizontal axis across its flight,
-    // faster the faster it flies, so its stripes visibly roll on every shot.
+    // tumble about the horizontal axis across its flight, faster the faster
+    // it flies, so its stripes visibly roll on every shot. Topspin speeds the
+    // roll up; backspin turns it around.
     const v = ball.vel;
     const flat = Math.hypot(v.x, v.z);
-    const tumble = ball.alive && !world.waitingForServe ? Math.min(Math.hypot(v.x, v.y, v.z) * BALL_TUMBLE, BALL_TUMBLE_MAX) : 0;
+    const inFlight = ball.alive && !world.waitingForServe;
+    const base = inFlight ? Math.min(Math.hypot(v.x, v.y, v.z) * BALL_TUMBLE, BALL_TUMBLE_MAX) : 0;
+    const r = this.ballRoll;
+    const tumble = !inFlight ? 0 : r >= 0 ? lerp(base, TOPSPIN_ROLL, r) : lerp(base, -TOPSPIN_ROLL, -r);
     const q = this.ball.rotationQuaternion ?? Quaternion.Identity();
     if (Math.abs(this.ballSpin) > 1e-3) q.multiplyInPlace(Quaternion.RotationAxis(Vector3.Up(), this.ballSpin * dt));
-    if (tumble > 0 && flat > 0.05) {
+    if (tumble !== 0 && flat > 0.05) {
       // The axis across the flight (velocity x up), so the top rolls forward.
       const across = new Vector3(v.z / flat, 0, -v.x / flat);
       q.copyFrom(Quaternion.RotationAxis(across, tumble * dt).multiply(q));
@@ -398,9 +413,12 @@ export class Renderer {
   }
 
   /** Play the pass or spike animation for a player. */
-  /** A player swings; with spin (-1..1) the arm also sweeps across in that direction. */
-  playSwing(playerId: number, kind: ShotKind, spin = 0, power = 0.5): void {
-    this.players[playerId]?.character.playSwing(kind, spin, power);
+  /**
+   * A player swings; with spin (-1..1) the arm also sweeps across in that
+   * direction, and with topspin (+) / backspin (-) it snaps over the top or scoops under.
+   */
+  playSwing(playerId: number, kind: ShotKind, spin = 0, power = 0.5, topspin = 0): void {
+    this.players[playerId]?.character.playSwing(kind, spin, power, topspin);
   }
 
   /** A player just hit the ball at `at`: their hand(s) reach to it. */

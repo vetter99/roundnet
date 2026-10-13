@@ -100,6 +100,12 @@ const HANG = new Vector3(0, -1, 0);
 // sweeps hard across to the other side, the direction the ball will curve.
 const SPIN_ARM = 1.5;
 const SPIN_TWIST = 0.55;
+// Topspin / backspin, read from the arm: while charging, the hitting arm is
+// raised further back for topspin or held low for backspin (radians at full
+// spin); on release it follows through hard down over the top (topspin) or
+// finishes scooping up and forward (backspin).
+const ROLL_COCK = 0.6;
+const ROLL_FINISH = 1.1;
 
 // Dive pose: how far the body pitches forward (radians) at full stretch.
 const DIVE_PITCH = 1.3;
@@ -174,20 +180,26 @@ export class Character {
 
   /** Fade the whole critter (1 = solid), e.g. when the camera is right behind it. */
   setOpacity(alpha: number): void {
-    if (Math.abs(alpha - this.opacity) < 0.005) return;
-    this.opacity = alpha;
-    for (const mesh of this.root.getChildMeshes()) mesh.visibility = alpha;
+    // Snap to fully solid: anything under 1 is drawn as see-through, where
+    // overlapping parts (or the ball's trail) can hide each other.
+    const a = alpha > 0.99 ? 1 : alpha;
+    if (a === this.opacity || (a !== 1 && Math.abs(a - this.opacity) < 0.005)) return;
+    this.opacity = a;
+    for (const mesh of this.root.getChildMeshes()) mesh.visibility = a;
   }
 
   // The spin of a hit being swung right now (the arm sweeps across).
   private spinSweep: number | null = null;
+  // The topspin (+) / backspin (-) of a hit being swung right now.
+  private rollSweep: number | null = null;
 
   /**
    * Play the pass or spike animation; call whenever this player swings. With
    * spin, the hitting arm also sweeps across in the spin direction.
    */
-  playSwing(kind: ShotKind, spin = 0, power = 0.5): void {
+  playSwing(kind: ShotKind, spin = 0, power = 0.5, topspin = 0): void {
     this.spinSweep = spin !== 0 ? spin : null;
+    this.rollSweep = topspin !== 0 ? topspin : null;
     const anim = SWING_ANIMS[kind];
     const startPhase = this.heldPhase?.kind === kind ? this.heldPhase.phase : 0;
     // Harder hits swing visibly faster.
@@ -219,6 +231,7 @@ export class Character {
     serveAim?: { x: number; z: number },
     spin = 0,
     holdBall?: { x: number; y: number; z: number },
+    roll = 0,
   ): void {
     this.root.position.set(x, y, z);
     this.root.scaling.setAll(size);
@@ -252,6 +265,7 @@ export class Character {
       if (phase >= 1) {
         this.swing = null;
         this.spinSweep = null;
+        this.rollSweep = null;
       }
     } else if (charge) {
       // Wind up quickly at first, then hold the pose as power builds.
@@ -355,6 +369,18 @@ export class Character {
       this.arms[1].rotation.z += cock * SPIN_ARM;
       this.root.rotation.y -= cock * SPIN_TWIST;
     }
+    // Topspin / backspin: arm raised back or held low while charging, then
+    // through the hit it moves to the follow-through (down over the top for
+    // topspin, up and forward for backspin). Negative rotation.x raises the arm.
+    let rollOffset = 0;
+    if (this.rollSweep !== null) {
+      const u = clamp((phase - 0.3) / 0.35, 0, 1);
+      const s = u * u * (3 - 2 * u);
+      rollOffset = this.rollSweep * lerp(-ROLL_COCK, ROLL_FINISH, s);
+    } else if (charge) {
+      rollOffset = -roll * ROLL_COCK;
+    }
+    if (rollOffset !== 0) this.arms[1].rotation.x += rollOffset;
 
     if (holdBall) this.reachArm(this.arms[0], holdBall, 1, HOLD_STRETCH);
     this.reachForContact(dt);

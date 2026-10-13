@@ -128,6 +128,18 @@ export const DEFAULT_TUNING = {
     // curves it this hard (m/s² at full spin) and kicks it sideways off the
     // net (by serve.spinKick), like a spun serve.
     spikeSpinCurve: 5,
+    // Topspin / backspin: stick toward / away from the net while charging a
+    // spike or serve. Full topspin pulls the ball down this much harder in
+    // flight (m/s², on top of gravity) so it dips slightly; full backspin
+    // lifts it by the same amount so it floats slightly (keep it well below
+    // gravity). Shots still aim at the same spot on the net.
+    topspinDip: 1.5,
+    // Off the net, full topspin pops up this fraction lower and keeps this
+    // fraction more of its horizontal speed (skips low and fast).
+    topspinNetEffect: 0.3,
+    // Off the net, full backspin loses this fraction of both its upward and
+    // horizontal speed: it dies, dropping close to the net.
+    backspinDeaden: 0.45,
     // A hit released this many ticks early still fires when the ball arrives.
     inputBufferTicks: 8,
     cooldownTicks: 15,
@@ -215,6 +227,9 @@ export const DEFAULT_TUNING = {
   practice: {
     // Ticks after the ball dies before the serve prompt appears (60 = 1 second).
     resetDelayTicks: 50,
+    // Serve practice: the point isn't played out; this many ticks after the
+    // receiver returns the serve, it's straight back to the next serve.
+    serveReturnTicks: 60,
     feedDistance: 2.2,
     feedHeight: 2.2,
     feedSpeed: 5,

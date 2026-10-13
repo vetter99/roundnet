@@ -8,7 +8,8 @@
 //    up; a full charge goes higher and drifts further in the held direction
 //    (changing where the serve is struck from). The aim locks.
 // 3. Hit: hold spike to charge while it's in the air (sideways stick sets
-//    spin: the arm cocks, then sweeps across), and release to hit. Timing is
+//    spin: the arm cocks, then sweeps across; stick up / down sets topspin /
+//    backspin), and release to hit. Timing is
 //    like a rally hit: at the sweet spot (`serve.contactHeight`) it goes where
 //    aimed at full power; hit early (ball high) it sails long, late (low) it
 //    drops short and slower.
@@ -19,7 +20,7 @@
 import type { Tuning } from '../config/tuning';
 import { launchBallAt, netContactHeight, netOuterRadius } from './ball';
 import { hitQuality } from './hit';
-import { chargePower, stickOf, type Intent, type Player } from './player';
+import { chargePower, stickOf, stickTopspin, type Intent, type Player } from './player';
 import { clamp, lerp } from './vec';
 import { otherTeam, serverTeam, teamPlayers, type Team, type World } from './world';
 
@@ -33,6 +34,9 @@ export interface ServeState {
   // Sidespin chosen while charging, -1..1: positive curves to the server's
   // right (as they face the net), negative to their left.
   spin: number;
+  // Topspin (positive, stick up) or backspin (negative, stick down), -1..1,
+  // also set while charging.
+  topspin: number;
   // The ball has been tossed and is in the air, waiting to be hit.
   tossed: boolean;
   // Faults on the current serve so far.
@@ -45,7 +49,7 @@ export interface ServeState {
 }
 
 export function createServeState(): ServeState {
-  return { serverId: 1, receiverId: 0, aim: { x: 0, z: 0 }, spin: 0, tossed: false, faults: 0, inFlight: false, returnPending: false };
+  return { serverId: 1, receiverId: 0, aim: { x: 0, z: 0 }, spin: 0, topspin: 0, tossed: false, faults: 0, inFlight: false, returnPending: false };
 }
 
 /** Which side of the net (along z) a team serves from: Blue from -z, Red from +z. */
@@ -101,9 +105,11 @@ export function setUpServe(world: World, t: Tuning): void {
   world.serveReadyTick = world.tick;
   world.serve.aim = { x: 0, z: 0 };
   world.serve.spin = 0;
+  world.serve.topspin = 0;
   world.serve.tossed = false;
   world.serve.inFlight = false;
   world.serve.returnPending = false;
+  world.returnTick = null;
   world.touches = 0;
   for (const p of world.players) {
     const spot =
@@ -138,7 +144,8 @@ function serveSide(world: World, server: Player, t: Tuning): { x: number; z: num
 /**
  * Before the toss, the aim follows the stick (full stick = the edge of the
  * aim range; let go and it's the net center). After the toss the aim is
- * locked, and while charging the hit, sideways stick sets the spin. The
+ * locked, and while charging the hit, the stick sets the spin (sideways:
+ * sidespin; up / down: topspin / backspin). The
  * server stays on their spot.
  */
 export function stepServeAim(world: World, server: Player, intent: Intent, t: Tuning): void {
@@ -149,6 +156,7 @@ export function stepServeAim(world: World, server: Player, intent: Intent, t: Tu
     if (server.charge?.kind === 'spike' && intent.spike) {
       const side = serveSide(world, server, t);
       world.serve.spin = clamp(stick.x * side.x + stick.z * side.z, -1, 1);
+      world.serve.topspin = stickTopspin(intent);
     }
   } else if (server.charge?.kind === 'pass' && !intent.pass) {
     // The toss is being released this tick: keep the aim from the last held
@@ -159,6 +167,7 @@ export function stepServeAim(world: World, server: Player, intent: Intent, t: Tu
     const scale = r > 1 ? limit / r : limit;
     world.serve.aim = { x: stick.x * scale, z: stick.z * scale };
     world.serve.spin = 0;
+    world.serve.topspin = 0;
   }
   pinServer(server, t);
 }
@@ -212,6 +221,7 @@ export function tossServe(world: World, server: Player, power: number, t: Tuning
   ball.alive = true;
   ball.soft = false;
   ball.curve = undefined;
+  ball.topspin = undefined;
   // Nobody can play it until it comes off the net.
   ball.lastTouch = 'feed';
   world.serve.tossed = true;
@@ -230,6 +240,8 @@ export function launchServe(world: World, server: Player, power: number, wobble:
   const toNet = -Math.sign(spot.z) || 1;
   const long = Math.sign(heightError) * (1 - quality) * t.serve.mistimeDrift;
   ball.curve = undefined;
+  // Topspin dips, backspin floats; set before launching so the arc allows for it.
+  ball.topspin = world.serve.topspin !== 0 ? world.serve.topspin : undefined;
   const target = { x: world.serve.aim.x + wobble.x, y: netContactHeight(t), z: world.serve.aim.z + wobble.z + toNet * long };
   const speed = lerp(t.serve.speedMin, t.serve.speedMax, clamp(power, 0, 1)) * lerp(t.hit.minQualityPower, 1, quality);
   launchBallAt(ball, target, speed, t);

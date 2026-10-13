@@ -291,7 +291,8 @@ function followCamera(frame: InputFrame): InputFrame {
   const yaw = renderer.viewYaw();
   const c = Math.cos(yaw);
   const s = Math.sin(yaw);
-  return { ...frame, moveX: frame.moveX * c + frame.moveZ * s, moveZ: -frame.moveX * s + frame.moveZ * c };
+  // `forward` keeps the stick's own up / down (topspin / backspin).
+  return { ...frame, moveX: frame.moveX * c + frame.moveZ * s, moveZ: -frame.moveX * s + frame.moveZ * c, forward: frame.moveZ };
 }
 
 function deviceName(d: Device): string {
@@ -551,7 +552,7 @@ function onEvent(e: SimEvent): void {
   if (e.type === 'swing') {
     // A tapped spike is a drop shot: play the gentle push instead of the slam.
     const drop = e.kind === 'spike' && e.power < tuning.hit.dropShotMaxPower;
-    renderer.playSwing(e.playerId, drop ? 'drop' : e.kind, drop ? 0 : e.spin, e.power);
+    renderer.playSwing(e.playerId, drop ? 'drop' : e.kind, drop ? 0 : e.spin, e.power, drop ? 0 : e.topspin);
     sfx.swing(e.power);
   } else if (e.type === 'whiff') {
     lastMiss = { team: world.players[e.playerId].team, reason: e.reason };
@@ -768,7 +769,7 @@ function updateHud(frameSeconds: number, devices: Device[]): void {
       serverDevice === 'cpu'
         ? `${playerSpan(serverPlayer)} is serving…${second}`
         : world.serve.tossed
-          ? `${playerSpan(serverPlayer)}: hold <b>${hitKey}</b>, release as it drops to chest height (stick ←→ = spin)${second}`
+          ? `${playerSpan(serverPlayer)}: hold <b>${hitKey}</b>, release as it drops to chest height (stick ←→ = curve, ↑ topspin, ↓ backspin)${second}`
           : `${playerSpan(serverPlayer)}: stick aims · hold <b>${tossKey}</b>, release to toss (longer = higher, wider)${second}`;
   }
   const match = world.mode === 'match';
